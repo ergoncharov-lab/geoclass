@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoClass — Классификация земной поверхности</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Вращение карты (правая кнопка мыши / Shift + колесо) -->
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@5.8.0/dist/togeojson.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="style.css" />
+        <!-- Плагин для трансформации фигур -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-path-transform@1.0.0/dist/leaflet-path-transform.css" />
+    <script src="https://unpkg.com/leaflet-path-transform@1.0.0/dist/leaflet-path-transform.js"></script>
+    <!-- 3D режим: MapLibre GL (рельеф, 3D-здания) + three.js (импорт 3D-моделей GLB/GLTF) -->
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- ЛЕВАЯ ПАНЕЛЬ -->
+    <div class="panel" id="mainPanel">
+        <div class="panel-header">
+            <h3><i class="fas fa-globe-americas"></i> GeoClass</h3>
+            <p>Классификация земной поверхности</p>
+        </div>
+
+        <!-- ВКЛАДКИ БОКОВОЙ ПАНЕЛИ (названия временные) -->
+        <div class="panel-tabs" role="tablist">
+            <button class="panel-tab active" role="tab" aria-selected="true" data-tab="main" title="Главная"><i class="fas fa-house"></i><span>Главная</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="data" title="Данные"><i class="fas fa-database"></i><span>Данные</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="layers" title="Слои"><i class="fas fa-layer-group"></i><span>Слои</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ"><i class="fas fa-chart-pie"></i><span>Анализ</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="reports" title="Отчёты"><i class="fas fa-file-lines"></i><span>Отчёты</span></button>
+        </div>
+
+        <!-- ВКЛАДКА «ГЛАВНАЯ»: всё текущее содержимое панели -->
+        <div class="tab-pane active" data-pane="main" role="tabpanel">
+
+        <!-- ПОИСК -->
+        <div class="section" style="background: #f8fafc;">
+            <div class="section-title"><i class="fas fa-search"></i> Поиск адреса</div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Поиск города или улицы..." autocomplete="off">
+                <button id="searchBtn"><i class="fas fa-search"></i></button>
+            </div>
+            <div id="searchResults" class="search-results"></div>
+        </div>
+
+        <!-- КООРДИНАТЫ И АДРЕС (правый клик «Что здесь?» или выбор в поиске) -->
+        <div class="section geo-section" id="geoSection">
+            <div class="section-title">
+                <i class="fas fa-location-crosshairs"></i> Координаты и адрес
+                <button class="geo-close" id="geoCloseBtn" title="Убрать точку с карты" hidden>
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="geo-info" id="geoInfo">
+                <div class="geo-empty" id="geoEmpty">Правый клик по карте → «Что здесь?» или выберите результат поиска</div>
+                <div class="geo-row" id="geoCoordsRow" hidden>
+                    <i class="fas fa-location-dot geo-icon"></i>
+                    <span class="geo-value" id="geoCoords"></span>
+                    <button class="copy-btn" data-copy="coords" title="Копировать координаты"><i class="fas fa-copy"></i></button>
+                </div>
+                <div class="geo-row" id="geoAddressRow" hidden>
+                    <i class="fas fa-house geo-icon"></i>
+                    <span class="geo-value" id="geoAddress"></span>
+                    <button class="copy-btn" data-copy="address" title="Копировать адрес"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ЗАГРУЗКА ДАННЫХ -->
+        <div class="section">
+            <div class="section-title"><i class="fas fa-file-import"></i> Загрузка данных</div>
+            <div class="file-area" onclick="document.getElementById('vectorFileInput').click()">
+                <i class="fas fa-upload"></i>
+                <p>Загрузить векторный файл</p>
+                <div class="file-name" id="vectorFileName">KML, GeoJSON, Excel, XML Росреестра</div>
+            </div>
+            <input type="file" id="vectorFileInput" accept=".kml,.geojson,.json,.xlsx,.xls,.xml" />
+        </div>
+
+        <!-- ИНФОРМАЦИЯ ОБ ОБЪЕКТЕ -->
+        <div class="section" id="infoSection" style="display: none;">
+            <div class="section-title"><i class="fas fa-info-circle"></i> Свойства объекта</div>
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Тип:</span>
+                    <span class="info-value" id="objectType">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Площадь:</span>
+                    <span class="info-value" id="objectArea">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Периметр:</span>
+                    <span class="info-value" id="objectPerimeter">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Вершин:</span>
+                    <span class="info-value" id="objectVertices">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- СПИСОК ОБЪЕКТОВ -->
+        <div class="section" id="objectListSection">
+            <div class="section-title"><i class="fas fa-list"></i> Список объектов <span id="objectsCountBadge" class="badge">0</span></div>
+            <div id="objectListContainer" class="object-list-container"></div>
+        </div>
+
+        <!-- СТОИМОСТЬ -->
+        <div class="section" style="background: #f0fdf4; border-bottom: none;">
+            <div class="section-title"><i class="fas fa-calculator"></i> Стоимость анализа</div>
+            
+            <div class="price-info">
+                <div class="price-row">
+                    <span>Общая площадь:</span>
+                    <span id="areaDisplay">0.000 км²</span>
+                </div>
+                <div class="price-row">
+                    <span>Кол-во объектов:</span>
+                    <span id="objectsCount">0</span>
+                </div>
+                <div class="price-row total">
+                    <span>Итого:</span>
+                    <span id="costDisplay">0 ₽</span>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary" id="calculateBtn">
+                <i class="fas fa-rocket"></i> ЗАПУСТИТЬ КЛАССИФИКАЦИЮ
+            </button>
+            
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="btn btn-secondary" style="flex:1;" id="exportReportBtn" disabled>
+                    <i class="fas fa-file-pdf"></i> Отчёт
+                </button>
+                <button class="btn btn-secondary" style="flex:1;" id="exportVectorBtn" disabled>
+                    <i class="fas fa-draw-polygon"></i> Вектор
+                </button>
+            </div>
+        </div>
+
+        </div><!-- /tab-pane main -->
+
+        <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК -->
+        <div class="tab-pane" data-pane="data" role="tabpanel">
+            <div class="tab-placeholder"><i class="fas fa-database"></i><p>Данные</p><span>Раздел в разработке</span></div>
+        </div>
+        <div class="tab-pane" data-pane="layers" role="tabpanel">
+            <div class="tab-placeholder"><i class="fas fa-layer-group"></i><p>Слои</p><span>Раздел в разработке</span></div>
+        </div>
+        <div class="tab-pane" data-pane="analysis" role="tabpanel">
+            <div class="tab-placeholder"><i class="fas fa-chart-pie"></i><p>Анализ</p><span>Раздел в разработке</span></div>
+        </div>
+        <div class="tab-pane" data-pane="reports" role="tabpanel">
+            <div class="tab-placeholder"><i class="fas fa-file-lines"></i><p>Отчёты</p><span>Раздел в разработке</span></div>
+        </div>
+
+        <div class="status-bar">
+            <i class="fas fa-circle" style="font-size: 8px; color: #10b981;"></i>
+            <span id="statusMsg">Готов к работе</span>
+        </div>
+    </div>
+
+    <!-- РУЧКА ИЗМЕНЕНИЯ ШИРИНЫ БОКОВОЙ ПАНЕЛИ (тянуть мышью) -->
+    <div class="panel-resizer" id="panelResizer" title="Потяните, чтобы изменить ширину панели (двойной клик — сбросить)"></div>
+
+    <!-- КАРТА -->
+    <div class="map-container">
+      <div class="map-stage" id="mapStage">
+        <div id="map"></div>
+        <!-- 3D-карта (MapLibre): показывается поверх основной карты в режиме «3D» -->
+        <div id="map3d" class="map3d"></div>
+
+        <!-- КНОПКИ СЛЕВА СВЕРХУ -->
+        <div class="map-controls-left">
+            <!-- Круглая кнопка «Обновить карту» — в углу между панелью рисования и панелью навигации -->
+            <button class="map-refresh-btn" id="refreshMapBtn" title="Обновить карту">
+                <i class="fas fa-rotate-right"></i>
+            </button>
+            <!-- Ряд 1: Инструменты рисования (горизонтально, со сдвигом) -->
+            <div class="draw-row">
+                <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
+                    <i class="fas fa-draw-polygon"></i>
+                </button>
+                <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
+                    <i class="fas fa-vector-square"></i>
+                </button>
+                <button class="map-btn draw-tool-btn" data-tool="circle" title="Круг / Овал">
+                    <i class="fas fa-circle"></i>
+                </button>
+                <button class="map-btn" id="editMapBtn" title="Редактировать">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="map-btn" id="deleteMapBtn" title="Удалить выбранное">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button class="map-btn" id="clearMapBtn" title="Очистить всё">
+                    <i class="fas fa-eraser"></i>
+                </button>
+            </div>
+            <!-- Ряд 2: Навигация (вертикально, компактно, выше) -->
+            <div class="nav-row">
+                <button class="map-btn" id="zoomInBtn" title="Приблизить">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="map-btn" id="zoomOutBtn" title="Отдалить">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="map-btn" id="locateBtn" title="Моё местоположение">
+                    <i class="fas fa-location-dot"></i>
+                </button>
+                <button class="map-btn" id="zoomBackBtn" title="Предыдущий экстент" disabled>
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <button class="map-btn" id="zoomForwardBtn" title="Следующий экстент" disabled>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+                <button class="map-btn" id="northBtn" title="Стрелка севера (сбросить поворот)">
+                    <svg id="northArrow" class="north-arrow" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                        <polygon points="12,2 17.5,13 12,11 6.5,13" fill="#ef4444"/>
+                        <polygon points="12,22 17.5,13 12,11 6.5,13" fill="#94a3b8"/>
+                    </svg>
+                </button>
+                <button class="map-btn" id="fullscreenBtn" title="На весь экран">
+                    <i class="fas fa-expand"></i>
+                </button>
+                <button class="map-btn" id="toggleDrawerBtn" title="Скрыть/показать панель">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- ПРАВАЯ ПАНЕЛЬ КНОПОК (ВЕРТИКАЛЬНО) -->
+        <div class="map-controls-right">
+            <!-- КНОПКА БАЗОВЫЕ КАРТЫ -->
+            <div class="side-widget" id="baseLayersWidget">
+                <button class="map-btn widget-btn" id="baseLayersBtn" title="Базовые карты">
+                    <i class="fas fa-map"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="baseLayersPanel">
+                    <div class="widget-panel-body-horizontal">
+                        <div class="layer-chip active" data-layer="google" title="Google Карты — универсальная дорожная схема с подписями">
+                            <span>Google</span>
+                            <div class="layer-thumb" data-thumb="google"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="osm" title="OpenStreetMap — открытая карта мира, самые подробные данные по дорогам и объектам">
+                            <span>OSM</span>
+                            <div class="layer-thumb" data-thumb="osm"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="2gis" title="2ГИС — подробная карта городов России: здания, организации, адреса">
+                            <span>2ГИС</span>
+                            <div class="layer-thumb" data-thumb="2gis"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="opentopo" title="OpenTopoMap — топографическая карта с горизонталями и отметками высот">
+                            <span>Topo</span>
+                            <div class="layer-thumb" data-thumb="opentopo"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_topo" title="Esri World Topographic Map — топографическая карта">
+                            <span>Esri Topo</span>
+                            <div class="layer-thumb" data-thumb="esri_topo"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_natgeo" title="Esri National Geographic World Map — карта в стиле National Geographic">
+                            <span>NatGeo</span>
+                            <div class="layer-thumb" data-thumb="esri_natgeo"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_terrain" title="Esri World Terrain Base — высоты и рельеф">
+                            <span>Terrain</span>
+                            <div class="layer-thumb" data-thumb="esri_terrain"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_gray" title="Esri Light Gray Canvas — нейтральная светло-серая основа для аналитики">
+                            <span>Gray</span>
+                            <div class="layer-thumb" data-thumb="esri_gray"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_hillshade" title="Esri World Hillshade — теневая отмывка рельефа">
+                            <span>Рельеф</span>
+                            <div class="layer-thumb" data-thumb="esri_hillshade"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_street" title="Esri World Street Map — классическая уличная карта с подписями">
+                            <span>Esri Street</span>
+                            <div class="layer-thumb" data-thumb="esri_street"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_dark" title="Esri Dark Gray Canvas — тёмно-серая основа с подписями, хороша для ярких данных">
+                            <span>Esri Dark</span>
+                            <div class="layer-thumb" data-thumb="esri_dark"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="osm_hot" title="Humanitarian OpenStreetMap — карта для гуманитарных задач, крупно показаны дороги, здания и водные объекты">
+                            <span>OSM HOT</span>
+                            <div class="layer-thumb" data-thumb="osm_hot"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="cyclosm" title="CyclOSM — карта для велосипедистов: веломаршруты, уклоны, покрытие дорог">
+                            <span>CyclOSM</span>
+                            <div class="layer-thumb" data-thumb="cyclosm"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_transport" title="Esri Транспорт — светлая основа с дорожной сетью и названиями для логистики">
+                            <span>Транспорт</span>
+                            <div class="layer-thumb" data-thumb="esri_transport"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- КНОПКА СПУТНИКОВЫЕ СНИМКИ -->
+            <div class="side-widget" id="satelliteWidget">
+                <button class="map-btn widget-btn" id="satelliteBtn" title="Спутниковые снимки">
+                    <i class="fas fa-satellite"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="satellitePanel">
+                    <div class="widget-panel-body-horizontal">
+                        <div class="layer-chip" data-layer="google_sat" title="Google Спутник — спутниковые снимки Google без подписей">
+                            <span>Google</span>
+                            <div class="layer-thumb" data-thumb="google_sat"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="google_hybrid" title="Google Гибрид — спутниковые снимки Google с дорогами и подписями">
+                            <span>Гибрид</span>
+                            <div class="layer-thumb" data-thumb="google_hybrid"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_sat" title="Esri World Imagery — спутниковые и аэроснимки Esri">
+                            <span>Esri</span>
+                            <div class="layer-thumb" data-thumb="esri_sat"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_hybrid" title="Esri Гибрид — снимки Esri World Imagery с дорогами и подписями">
+                            <span>Esri Гибрид</span>
+                            <div class="layer-thumb" data-thumb="esri_hybrid"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_clarity" title="Esri World Imagery Clarity — улучшенная чёткость снимков Esri">
+                            <span>Esri Clarity</span>
+                            <div class="layer-thumb" data-thumb="esri_clarity"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="esri_firefly" title="Esri Imagery Firefly — приглушённая тёмная версия снимков Esri, удобна для наложения данных">
+                            <span>Firefly</span>
+                            <div class="layer-thumb" data-thumb="esri_firefly"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="sentinel2" title="Sentinel-2 — мультиспектральные снимки ESA, 10 м на пиксель">
+                            <span>S2</span>
+                            <div class="layer-thumb" data-thumb="sentinel2"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="landsat8" title="Landsat 8 — мультиспектральные снимки NASA/USGS, 30 м на пиксель">
+                            <span>L8</span>
+                            <div class="layer-thumb" data-thumb="landsat8"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="eox_s2" title="Sentinel-2 Cloudless (EOX, 2023) — безоблачная мозаика Sentinel-2 на весь мир">
+                            <span>S2 Cloudless</span>
+                            <div class="layer-thumb" data-thumb="eox_s2"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="nasa_viirs" title="NASA VIIRS True Color — почти ежедневные снимки Земли (250 м), помогают увидеть погоду и пожары">
+                            <span>NASA VIIRS</span>
+                            <div class="layer-thumb" data-thumb="nasa_viirs"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="bing_sat" title="Bing Aerial — спутниковые и аэроснимки Microsoft Bing">
+                            <span>Bing</span>
+                            <div class="layer-thumb" data-thumb="bing_sat"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="bing_hybrid" title="Bing Aerial с подписями — снимки Bing с дорогами и названиями">
+                            <span>Bing Гибрид</span>
+                            <div class="layer-thumb" data-thumb="bing_hybrid"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- КНОПКА АНАЛИТИЧЕСКИЕ ПОДЛОЖКИ -->
+            <div class="side-widget" id="analyticsWidget">
+                <button class="map-btn widget-btn" id="analyticsBtn" title="Аналитические подложки">
+                    <i class="fas fa-chart-area"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="analyticsPanel">
+                    <div class="widget-panel-body-horizontal">
+                        <div class="layer-chip" data-layer="esri_landcover" title="Esri Land Cover — классификация земного покрова по Sentinel-2, 10 м">
+                            <span>Land Cover</span>
+                            <div class="layer-thumb" data-thumb="esri_landcover"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndvi" title="NDVI — индекс растительности: чем выше значение, тем гуще и здоровее растительность">
+                            <span>NDVI</span>
+                            <div class="layer-thumb" data-thumb="ndvi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndwi" title="NDWI — индекс водных объектов и влажности: выделяет воду и переувлажнённые участки">
+                            <span>NDWI</span>
+                            <div class="layer-thumb" data-thumb="ndwi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="modified_ndwi" title="MNDWI — модифицированный индекс воды: чётче отделяет воду от застройки и почвы">
+                            <span>MNDWI</span>
+                            <div class="layer-thumb" data-thumb="modified_ndwi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_ph" title="Кислотность почвы (pH в воде), слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>pH почв</span>
+                            <div class="layer-thumb" data-thumb="soil_ph"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_soc" title="Органический углерод почвы, слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>Орг. C</span>
+                            <div class="layer-thumb" data-thumb="soil_soc"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_nitrogen" title="Общий азот в почве, слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>Азот</span>
+                            <div class="layer-thumb" data-thumb="soil_nitrogen"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_cec" title="Ёмкость катионного обмена (CEC), слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>ЕКО</span>
+                            <div class="layer-thumb" data-thumb="soil_cec"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_clay" title="Содержание глины, слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>Глина</span>
+                            <div class="layer-thumb" data-thumb="soil_clay"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="soil_sand" title="Содержание песка, слой 0–5 см — ISRIC SoilGrids 250 м">
+                            <span>Песок</span>
+                            <div class="layer-thumb" data-thumb="soil_sand"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- КНОПКА ИЗМЕРЕНИЯ -->
+            <div class="side-widget" id="measureWidget">
+                <button class="map-btn widget-btn" id="measureBtn" title="Измерения">
+                    <i class="fas fa-ruler-combined"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="measurePanel">
+                    <div class="widget-panel-body-horizontal">
+                        <div class="measure-chip" data-mode="distance">
+                            <i class="fas fa-ruler"></i>
+                            <span>Расстояние</span>
+                        </div>
+                        <div class="measure-chip" data-mode="area">
+                            <i class="fas fa-vector-square"></i>
+                            <span>Площадь</span>
+                        </div>
+                        <div class="measure-chip" data-mode="clear">
+                            <i class="fas fa-trash-alt"></i>
+                            <span>Очистить</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- КНОПКА ШТОРКА (разделяет карту на две части с разными подложками) -->
+            <div class="side-widget" id="swipeWidget">
+                <button class="map-btn widget-btn" id="swipeBtn" title="Шторка">
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                        <path d="M12 3v18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                        <path d="M8 8l-4 4 4 4M16 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            <!-- КНОПКА 3D РЕЖИМ (рельеф, 3D-здания OSM, импорт 3D-объектов; настройки — во вкладке «3D» нижней панели) -->
+            <div class="side-widget" id="mode3dWidget">
+                <button class="map-btn widget-btn" id="mode3dBtn" title="3D режим">
+                    <i class="fas fa-cube"></i>
+                </button>
+            </div>
+        </div>
+        <!-- МИНИ-КАРТА СПРАВА СНИЗУ -->
+        <div class="mini-map-container" id="miniMapContainer">
+            <div id="miniMap"></div>
+            <button class="mini-map-collapse-btn" id="miniMapCollapseBtn" title="Свернуть/развернуть">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- МАСШТАБНАЯ ЛИНЕЙКА СЛЕВА СНИЗУ -->
+        <div class="map-bottom-left">
+            <div class="scale-bar" id="scaleBar">
+                <div class="scale-line"></div>
+                <div class="scale-text">0 м</div>
+            </div>
+        </div>
+
+        <!-- КОНТЕКСТНОЕ МЕНЮ КАРТЫ (правый клик) -->
+        <div class="map-context-menu" id="mapContextMenu">
+            <div class="ctx-item" id="ctxWhatHere"><i class="fas fa-circle-question"></i> Что здесь?</div>
+        </div>
+      </div>
+
+      <!-- НИЖНЯЯ ГОРИЗОНТАЛЬНАЯ ПАНЕЛЬ: легенда, отчёты, графики -->
+      <div class="bottom-panel" id="bottomPanel">
+        <!-- РУЧКА ИЗМЕНЕНИЯ ВЫСОТЫ (тянуть мышью вверх/вниз) -->
+        <div class="bp-resizer" id="bpResizer" title="Потяните, чтобы изменить высоту панели (двойной клик — сбросить)"></div>
+        <div class="bottom-panel-header">
+            <div class="bottom-panel-title"><i class="fas fa-chart-column"></i> Легенда и инструменты</div>
+            <button class="bottom-panel-toggle" id="bottomPanelToggle" title="Свернуть/развернуть панель">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+        <!-- ВКЛАДКИ НИЖНЕЙ ПАНЕЛИ (пока кроме «Главной» пустые — под будущий растровый анализ) -->
+        <div class="bp-tabs" id="bpTabs" role="tablist">
+            <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="3d" title="Настройки 3D режима (включите кнопку «3D» на карте)" disabled><i class="fas fa-cube"></i><span>3D</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Выбор даты спутникового снимка (Sentinel-2)"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
+        </div>
+
+        <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
+        <div class="bottom-panel-body bp-pane active" data-bp-pane="main" role="tabpanel">
+            <div class="bp-block bp-legend">
+                <div class="bp-block-title">Легенда включённых аналитических слоёв</div>
+                <div class="bp-empty-note" id="layerLegendEmpty">Нет включённых аналитических слоёв. Включите слой (Land Cover, NDVI, NDWI, почвенные карты) кнопкой «Аналитические подложки» справа на карте — здесь появится его легенда.</div>
+                <!-- Легенда активной аналитической подложки (заполняется из script.js) -->
+                <div class="layer-legend" id="layerLegend" hidden></div>
+            </div>
+        </div><!-- /bp-pane main -->
+
+        <!-- ВКЛАДКА «РИСОВАНИЕ»: виджет рисования (стили, фигуры, значки, текст) -->
+        <div class="bottom-panel-body bp-pane bp-draw" data-bp-pane="draw" role="tabpanel">
+
+            <!-- Инструменты -->
+            <div class="dw-block dw-tools">
+                <div class="dw-title">Инструменты</div>
+                <div class="dw-tool-grid">
+                    <button class="dw-tool" data-sk-tool="icon" title="Значок"><i class="fas fa-location-dot"></i><span>Значок</span></button>
+                    <button class="dw-tool" data-sk-tool="point" title="Точка"><i class="fas fa-circle-dot"></i><span>Точка</span></button>
+                    <button class="dw-tool" data-sk-tool="text" title="Текст"><i class="fas fa-font"></i><span>Текст</span></button>
+                    <button class="dw-tool" data-sk-tool="line" title="Линия (ломаная)"><i class="fas fa-route"></i><span>Линия</span></button>
+                    <button class="dw-tool" data-sk-tool="freeline" title="Свободная линия"><i class="fas fa-pencil"></i><span>Свободная</span></button>
+                    <button class="dw-tool" data-sk-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
+                    <button class="dw-tool" data-sk-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
+                    <button class="dw-tool" data-sk-tool="circle" title="Круг"><i class="far fa-circle"></i><span>Круг</span></button>
+                </div>
+                <label class="dw-check"><input type="checkbox" id="skRepeat"> Не отключать инструмент после рисования</label>
+                <label class="dw-check"><input type="checkbox" id="skMeasure"> Показывать размеры (длина, площадь)</label>
+            </div>
+
+            <!-- Действия -->
+            <div class="dw-block dw-actions">
+                <div class="dw-title">Действия</div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" data-sk-mode="select" title="Выбрать объект и менять его стиль"><i class="fas fa-arrow-pointer"></i><span>Выбрать</span></button>
+                    <button class="dw-act" data-sk-mode="move" title="Перемещать объекты мышью"><i class="fas fa-up-down-left-right"></i><span>Двигать</span></button>
+                    <button class="dw-act" data-sk-mode="edit" title="Править вершины выбранного объекта"><i class="fas fa-pen-to-square"></i><span>Вершины</span></button>
+                    <button class="dw-act" data-sk-act="duplicate" title="Создать копию выбранного" disabled><i class="fas fa-clone"></i><span>Копия</span></button>
+                    <button class="dw-act" data-sk-act="front" title="На передний план" disabled><i class="fas fa-arrow-up"></i><span>Вперёд</span></button>
+                    <button class="dw-act" data-sk-act="back" title="На задний план" disabled><i class="fas fa-arrow-down"></i><span>Назад</span></button>
+                    <button class="dw-act" data-sk-act="undo" title="Отменить (Ctrl+Z)" disabled><i class="fas fa-rotate-left"></i><span>Отменить</span></button>
+                    <button class="dw-act" data-sk-act="redo" title="Повторить (Ctrl+Y)" disabled><i class="fas fa-rotate-right"></i><span>Повторить</span></button>
+                    <button class="dw-act dw-danger" data-sk-act="delete" title="Удалить выбранный (Delete)" disabled><i class="fas fa-trash"></i><span>Удалить</span></button>
+                    <button class="dw-act dw-danger" data-sk-act="clear" title="Удалить все рисунки" disabled><i class="fas fa-eraser"></i><span>Очистить</span></button>
+                    <button class="dw-act" data-sk-act="export" title="Скачать рисунки в GeoJSON" disabled><i class="fas fa-download"></i><span>GeoJSON</span></button>
+                </div>
+            </div>
+
+            <!-- Линия и контур -->
+            <div class="dw-block dw-style" data-for="point line polygon rectangle circle">
+                <div class="dw-title">Линия / контур</div>
+                <div class="dw-row"><label>Цвет</label><input type="color" id="skColor"></div>
+                <div class="dw-swatches" data-target="skColor"></div>
+                <div class="dw-row"><label>Толщина</label><input type="range" id="skWeight" min="1" max="20" step="1"><span class="dw-val" id="skWeightVal"></span></div>
+                <div class="dw-row"><label>Прозрачность</label><input type="range" id="skOpacity" min="0" max="100" step="5"><span class="dw-val" id="skOpacityVal"></span></div>
+                <div class="dw-row"><label>Стиль</label>
+                    <select id="skDash">
+                        <option value="solid">Сплошная</option>
+                        <option value="dash">Пунктир</option>
+                        <option value="long">Длинный пунктир</option>
+                        <option value="dot">Точки</option>
+                        <option value="dashdot">Штрих-пунктир</option>
+                    </select>
+                </div>
+                <div class="dw-row"><label>Концы</label>
+                    <select id="skCap">
+                        <option value="round">Скруглённые</option>
+                        <option value="butt">Плоские</option>
+                        <option value="square">Квадратные</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Заливка -->
+            <div class="dw-block dw-style" data-for="point polygon rectangle circle">
+                <div class="dw-title">Заливка</div>
+                <label class="dw-check"><input type="checkbox" id="skFillOn"> Залить фигуру</label>
+                <div class="dw-row"><label>Цвет</label><input type="color" id="skFillColor"></div>
+                <div class="dw-swatches" data-target="skFillColor"></div>
+                <div class="dw-row"><label>Прозрачность</label><input type="range" id="skFillOpacity" min="0" max="100" step="5"><span class="dw-val" id="skFillOpacityVal"></span></div>
+                <div class="dw-row"><label>Размер точки</label><input type="range" id="skRadius" min="2" max="30" step="1"><span class="dw-val" id="skRadiusVal"></span></div>
+            </div>
+
+            <!-- Значок -->
+            <div class="dw-block dw-style dw-icon-block" data-for="icon">
+                <div class="dw-title">Значок</div>
+                <div class="dw-icon-grid" id="skIconGrid"></div>
+                <div class="dw-row"><label>Форма</label>
+                    <select id="skIconShape">
+                        <option value="pin">Булавка</option>
+                        <option value="circle">Круг</option>
+                        <option value="square">Квадрат</option>
+                        <option value="plain">Без фона</option>
+                    </select>
+                </div>
+                <div class="dw-row"><label>Цвет фона</label><input type="color" id="skIconBg"></div>
+                <div class="dw-swatches" data-target="skIconBg"></div>
+                <div class="dw-row"><label>Цвет значка</label><input type="color" id="skIconColor"></div>
+                <div class="dw-row"><label>Размер</label><input type="range" id="skIconSize" min="16" max="64" step="2"><span class="dw-val" id="skIconSizeVal"></span></div>
+            </div>
+
+            <!-- Текст -->
+            <div class="dw-block dw-style" data-for="text">
+                <div class="dw-title">Текст</div>
+                <div class="dw-row"><label>Надпись</label><input type="text" id="skText" placeholder="Введите текст"></div>
+                <div class="dw-row"><label>Размер</label><input type="range" id="skTextSize" min="8" max="48" step="1"><span class="dw-val" id="skTextSizeVal"></span></div>
+                <div class="dw-row"><label>Цвет</label><input type="color" id="skTextColor"></div>
+                <div class="dw-swatches" data-target="skTextColor"></div>
+                <div class="dw-row dw-row-checks">
+                    <label class="dw-check"><input type="checkbox" id="skBold"> <b>Ж</b></label>
+                    <label class="dw-check"><input type="checkbox" id="skItalic"> <i>К</i></label>
+                </div>
+                <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skHalo"> Обводка</label><input type="color" id="skHaloColor"></div>
+                <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skTextBg"> Фон</label><input type="color" id="skTextBgColor"></div>
+            </div>
+
+            <!-- Список объектов -->
+            <div class="dw-block dw-listblock">
+                <div class="dw-title">Объекты <span class="badge" id="skCount">0</span></div>
+                <div class="dw-list" id="skList"></div>
+            </div>
+        </div><!-- /bp-pane draw -->
+
+        <!-- ВКЛАДКА «3D»: настройки 3D режима (активна после включения кнопки «3D» на карте) -->
+        <div class="bottom-panel-body bp-pane bp-draw bp-3d" data-bp-pane="3d" role="tabpanel">
+
+            <!-- Камера -->
+            <div class="dw-block">
+                <div class="dw-title">Камера</div>
+                <div class="dw-row"><label>Наклон</label><input type="range" id="m3Pitch" min="0" max="85" step="1" value="60"><span class="dw-val" id="m3PitchVal">60°</span></div>
+                <div class="dw-row"><label>Поворот</label><input type="range" id="m3Bearing" min="-180" max="180" step="1" value="0"><span class="dw-val" id="m3BearingVal">0°</span></div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" data-m3-view="top" title="Вид строго сверху"><i class="fas fa-arrow-down-long"></i><span>Сверху</span></button>
+                    <button class="dw-act" data-m3-view="tilt" title="Наклон 60°"><i class="fas fa-cube"></i><span>Наклон</span></button>
+                    <button class="dw-act" data-m3-view="side" title="Почти горизонтальный вид (80°)"><i class="fas fa-mountain-sun"></i><span>Сбоку</span></button>
+                    <button class="dw-act" id="m3Orbit" title="Автоматическое вращение камеры"><i class="fas fa-rotate"></i><span>Облёт</span></button>
+                </div>
+                <div class="m3-hint">ЛКМ — сдвиг · ПКМ или Ctrl+ЛКМ — поворот и наклон · колесо — масштаб</div>
+            </div>
+
+            <!-- Рельеф -->
+            <div class="dw-block">
+                <div class="dw-title">Рельеф</div>
+                <label class="dw-check"><input type="checkbox" id="m3Terrain"> 3D-рельеф (холмы и впадины)</label>
+                <div class="dw-row"><label>Высота ×</label><input type="range" id="m3Exag" min="0.5" max="5" step="0.1"><span class="dw-val" id="m3ExagVal"></span></div>
+                <label class="dw-check"><input type="checkbox" id="m3Hill"> Тени рельефа</label>
+                <div class="dw-row"><label>Тени</label><input type="range" id="m3HillInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3HillIntVal"></span></div>
+                <label class="dw-check"><input type="checkbox" id="m3Sky"> Небо и дымка</label>
+            </div>
+
+            <!-- Здания OSM -->
+            <div class="dw-block">
+                <div class="dw-title">Здания OSM</div>
+                <label class="dw-check"><input type="checkbox" id="m3Bld"> 3D-здания (с масштаба z13)</label>
+                <div class="dw-row"><label>Цвет</label><input type="color" id="m3BColor"></div>
+                <label class="dw-check"><input type="checkbox" id="m3BByH"> Цвет по высоте здания</label>
+                <div class="dw-row"><label>Непрозр.</label><input type="range" id="m3BOp" min="0.2" max="1" step="0.02"><span class="dw-val" id="m3BOpVal"></span></div>
+                <div class="dw-row"><label>Высота ×</label><input type="range" id="m3BH" min="0.5" max="3" step="0.1"><span class="dw-val" id="m3BHVal"></span></div>
+            </div>
+
+            <!-- Слои OSM -->
+            <div class="dw-block">
+                <div class="dw-title">Слои OSM</div>
+                <label class="dw-check"><input type="checkbox" id="m3Roads"> Дороги</label>
+                <label class="dw-check"><input type="checkbox" id="m3Water"> Водные объекты</label>
+                <label class="dw-check"><input type="checkbox" id="m3Land"> Леса, луга, поля</label>
+                <label class="dw-check"><input type="checkbox" id="m3Labels"> Названия населённых пунктов</label>
+                <div class="m3-hint">Клик по зданию — показать его высоту</div>
+            </div>
+
+            <!-- Освещение -->
+            <div class="dw-block">
+                <div class="dw-title">Освещение (солнце)</div>
+                <div class="dw-row"><label>Азимут</label><input type="range" id="m3SunAz" min="0" max="360" step="5"><span class="dw-val" id="m3SunAzVal"></span></div>
+                <div class="dw-row"><label>Высота</label><input type="range" id="m3SunAlt" min="5" max="90" step="1"><span class="dw-val" id="m3SunAltVal"></span></div>
+                <div class="dw-row"><label>Яркость</label><input type="range" id="m3SunInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3SunIntVal"></span></div>
+            </div>
+
+            <!-- Мои объекты -->
+            <div class="dw-block">
+                <div class="dw-title">Мои объекты <span class="badge" id="m3UserCount">0</span></div>
+                <label class="dw-check"><input type="checkbox" id="m3User"> Показывать нарисованные и загруженные объекты</label>
+                <label class="dw-check"><input type="checkbox" id="m3Extrude"> Выдавить полигоны в 3D</label>
+                <div class="dw-row"><label>Высота</label><input type="range" id="m3ExtH" min="1" max="300" step="1"><span class="dw-val" id="m3ExtHVal"></span></div>
+                <button class="dw-act" id="m3RefreshUser" title="Перечитать объекты из 2D-карты"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
+            </div>
+
+            <!-- Импорт 3D-объектов -->
+            <div class="dw-block dw-listblock m3-import">
+                <div class="dw-title">3D-объекты (импорт)</div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="m3ImportModelBtn" title="Импорт 3D-модели GLB / GLTF (как в Google Earth)"><i class="fas fa-cube"></i><span>Модель</span></button>
+                    <button class="dw-act" id="m3ImportVecBtn" title="Импорт GeoJSON / KML: полигоны выдавливаются в 3D по высоте из атрибутов"><i class="fas fa-building"></i><span>GeoJSON/KML</span></button>
+                </div>
+                <input type="file" id="m3ModelFile" accept=".glb,.gltf" hidden />
+                <input type="file" id="m3VecFile" accept=".geojson,.json,.kml" hidden />
+                <div class="dw-row"><label>Высота, м</label><input type="number" id="m3ImpH" min="1" max="1000" step="1" value="20" title="Высота по умолчанию, если в файле нет height / building:levels"><input type="color" id="m3ImpColor" value="#f59e0b" title="Цвет выдавливаемых объектов"></div>
+                <div class="dw-list" id="m3List"></div>
+            </div>
+
+            <!-- Выбранный объект -->
+            <div class="dw-block dw-dim" id="m3SelBlock">
+                <div class="dw-title">Выбранный: <span id="m3SelName" class="m3-selname">не выбран</span></div>
+                <div class="dw-row"><label>Масштаб</label><input type="range" id="m3SelScale" min="-1" max="2.5" step="0.02" value="0" disabled><span class="dw-val" id="m3SelScaleVal"></span></div>
+                <div class="dw-row"><label>Поворот</label><input type="range" id="m3SelHeading" min="-180" max="180" step="1" value="0" disabled><span class="dw-val" id="m3SelHeadingVal"></span></div>
+                <div class="dw-row"><label>Над землёй</label><input type="range" id="m3SelAlt" min="-50" max="500" step="1" value="0" disabled><span class="dw-val" id="m3SelAltVal"></span></div>
+                <div class="dw-row"><label>Цвет</label><input type="color" id="m3SelColor" value="#f59e0b" disabled></div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="m3MoveBtn" title="Кликнуть по карте, чтобы переставить модель" disabled><i class="fas fa-up-down-left-right"></i><span>Переместить</span></button>
+                    <button class="dw-act dw-danger" id="m3DelBtn" title="Удалить выбранный объект" disabled><i class="fas fa-trash"></i><span>Удалить</span></button>
+                </div>
+            </div>
+
+            <!-- Сервис -->
+            <div class="dw-block dw-listblock">
+                <div class="dw-title">Сервис</div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="m3Shot" title="Сохранить текущий 3D-вид в PNG"><i class="fas fa-camera"></i><span>Снимок</span></button>
+                    <button class="dw-act" id="m3Reset" title="Вернуть настройки 3D по умолчанию"><i class="fas fa-rotate-left"></i><span>Сбросить</span></button>
+                </div>
+            </div>
+        </div><!-- /bp-pane 3d -->
+
+        <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
+        <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Выбор даты спутникового снимка — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="ndvi" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-leaf"></i><div><p>NDVI</p><span>Индекс растительности — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="ndwi" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-droplet"></i><div><p>NDWI</p><span>Индекс водных объектов — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="ndmi" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-cloud-rain"></i><div><p>NDMI</p><span>Индекс влажности растительности — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="nbr" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-fire"></i><div><p>NBR</p><span>Гари и повреждение растительности — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="change" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Изменения</p><span>Сравнение снимков на две даты — в разработке</span></div></div>
+        </div>
+        <div class="bottom-panel-body bp-pane" data-bp-pane="catalog" role="tabpanel">
+            <div class="bp-empty"><i class="fas fa-folder-open"></i><div><p>Каталог</p><span>Каталог данных — в разработке</span></div></div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
