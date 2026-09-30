@@ -5146,6 +5146,7 @@ function m3AddOverlays(m) {
         'text-font': M3D.FONT, 'text-max-width': 8,
         'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11, 12, 15, 16, 18]
     }, paint: { 'text-color': '#0f172a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 } });
+    if (window.gridInit3D) window.gridInit3D(m);   // сетка координат в 3D
 }
 
 function m3AddUserLayers(m) {
@@ -6648,4 +6649,550 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     map.on('layeradd layerremove', () => schedule(500));
     document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.layer-chip, #mode3dBtn, #m3ToggleBtn')) schedule(900); });
     syncUI();
+})();
+
+// ============================================================
+//  СЕТКА КООРДИНАТ (виджет справа) и ПРОФИЛЬ РЕЛЬЕФА (вкладка «Профиль» нижней панели)
+// ============================================================
+//  Сетка: географическая (градусы или град-мин-сек), шаг авто или вручную, подписи по краям.
+//  В 2D рисуется на canvas поверх карты (учитывает поворот и режим дублирования),
+//  в 3D — слоями MapLibre в каждом окне.
+//  Профиль: линия рисуется на карте (или берётся выбранная на вкладке «Рисование»),
+//  высоты читаются из тайлов Terrarium DEM (те же, что использует 3D-рельеф).
+// ============================================================
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+
+    // ---------- СЕТКА ----------
+    const gs = { on: false, fmt: 'dd', step: 'auto', color: '#1d4ed8', labels: true };
+    const DD_STEPS = [0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30];
+    const DMS_STEPS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 18000, 36000, 72000, 108000].map(v => v / 3600);
+
+    function stepText(step) {
+        if (gs.fmt === 'dms') {
+            const sec = Math.round(step * 3600);
+            return sec >= 3600 ? (sec / 3600) + '°' : sec >= 60 ? (sec / 60) + '′' : sec + '″';
+        }
+        return step + '°';
+    }
+    function fillSteps() {
+        const sel = $('gridStep');
+        const list = gs.fmt === 'dms' ? DMS_STEPS : DD_STEPS;
+        sel.innerHTML = '<option value="auto">Авто</option>' + list.map(v => `<option value="${v}">${stepText(v)}</option>`).join('');
+        sel.value = gs.step;
+    }
+    function autoStep(degPerPx, minPx) {
+        const list = gs.fmt === 'dms' ? DMS_STEPS : DD_STEPS;
+        for (const s of list) if (s / degPerPx >= minPx) return s;
+        return list[list.length - 1];
+    }
+    function axis(min, max, step) {
+        const out = [];
+        for (let k = Math.ceil(min / step - 1e-9); k * step <= max && out.length < 400; k++) out.push(+(k * step).toFixed(8));
+        return out;
+    }
+    function plan(b, degPerPx) {
+        let step = gs.step === 'auto' ? autoStep(degPerPx, 110) : +gs.step;
+        while (((b.e - b.w) + (b.n - b.s)) / step > 160) step *= 2;
+        return { step: step, lngs: axis(b.w, b.e, step), lats: axis(b.s, b.n, step) };
+    }
+    function fmtCoord(v, isLat, step) {
+        if (!isLat) v = ((v + 540) % 360) - 180;
+        const hemi = isLat ? (v < 0 ? 'S' : 'N') : (v < 0 ? 'W' : 'E');
+        const a = Math.abs(v);
+        if (gs.fmt === 'dms') {
+            let sec = Math.round(a * 3600);
+            const d = Math.floor(sec / 3600); sec -= d * 3600;
+            const m = Math.floor(sec / 60); sec -= m * 60;
+            const st = Math.round(step * 3600);
+            if (st >= 3600) return `${d}°${hemi}`;
+            if (st >= 60) return `${d}°${String(m).padStart(2, '0')}′${hemi}`;
+            return `${d}°${String(m).padStart(2, '0')}′${String(sec).padStart(2, '0')}″${hemi}`;
+        }
+        const dec = Math.min(6, Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)));
+        return a.toFixed(dec) + '°' + hemi;
+    }
+    function hexA(hex, a) {
+        const n = parseInt(hex.slice(1), 16);
+        return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+    }
+    function clipSeg(x0, y0, x1, y1, xmin, ymin, xmax, ymax) {   // Лян–Барски
+        let t0 = 0, t1 = 1;
+        const dx = x1 - x0, dy = y1 - y0, p = [-dx, dx, -dy, dy], q = [x0 - xmin, xmax - x0, y0 - ymin, ymax - y0];
+        for (let i = 0; i < 4; i++) {
+            if (p[i] === 0) { if (q[i] < 0) return null; continue; }
+            const r = q[i] / p[i];
+            if (p[i] < 0) { if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; }
+        }
+        return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
+    }
+
+    // --- 2D: canvas ---
+    const cv = $('gridCanvas'), cx = cv.getContext('2d');
+    let gRaf = 0;
+    function gridRedraw() {
+        if (gRaf) return;
+        gRaf = requestAnimationFrame(() => { gRaf = 0; drawGrid2D(); });
+    }
+    function drawWindow(offX, w, h) {
+        cx.save();
+        cx.translate(offX, 0);
+        cx.beginPath(); cx.rect(0, 0, w, h); cx.clip();
+        const ll = [[0, 0], [w, 0], [w, h], [0, h]].map(p => map.containerPointToLatLng(L.point(p[0], p[1])));
+        const b = {
+            w: Math.min.apply(null, ll.map(p => p.lng)), e: Math.max.apply(null, ll.map(p => p.lng)),
+            s: Math.max(-85, Math.min.apply(null, ll.map(p => p.lat))), n: Math.min(85, Math.max.apply(null, ll.map(p => p.lat)))
+        };
+        const pl = plan(b, 360 / (256 * Math.pow(2, map.getZoom())));
+        const P = (lat, lng) => map.latLngToContainerPoint(L.latLng(lat, lng));
+        cx.strokeStyle = hexA(gs.color, 0.6); cx.lineWidth = 1;
+        const lines = [];
+        pl.lngs.forEach(v => lines.push({ a: P(b.s, v), b: P(b.n, v), v: v, lat: false }));
+        pl.lats.forEach(v => lines.push({ a: P(v, b.w), b: P(v, b.e), v: v, lat: true }));
+        cx.beginPath();
+        lines.forEach(l => { cx.moveTo(l.a.x, l.a.y); cx.lineTo(l.b.x, l.b.y); });
+        cx.stroke();
+        if (gs.labels) {
+            cx.font = '600 11px "Segoe UI", Arial, sans-serif';
+            cx.lineJoin = 'round'; cx.lineWidth = 3;
+            lines.forEach(l => {
+                const c = clipSeg(l.a.x, l.a.y, l.b.x, l.b.y, 6, 6, w - 6, h - 6);
+                if (!c || Math.hypot(c[2] - c[0], c[3] - c[1]) < 40) return;
+                let x, y;
+                if (l.lat) {   // параллель: подпись у левого края
+                    const left = c[0] <= c[2];
+                    x = left ? c[0] : c[2]; y = left ? c[1] : c[3];
+                    cx.textAlign = 'left'; cx.textBaseline = 'middle'; x += 4;
+                } else {       // меридиан: подпись у верхнего края
+                    const top = c[1] <= c[3];
+                    x = top ? c[0] : c[2]; y = top ? c[1] : c[3];
+                    cx.textAlign = 'center'; cx.textBaseline = 'top'; y += 3;
+                }
+                const t = fmtCoord(l.v, l.lat, pl.step);
+                cx.strokeStyle = 'rgba(255,255,255,0.9)'; cx.strokeText(t, x, y);
+                cx.fillStyle = '#0f172a'; cx.fillText(t, x, y);
+            });
+        }
+        cx.restore();
+    }
+    function drawGrid2D() {
+        const W = mapStageEl.clientWidth, H = mapStageEl.clientHeight, dpr = window.devicePixelRatio || 1;
+        if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+        cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cx.clearRect(0, 0, W, H);
+        if (!gs.on || m3d.active) return;
+        const sz = map.getSize();
+        drawWindow(0, sz.x, sz.y);
+        if (swipeState.active && swipeState.mode === 'dual') drawWindow(W / 2, sz.x, sz.y);   // второе окно дублирования
+    }
+
+    // --- 3D: слои MapLibre ---
+    function grid3dUpdate(m) {
+        try {
+            if (!m || !m.getSource('gc-grid')) return;
+            m.setLayoutProperty('gc-grid-line', 'visibility', gs.on ? 'visible' : 'none');
+            m.setLayoutProperty('gc-grid-lbl', 'visibility', gs.on && gs.labels ? 'visible' : 'none');
+            m.setPaintProperty('gc-grid-line', 'line-color', gs.color);
+            if (!gs.on) return;
+            const c = m.getCenter(), dpp = 360 / (512 * Math.pow(2, m.getZoom()));
+            const step0 = gs.step === 'auto' ? autoStep(dpp, 110) : +gs.step, span = step0 * 25;
+            const pl = plan({ w: c.lng - span, e: c.lng + span, s: Math.max(-85, c.lat - span), n: Math.min(85, c.lat + span) }, dpp);
+            const s = Math.max(-85, c.lat - span), n = Math.min(85, c.lat + span);
+            const feats = [];
+            pl.lngs.forEach(v => feats.push({ type: 'Feature', properties: { label: fmtCoord(v, false, pl.step) }, geometry: { type: 'LineString', coordinates: [[v, s], [v, n]] } }));
+            pl.lats.forEach(v => feats.push({ type: 'Feature', properties: { label: fmtCoord(v, true, pl.step) }, geometry: { type: 'LineString', coordinates: [[c.lng - span, v], [c.lng + span, v]] } }));
+            m.getSource('gc-grid').setData({ type: 'FeatureCollection', features: feats });
+        } catch (e) { /* стиль ещё загружается */ }
+    }
+    window.gridInit3D = function (m) {
+        m.addSource('gc-grid', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        m.addLayer({ id: 'gc-grid-line', type: 'line', source: 'gc-grid', layout: { visibility: 'none' },
+            paint: { 'line-color': gs.color, 'line-width': 1, 'line-opacity': 0.75 } });
+        m.addLayer({ id: 'gc-grid-lbl', type: 'symbol', source: 'gc-grid', layout: { visibility: 'none', 'symbol-placement': 'line', 'symbol-spacing': 300,
+            'text-field': ['get', 'label'], 'text-font': M3D.FONT, 'text-size': 11 },
+            paint: { 'text-color': '#0f172a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 } });
+        m.on('moveend', () => grid3dUpdate(m));
+        grid3dUpdate(m);
+    };
+    function grid3dAll() { [m3d.map, m3d.map2].forEach(grid3dUpdate); }
+
+    function gridApply() { gridRedraw(); grid3dAll(); }
+    function setGrid(on) {
+        gs.on = on;
+        $('gridToggle').classList.toggle('active', on);
+        $('gridBtn').classList.toggle('tool-on', on);
+        gridApply();
+        updateStatus(on ? `▦ Сетка координат включена (шаг: ${gs.step === 'auto' ? 'авто' : stepText(+gs.step)})` : '▦ Сетка координат выключена');
+    }
+    $('gridBtn').addEventListener('click', e => { e.stopPropagation(); togglePanel('gridPanel', 'gridBtn'); });
+    $('gridToggle').addEventListener('click', e => { e.stopPropagation(); setGrid(!gs.on); });
+    $('gridFmt').addEventListener('change', function () { gs.fmt = this.value; gs.step = 'auto'; fillSteps(); if (!gs.on) setGrid(true); else gridApply(); });
+    $('gridStep').addEventListener('change', function () { gs.step = this.value; if (!gs.on) setGrid(true); else gridApply(); });
+    $('gridColor').addEventListener('input', function () { gs.color = this.value; if (!gs.on) setGrid(true); else gridApply(); });
+    $('gridLabels').addEventListener('change', function () { gs.labels = this.checked; gridApply(); });
+    fillSteps();
+    map.on('move zoom zoomend moveend rotate resize viewreset', gridRedraw);
+    if (window.ResizeObserver) new ResizeObserver(gridRedraw).observe(mapStageEl);
+    new MutationObserver(gridRedraw).observe(mapStageEl, { attributes: true, attributeFilter: ['class'] });
+
+    // ---------- ПРОФИЛЬ РЕЛЬЕФА ----------
+    const pf = { drawing: false, pts: [], latlngs: null, line: null, verts: null, rubber: null, hoverMk: null,
+        seq: 0, dist: null, lat: null, lng: null, raw: null, ele: null, slope: null, total: 0, hover: -1 };
+    const slopeColor = p => { const a = Math.abs(p); return a < 3 ? '#10b981' : a < 8 ? '#eab308' : a < 15 ? '#f97316' : '#dc2626'; };
+    const fmtDist = d => d >= 1000 ? (d / 1000).toFixed(2) + ' км' : Math.round(d) + ' м';
+    const fmtM = v => Math.round(v) + ' м';
+    const fmtSlope = p => `${p.toFixed(1)}% (${(Math.atan(p / 100) * 180 / Math.PI).toFixed(1)}°)`;
+
+    // --- тайлы высот ---
+    const tiles = new Map();
+    function pfTile(z, x, y) {
+        const k = z + '/' + x + '/' + y;
+        let p = tiles.get(k);
+        if (!p) {
+            p = new Promise(res => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    try {
+                        const c = document.createElement('canvas'); c.width = c.height = 256;
+                        const g = c.getContext('2d', { willReadFrequently: true });
+                        g.drawImage(img, 0, 0);
+                        const d = g.getImageData(0, 0, 256, 256).data, a = new Float32Array(65536);
+                        for (let i = 0; i < 65536; i++) a[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
+                        res(a);
+                    } catch (e) { res(null); }
+                };
+                img.onerror = () => res(null);
+                img.src = M3D.DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+            }).then(v => { if (!v) tiles.delete(k); return v; });
+            tiles.set(k, p);
+            if (tiles.size > 160) tiles.delete(tiles.keys().next().value);
+        }
+        return p;
+    }
+    function tileXY(lat, lng, z) {
+        const n = Math.pow(2, z), lr = lat * Math.PI / 180;
+        return { x: (lng + 180) / 360 * n, y: (1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2 * n };
+    }
+
+    // --- рисование линии ---
+    function pfOpenTab() {
+        const bp = $('bottomPanel');
+        if (bp.classList.contains('collapsed')) $('bottomPanelToggle').click();
+        const tab = document.querySelector('.bp-tab[data-bp-tab="profile"]');
+        if (tab && !tab.classList.contains('active')) tab.click();
+    }
+    function pfLayersClear() {
+        [pf.line, pf.verts, pf.rubber, pf.hoverMk].forEach(l => { if (l) map.removeLayer(l); });
+        pf.line = pf.verts = pf.rubber = pf.hoverMk = null;
+    }
+    function pfShowLine(pts, dashed) {
+        if (!pf.line) {
+            pf.line = L.polyline(pts, { color: '#e11d48', weight: 3, dashArray: dashed ? '6 5' : null, interactive: false }).addTo(map);
+            pf.verts = L.layerGroup().addTo(map);
+        } else {
+            pf.line.setLatLngs(pts);
+            pf.line.setStyle({ dashArray: dashed ? '6 5' : null });
+        }
+        pf.verts.clearLayers();
+        pts.forEach((p, i) => {
+            if (!dashed && i > 0 && i < pts.length - 1) return;
+            L.circleMarker(p, { radius: 4, color: '#e11d48', weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false }).addTo(pf.verts);
+        });
+    }
+    function pfEndDrawUI() {
+        pf.drawing = false;
+        map.doubleClickZoom.enable();
+        map.getContainer().classList.remove('pf-drawing');
+        $('pfDraw').classList.remove('pf-on');
+        $('pfDraw').querySelector('span').textContent = 'Нарисовать';
+        $('profileBtn').classList.remove('tool-on');
+        if (pf.rubber) { map.removeLayer(pf.rubber); pf.rubber = null; }
+    }
+    function pfClear() {
+        if (pf.drawing) pfEndDrawUI();
+        pf.seq++;
+        pfLayersClear();
+        pf.pts = []; pf.latlngs = null; pf.ele = pf.raw = pf.dist = pf.slope = null; pf.hover = -1;
+        $('pfCsv').disabled = $('pfPng').disabled = true;
+        pfStatsRender(); pfDraw();
+        $('pfEmpty').textContent = 'Нажмите «Нарисовать» (или кнопку ⛰ на карте) и укажите линию, либо выберите линию на вкладке «Рисование» и нажмите «По выбранной»';
+        $('pfEmpty').hidden = false;
+    }
+    function pfStart() {
+        if (m3d.active) { updateStatus('ℹ️ Профиль рельефа строится на 2D-карте — выключите кнопку «3D»', true); return; }
+        try { if (measureMode) deactivateMeasureMode(); } catch (e) { /* не критично */ }
+        try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
+        pfClear();
+        pf.drawing = true;
+        map.doubleClickZoom.disable();
+        map.getContainer().classList.add('pf-drawing');
+        $('pfDraw').classList.add('pf-on');
+        $('pfDraw').querySelector('span').textContent = 'Завершить';
+        $('profileBtn').classList.add('tool-on');
+        pfOpenTab();
+        updateStatus('⛰️ Профиль: ЛКМ — точки линии, двойной клик или Enter — завершить, Esc — отмена');
+    }
+    function pfFinish() {
+        if (pf.pts.length < 2) { updateStatus('⚠️ Для профиля нужно минимум 2 точки', true); return; }
+        pfEndDrawUI();
+        pf.latlngs = pf.pts.slice();
+        pfShowLine(pf.latlngs, false);
+        pfCompute();
+    }
+    function pfToggleDraw() {
+        if (pf.drawing) { if (pf.pts.length >= 2) pfFinish(); else pfClear(); } else pfStart();
+    }
+    function pfFromSelected() {
+        const sel = sketchState.selected;
+        if (!sel || !sel._sk || typeof sel.getLatLngs !== 'function') {
+            updateStatus('ℹ️ Выберите линию или контур на вкладке «Рисование» (кнопка «Выбрать»)', true); return;
+        }
+        let ll = sel.getLatLngs();
+        while (Array.isArray(ll[0])) ll = ll[0];
+        ll = ll.map(p => L.latLng(p.lat, p.lng));
+        if (sel._sk.kind !== 'line' && ll.length) ll.push(ll[0]);
+        if (ll.length < 2) { updateStatus('ℹ️ У выбранного объекта нет линии', true); return; }
+        pfClear();
+        pf.latlngs = ll;
+        pfShowLine(ll, false);
+        pfOpenTab();
+        pfCompute();
+    }
+
+    map.on('click', e => {
+        if (!pf.drawing) return;
+        if (measureMode || currentTool || sketchState.tool) { pfClear(); return; }
+        const last = pf.pts[pf.pts.length - 1];
+        if (last && map.latLngToContainerPoint(last).distanceTo(map.latLngToContainerPoint(e.latlng)) < 3) return;   // второй клик двойного клика
+        pf.pts.push(e.latlng);
+        pfShowLine(pf.pts, true);
+    });
+    map.on('dblclick', () => { if (pf.drawing) pfFinish(); });
+    map.on('mousemove', e => {
+        if (!pf.drawing || !pf.pts.length) return;
+        const seg = [pf.pts[pf.pts.length - 1], e.latlng];
+        if (!pf.rubber) pf.rubber = L.polyline(seg, { color: '#e11d48', weight: 2, opacity: 0.5, dashArray: '2 5', interactive: false }).addTo(map);
+        else pf.rubber.setLatLngs(seg);
+    });
+    document.addEventListener('keydown', e => {
+        if (!pf.drawing || /INPUT|SELECT|TEXTAREA/.test((e.target || {}).tagName || '')) return;
+        if (e.key === 'Enter') pfFinish();
+        else if (e.key === 'Escape') { pfClear(); updateStatus('⛰️ Построение профиля отменено'); }
+    });
+
+    // --- расчёт ---
+    async function pfCompute() {
+        const my = ++pf.seq, ll = pf.latlngs;
+        const cum = [0];
+        for (let i = 1; i < ll.length; i++) cum.push(cum[i - 1] + ll[i - 1].distanceTo(ll[i]));
+        const total = cum[cum.length - 1];
+        if (total < 1) { updateStatus('⚠️ Линия слишком короткая', true); return; }
+        const N = Math.max(2, Math.min(+$('pfN').value, Math.ceil(total / 2) + 1));
+        const dist = [], lat = [], lng = [];
+        let j = 0;
+        for (let k = 0; k < N; k++) {
+            const d = total * k / (N - 1);
+            while (j < cum.length - 2 && cum[j + 1] < d) j++;
+            const seg = cum[j + 1] - cum[j], t = seg > 0 ? (d - cum[j]) / seg : 0;
+            dist.push(d);
+            lat.push(ll[j].lat + (ll[j + 1].lat - ll[j].lat) * t);
+            lng.push(ll[j].lng + (ll[j + 1].lng - ll[j].lng) * t);
+        }
+        $('pfEmpty').textContent = 'Загрузка высот…'; $('pfEmpty').hidden = false;
+        pf.ele = null; pfDraw();
+        updateStatus('⛰️ Профиль: загружаю высоты…');
+
+        // масштаб тайлов подбираем под шаг между точками, но не более ~36 тайлов
+        const spacing = total / (N - 1), latMid = lat.reduce((a, b) => a + b, 0) / N;
+        let z = Math.ceil(Math.log2(156543.03 * Math.cos(latMid * Math.PI / 180) / spacing));
+        z = Math.max(5, Math.min(14, z));
+        const keys = zz => { const set = new Set(); for (let i = 0; i < N; i++) { const t = tileXY(lat[i], lng[i], zz); set.add(Math.floor(t.x) + ',' + Math.floor(t.y)); } return set; };
+        while (z > 5 && keys(z).size > 36) z--;
+        const need = Array.from(keys(z));
+        const data = {};
+        await Promise.all(need.map(k => { const [x, y] = k.split(',').map(Number); return pfTile(z, x, y).then(a => { data[k] = a; }); }));
+        if (my !== pf.seq) return;
+
+        const raw = [];
+        let miss = 0;
+        for (let i = 0; i < N; i++) {
+            const t = tileXY(lat[i], lng[i], z), tx = Math.floor(t.x), ty = Math.floor(t.y), a = data[tx + ',' + ty];
+            if (!a) { raw.push(null); miss++; continue; }
+            const px = Math.min(254.999, Math.max(0, (t.x - tx) * 256 - 0.5)), py = Math.min(254.999, Math.max(0, (t.y - ty) * 256 - 0.5));
+            const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0, o = y0 * 256 + x0;
+            raw.push(a[o] * (1 - fx) * (1 - fy) + a[o + 1] * fx * (1 - fy) + a[o + 256] * (1 - fx) * fy + a[o + 257] * fx * fy);
+        }
+        if (miss === N) {
+            $('pfEmpty').textContent = 'Не удалось загрузить данные рельефа. Проверьте подключение к интернету.';
+            updateStatus('⚠️ Профиль: данные рельефа недоступны', true); return;
+        }
+        for (let i = 1; i < N; i++) if (raw[i] == null) raw[i] = raw[i - 1];
+        for (let i = N - 2; i >= 0; i--) if (raw[i] == null) raw[i] = raw[i + 1];
+        Object.assign(pf, { dist: dist, lat: lat, lng: lng, raw: raw, total: total });
+        pfRender();
+        updateStatus(`⛰️ Профиль построен: ${fmtDist(total)}, перепад ${fmtM(Math.max.apply(null, pf.ele) - Math.min.apply(null, pf.ele))}` + (miss ? ' (часть данных не загрузилась)' : ''));
+    }
+
+    function pfRender() {
+        if (!pf.raw) return;
+        const n = pf.raw.length, k = +$('pfSmooth').value;
+        pf.ele = pf.raw.map((_, i) => {
+            const a = Math.max(0, i - k), b = Math.min(n - 1, i + k);
+            let s = 0; for (let q = a; q <= b; q++) s += pf.raw[q];
+            return s / (b - a + 1);
+        });
+        pf.slope = pf.ele.map((_, i) => {
+            const a = Math.max(0, i - 2), b = Math.min(n - 1, i + 2);
+            return pf.dist[b] > pf.dist[a] ? (pf.ele[b] - pf.ele[a]) / (pf.dist[b] - pf.dist[a]) * 100 : 0;
+        });
+        $('pfEmpty').hidden = true;
+        $('pfCsv').disabled = $('pfPng').disabled = false;
+        pfStatsRender();
+        pfDraw();
+    }
+
+    function pfStatsRender() {
+        const box = $('pfStats');
+        if (!pf.ele) { box.innerHTML = '<div class="m3-hint">Нет данных</div>'; return; }
+        const e = pf.ele, n = e.length;
+        let asc = 0, desc = 0, sumAbs = 0;
+        for (let i = 1; i < n; i++) { const d = e[i] - e[i - 1]; if (d > 0) asc += d; else desc -= d; }
+        pf.slope.forEach(s => { sumAbs += Math.abs(s); });
+        const mn = Math.min.apply(null, e), mx = Math.max.apply(null, e);
+        const rows = [
+            ['Длина', fmtDist(pf.total)], ['Точек', n],
+            ['Мин. высота', fmtM(mn)], ['Макс. высота', fmtM(mx)],
+            ['Средняя', fmtM(e.reduce((a, b) => a + b, 0) / n)], ['Перепад', fmtM(mx - mn)],
+            ['Начало', fmtM(e[0])], ['Конец', fmtM(e[n - 1])],
+            ['Набор ▲', fmtM(asc)], ['Спуск ▼', fmtM(desc)],
+            ['Макс. подъём', fmtSlope(Math.max.apply(null, pf.slope))], ['Макс. спуск', fmtSlope(Math.min.apply(null, pf.slope))],
+            ['Ср. уклон', fmtSlope(sumAbs / n)], ['Конец − начало', (e[n - 1] - e[0] >= 0 ? '+' : '') + Math.round(e[n - 1] - e[0]) + ' м']
+        ];
+        box.innerHTML = rows.map(r => `<div class="pf-st"><span>${r[0]}</span><b>${r[1]}</b></div>`).join('');
+    }
+
+    // --- график ---
+    function niceTicks(a, b, cnt) {
+        const s0 = (b - a) / Math.max(1, cnt), mag = Math.pow(10, Math.floor(Math.log10(s0))), nn = s0 / mag;
+        const st = (nn < 1.5 ? 1 : nn < 3 ? 2 : nn < 7 ? 5 : 10) * mag, out = [];
+        for (let v = Math.ceil(a / st - 1e-9) * st; v <= b + 1e-9; v += st) out.push(+v.toFixed(6));
+        return out;
+    }
+    function pfDraw() {
+        const wrap = $('pfWrap'), c = $('pfCanvas'), W = wrap.clientWidth, H = wrap.clientHeight;
+        if (!W || !H) return;
+        const dpr = window.devicePixelRatio || 1;
+        if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+        const g = c.getContext('2d');
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+        if (!pf.ele) return;
+        const e = pf.ele, n = e.length, total = pf.total, PL = 46, PR = 12, PT = 10, PB = 22, pw = W - PL - PR, ph = H - PT - PB;
+        if (pw < 20 || ph < 20) return;
+        const mn = Math.min.apply(null, e), mx = Math.max.apply(null, e), pad = Math.max((mx - mn) * 0.1, 2), y0 = mn - pad, y1 = mx + pad;
+        const X = d => PL + d / total * pw, Y = v => PT + ph - (v - y0) / (y1 - y0) * ph;
+        g.font = '10px "Segoe UI", Arial, sans-serif';
+        g.lineWidth = 1;
+        g.textAlign = 'right'; g.textBaseline = 'middle';
+        niceTicks(y0, y1, Math.floor(ph / 32)).forEach(v => {
+            const y = Math.round(Y(v)) + 0.5;
+            g.strokeStyle = '#e2e8f0'; g.beginPath(); g.moveTo(PL, y); g.lineTo(W - PR, y); g.stroke();
+            g.fillStyle = '#64748b'; g.fillText(String(Math.round(v)), PL - 5, y);
+        });
+        const km = total >= 2000;
+        g.textAlign = 'center'; g.textBaseline = 'top';
+        niceTicks(0, total, Math.floor(pw / 80)).forEach(v => {
+            const x = Math.round(X(v)) + 0.5;
+            g.strokeStyle = '#f1f5f9'; g.beginPath(); g.moveTo(x, PT); g.lineTo(x, PT + ph); g.stroke();
+            g.fillStyle = '#64748b'; g.fillText(String(+(km ? v / 1000 : v).toFixed(2)), x, PT + ph + 4);
+        });
+        g.textAlign = 'right'; g.fillStyle = '#94a3b8'; g.fillText(km ? 'км' : 'м', W - 2, PT + ph + 4);
+        g.save(); g.translate(10, PT + ph / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.fillText('высота, м', 0, -6); g.restore();
+        // заливка и линия
+        const grad = g.createLinearGradient(0, PT, 0, PT + ph);
+        grad.addColorStop(0, 'rgba(16,185,129,0.35)'); grad.addColorStop(1, 'rgba(16,185,129,0.03)');
+        g.beginPath(); g.moveTo(X(pf.dist[0]), PT + ph);
+        for (let i = 0; i < n; i++) g.lineTo(X(pf.dist[i]), Y(e[i]));
+        g.lineTo(X(pf.dist[n - 1]), PT + ph); g.closePath(); g.fillStyle = grad; g.fill();
+        g.lineWidth = 2; g.lineJoin = 'round'; g.lineCap = 'round';
+        if ($('pfSlopeColor').checked) {
+            for (let i = 1; i < n; i++) {
+                g.strokeStyle = slopeColor((pf.slope[i] + pf.slope[i - 1]) / 2);
+                g.beginPath(); g.moveTo(X(pf.dist[i - 1]), Y(e[i - 1])); g.lineTo(X(pf.dist[i]), Y(e[i])); g.stroke();
+            }
+        } else {
+            g.strokeStyle = '#059669'; g.beginPath();
+            for (let i = 0; i < n; i++) { const x = X(pf.dist[i]), y = Y(e[i]); if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+            g.stroke();
+        }
+        // маркер под курсором
+        const h = pf.hover;
+        if (h >= 0 && h < n) {
+            const x = X(pf.dist[h]), y = Y(e[h]);
+            g.strokeStyle = '#64748b'; g.lineWidth = 1; g.setLineDash([3, 3]);
+            g.beginPath(); g.moveTo(x, PT); g.lineTo(x, PT + ph); g.stroke(); g.setLineDash([]);
+            g.fillStyle = '#e11d48'; g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+            g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); g.stroke();
+            const s = pf.slope[h], txt = `${fmtDist(pf.dist[h])} · ${Math.round(e[h])} м · ${s >= 0 ? '↗' : '↘'} ${Math.abs(s).toFixed(1)}%`;
+            g.font = '600 11px "Segoe UI", Arial, sans-serif';
+            const tw = g.measureText(txt).width + 12, bx = x + 10 + tw > W - 4 ? x - 10 - tw : x + 10;
+            g.fillStyle = 'rgba(15,23,42,0.88)'; g.fillRect(bx, PT + 2, tw, 20);
+            g.fillStyle = '#ffffff'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(txt, bx + 6, PT + 12);
+        }
+    }
+    function pfHover(i) {
+        pf.hover = i;
+        pfDraw();
+        if (i < 0 || !pf.ele) { if (pf.hoverMk) { map.removeLayer(pf.hoverMk); pf.hoverMk = null; } return; }
+        const p = L.latLng(pf.lat[i], pf.lng[i]);
+        if (!pf.hoverMk) pf.hoverMk = L.circleMarker(p, { radius: 6, color: '#ffffff', weight: 2, fillColor: '#e11d48', fillOpacity: 1, interactive: false }).addTo(map);
+        else pf.hoverMk.setLatLng(p);
+    }
+    $('pfCanvas').addEventListener('pointermove', e => {
+        if (!pf.ele) return;
+        const r = $('pfCanvas').getBoundingClientRect(), PL = 46, PR = 12, pw = r.width - PL - PR;
+        const t = Math.min(1, Math.max(0, (e.clientX - r.left - PL) / pw));
+        pfHover(Math.round(t * (pf.ele.length - 1)));
+    });
+    $('pfCanvas').addEventListener('pointerleave', () => pfHover(-1));
+    if (window.ResizeObserver) new ResizeObserver(pfDraw).observe($('pfWrap'));
+    document.querySelector('.bp-tab[data-bp-tab="profile"]').addEventListener('click', () => setTimeout(pfDraw, 30));
+
+    // --- экспорт ---
+    function download(blob, name) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }
+    $('pfCsv').addEventListener('click', () => {
+        if (!pf.ele) return;
+        const f = (v, d) => v.toFixed(d).replace('.', ',');
+        const rows = ['№;Расстояние, м;Широта;Долгота;Высота, м;Высота (сырая), м;Уклон, %'];
+        pf.ele.forEach((v, i) => rows.push([i + 1, f(pf.dist[i], 1), f(pf.lat[i], 6), f(pf.lng[i], 6), f(v, 1), f(pf.raw[i], 1), f(pf.slope[i], 1)].join(';')));
+        download(new Blob(['\ufeff' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'profile.csv');
+    });
+    $('pfPng').addEventListener('click', () => {
+        if (!pf.ele) return;
+        const h = pf.hover; pf.hover = -1; pfDraw();
+        $('pfCanvas').toBlob(b => { if (b) download(b, 'profile.png'); pf.hover = h; pfDraw(); });
+    });
+
+    // --- привязка кнопок ---
+    $('profileBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        document.querySelectorAll('.widget-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.widget-btn').forEach(b => { if (b.id !== 'mode3dBtn' && b.id !== 'swipeBtn') b.classList.remove('active'); });
+        activePanel = null;
+        pfToggleDraw();
+    });
+    $('pfDraw').addEventListener('click', pfToggleDraw);
+    $('pfFromSel').addEventListener('click', pfFromSelected);
+    $('pfClear').addEventListener('click', pfClear);
+    $('pfN').addEventListener('change', () => { if (pf.latlngs) pfCompute(); });
+    $('pfSmooth').addEventListener('input', function () { $('pfSmoothVal').textContent = this.value; pfRender(); });
+    $('pfSlopeColor').addEventListener('change', pfDraw);
+    pfClear();
 })();

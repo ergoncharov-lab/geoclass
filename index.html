@@ -150,6 +150,8 @@
         <div id="map"></div>
         <!-- 3D-карта (MapLibre): показывается поверх основной карты в режиме «3D» -->
         <div id="map3d" class="map3d"></div>
+        <!-- Сетка координат (2D): рисуется поверх карты -->
+        <canvas id="gridCanvas" class="grid-canvas"></canvas>
 
         <!-- КНОПКИ СЛЕВА СВЕРХУ -->
         <div class="map-controls-left">
@@ -426,6 +428,27 @@
                     <i class="fas fa-cube"></i>
                 </button>
             </div>
+            <!-- КНОПКА СЕТКА КООРДИНАТ -->
+            <div class="side-widget" id="gridWidget">
+                <button class="map-btn widget-btn" id="gridBtn" title="Сетка координат">
+                    <i class="fas fa-border-all"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="gridPanel">
+                    <div class="widget-panel-body-horizontal grid-opts">
+                        <div class="measure-chip" id="gridToggle" title="Включить / выключить сетку"><i class="fas fa-eye"></i><span>Сетка</span></div>
+                        <label class="gr-f">Формат <select id="gridFmt"><option value="dd">Градусы</option><option value="dms">Град-мин-сек</option></select></label>
+                        <label class="gr-f">Шаг <select id="gridStep"></select></label>
+                        <label class="gr-f">Цвет <input type="color" id="gridColor" value="#1d4ed8"></label>
+                        <label class="gr-f"><input type="checkbox" id="gridLabels" checked> Подписи</label>
+                    </div>
+                </div>
+            </div>
+            <!-- КНОПКА ПРОФИЛЬ РЕЛЬЕФА (результат — на вкладке «Профиль» нижней панели) -->
+            <div class="side-widget" id="profileWidget">
+                <button class="map-btn widget-btn" id="profileBtn" title="Профиль рельефа: нарисуйте линию на карте">
+                    <i class="fas fa-mountain"></i>
+                </button>
+            </div>
         </div>
         <!-- МИНИ-КАРТА СПРАВА СНИЗУ -->
         <div class="mini-map-container" id="miniMapContainer">
@@ -466,6 +489,7 @@
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
             <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой на вкладке или на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Выбор даты спутникового снимка (Sentinel-2)"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
@@ -708,6 +732,39 @@
                 </div>
             </div>
         </div><!-- /bp-pane 3d -->
+
+        <!-- ВКЛАДКА «ПРОФИЛЬ»: профиль рельефа по линии (высоты — Terrarium DEM) -->
+        <div class="bottom-panel-body bp-pane bp-draw bp-profile" data-bp-pane="profile" role="tabpanel">
+            <div class="dw-block pf-ctrl">
+                <div class="dw-title">Профиль рельефа</div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="pfDraw" title="Нарисовать линию на карте (повторный клик — завершить)"><i class="fas fa-pen"></i><span>Нарисовать</span></button>
+                    <button class="dw-act" id="pfFromSel" title="Взять линию или контур, выбранный на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>По выбранной</span></button>
+                    <button class="dw-act dw-danger" id="pfClear" title="Убрать профиль и линию с карты"><i class="fas fa-eraser"></i><span>Очистить</span></button>
+                </div>
+                <div class="dw-row"><label>Точек</label>
+                    <select id="pfN"><option value="100">100</option><option value="200" selected>200</option><option value="300">300</option><option value="500">500</option></select>
+                </div>
+                <div class="dw-row"><label>Сглаживание</label><input type="range" id="pfSmooth" min="0" max="6" step="1" value="2"><span class="dw-val" id="pfSmoothVal">2</span></div>
+                <label class="dw-check"><input type="checkbox" id="pfSlopeColor" checked> Цвет линии по уклону</label>
+                <div class="m3-hint">ЛКМ — точка, двойной клик или Enter — завершить, Esc — отмена</div>
+            </div>
+            <div class="dw-block pf-stats">
+                <div class="dw-title">Показатели</div>
+                <div class="pf-stat-grid" id="pfStats"></div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="pfCsv" title="Скачать таблицу профиля (CSV)" disabled><i class="fas fa-file-csv"></i><span>CSV</span></button>
+                    <button class="dw-act" id="pfPng" title="Скачать график (PNG)" disabled><i class="fas fa-image"></i><span>PNG</span></button>
+                </div>
+            </div>
+            <div class="dw-block pf-chartblock">
+                <div class="dw-title">График высот <span class="pf-legend" title="Уклон"><i style="background:#10b981"></i>&lt;3% <i style="background:#eab308"></i>3–8% <i style="background:#f97316"></i>8–15% <i style="background:#dc2626"></i>&gt;15%</span></div>
+                <div class="pf-chart-wrap" id="pfWrap">
+                    <canvas id="pfCanvas"></canvas>
+                    <div class="pf-empty" id="pfEmpty">Нажмите «Нарисовать» (или кнопку ⛰ на карте) и укажите линию, либо выберите линию на вкладке «Рисование» и нажмите «По выбранной»</div>
+                </div>
+            </div>
+        </div><!-- /bp-pane profile -->
 
         <!-- ВКЛАДКА «ЭКСПОРТ»: выгрузка карты в изображение / PDF / GeoTIFF с привязкой -->
         <div class="bottom-panel-body bp-pane bp-draw bp-export" data-bp-pane="export" role="tabpanel">
