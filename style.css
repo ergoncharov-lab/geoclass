@@ -1130,7 +1130,8 @@ input[type="file"] { display: none; }
 .bottom-panel {
     flex-shrink: 0;
     position: relative;
-    height: 220px;
+    height: 300px;
+    max-height: calc(100vh - 200px);
     background: #ffffff;
     border-top: 1px solid #d0d5dd;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
@@ -1865,3 +1866,39 @@ body.resizing-x *, body.resizing-y * { user-select: none; }
 .m3-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m3-item button { border: none; background: transparent; color: #64748b; cursor: pointer; padding: 1px 3px; font-size: 10px; }
 .m3-item button:hover { color: #059669; }
+
+/* ===== 3D: переключатель на вкладке и неактивное состояние инструментов ===== */
+.bp-3d.m3-off .dw-block:not(.m3-switch) { opacity: 0.4; pointer-events: none; filter: grayscale(0.6); }
+.m3-toggle-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #ffffff; color: #334155; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.m3-toggle-btn:hover { border-color: #34d399; color: #059669; }
+.m3-toggle-btn.on { background: #059669; border-color: #059669; color: #ffffff; }
+.m3-toggle-btn.on:hover { background: #047857; color: #ffffff; }
+/* компактная кнопка 3D в шапке нижней панели — показывается только на вкладке «3D» */
+.m3-toggle-btn.m3-mini { display: none; margin: 0 6px 0 auto; padding: 0 9px; height: 22px; gap: 5px; font-size: 11px; line-height: 1; border-radius: 11px; }
+.m3-toggle-btn.m3-mini i { font-size: 10px; }
+.bottom-panel:has(.bp-tab[data-bp-tab="3d"].active) .m3-toggle-btn.m3-mini { display: inline-flex; }
+/* «Сбросить» — отдельной строкой ниже, не у края */
+.bp-3d .m3-reset-row { grid-template-columns: 1fr; margin-top: 14px; }
+.bp-3d .dw-block:last-child { padding-right: 12px; }
+
+/* ===== Вкладка «Экспорт» ===== */
+.bp-export .dw-block { max-width: 230px; }
+.bp-export .dw-row input[type="number"], .bp-export .dw-row input[type="text"] {
+    flex: 1 1 auto; min-width: 0; width: 50px; height: 20px; padding: 0 4px;
+    border: 1px solid #cbd5e1; border-radius: 5px; background: #ffffff; color: #1e293b; font-family: inherit; font-size: 10px;
+}
+.bp-export .ex-preview { flex: 1 1 300px; min-width: 260px; max-width: 420px; padding-right: 12px; }
+.ex-canvas-wrap {
+    display: flex; align-items: center; justify-content: center; min-height: 110px; padding: 4px;
+    background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 6px;
+}
+#exPreview { max-width: 100%; max-height: 170px; background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.ex-info { font-size: 10px; color: #64748b; line-height: 1.35; }
+.ex-warn { font-size: 10px; color: #b45309; line-height: 1.35; }
+.ex-go { background: #059669; border-color: #059669; color: #ffffff; }
+.ex-go:hover:not(:disabled) { background: #047857; color: #ffffff; }

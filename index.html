@@ -119,39 +119,6 @@
             <div id="objectListContainer" class="object-list-container"></div>
         </div>
 
-        <!-- СТОИМОСТЬ -->
-        <div class="section" style="background: #f0fdf4; border-bottom: none;">
-            <div class="section-title"><i class="fas fa-calculator"></i> Стоимость анализа</div>
-            
-            <div class="price-info">
-                <div class="price-row">
-                    <span>Общая площадь:</span>
-                    <span id="areaDisplay">0.000 км²</span>
-                </div>
-                <div class="price-row">
-                    <span>Кол-во объектов:</span>
-                    <span id="objectsCount">0</span>
-                </div>
-                <div class="price-row total">
-                    <span>Итого:</span>
-                    <span id="costDisplay">0 ₽</span>
-                </div>
-            </div>
-            
-            <button class="btn btn-primary" id="calculateBtn">
-                <i class="fas fa-rocket"></i> ЗАПУСТИТЬ КЛАССИФИКАЦИЮ
-            </button>
-            
-            <div style="margin-top: 10px; display: flex; gap: 8px;">
-                <button class="btn btn-secondary" style="flex:1;" id="exportReportBtn" disabled>
-                    <i class="fas fa-file-pdf"></i> Отчёт
-                </button>
-                <button class="btn btn-secondary" style="flex:1;" id="exportVectorBtn" disabled>
-                    <i class="fas fa-draw-polygon"></i> Вектор
-                </button>
-            </div>
-        </div>
-
         </div><!-- /tab-pane main -->
 
         <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК -->
@@ -488,15 +455,18 @@
         <div class="bp-resizer" id="bpResizer" title="Потяните, чтобы изменить высоту панели (двойной клик — сбросить)"></div>
         <div class="bottom-panel-header">
             <div class="bottom-panel-title"><i class="fas fa-chart-column"></i> Легенда и инструменты</div>
+            <!-- компактная кнопка 3D: видна только на вкладке «3D», не занимает место среди инструментов -->
+            <button class="m3-toggle-btn m3-mini" id="m3ToggleBtn" title="Включить / выключить 3D режим (настройки станут доступны после включения)"><i class="fas fa-cube"></i><span>Включить 3D</span></button>
             <button class="bottom-panel-toggle" id="bottomPanelToggle" title="Свернуть/развернуть панель">
                 <i class="fas fa-chevron-down"></i>
             </button>
         </div>
         <!-- ВКЛАДКИ НИЖНЕЙ ПАНЕЛИ (пока кроме «Главной» пустые — под будущий растровый анализ) -->
         <div class="bp-tabs" id="bpTabs" role="tablist">
-            <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="3d" title="Настройки 3D режима (включите кнопку «3D» на карте)" disabled><i class="fas fa-cube"></i><span>3D</span></button>
+            <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой на вкладке или на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
+            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Выбор даты спутникового снимка (Sentinel-2)"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
             <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
@@ -507,7 +477,7 @@
         </div>
 
         <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
-        <div class="bottom-panel-body bp-pane active" data-bp-pane="main" role="tabpanel">
+        <div class="bottom-panel-body bp-pane" data-bp-pane="main" role="tabpanel">
             <div class="bp-block bp-legend">
                 <div class="bp-block-title">Легенда включённых аналитических слоёв</div>
                 <div class="bp-empty-note" id="layerLegendEmpty">Нет включённых аналитических слоёв. Включите слой (Land Cover, NDVI, NDWI, почвенные карты) кнопкой «Аналитические подложки» справа на карте — здесь появится его легенда.</div>
@@ -630,7 +600,7 @@
         </div><!-- /bp-pane draw -->
 
         <!-- ВКЛАДКА «3D»: настройки 3D режима (активна после включения кнопки «3D» на карте) -->
-        <div class="bottom-panel-body bp-pane bp-draw bp-3d" data-bp-pane="3d" role="tabpanel">
+        <div class="bottom-panel-body bp-pane active bp-draw bp-3d m3-off" data-bp-pane="3d" role="tabpanel">
 
             <!-- Камера -->
             <div class="dw-block">
@@ -674,6 +644,14 @@
                 <label class="dw-check"><input type="checkbox" id="m3Land"> Леса, луга, поля</label>
                 <label class="dw-check"><input type="checkbox" id="m3Labels"> Названия населённых пунктов</label>
                 <div class="m3-hint">Клик по зданию — показать его высоту</div>
+            </div>
+
+            <!-- Деревья на лесных полигонах OSM -->
+            <div class="dw-block">
+                <div class="dw-title">Деревья</div>
+                <label class="dw-check"><input type="checkbox" id="m3Trees"> 3D-деревья на лесах OSM</label>
+                <div class="dw-row"><label>Густота</label><input type="range" id="m3TreeDens" min="10" max="300" step="10"><span class="dw-val" id="m3TreeDensVal"></span></div>
+                <div class="m3-hint" id="m3TreesInfo">Деревья случайно рассыпаются по лесным полигонам OSM (с масштаба z14)</div>
             </div>
 
             <!-- Освещение -->
@@ -724,10 +702,110 @@
                 <div class="dw-title">Сервис</div>
                 <div class="dw-act-grid">
                     <button class="dw-act" id="m3Shot" title="Сохранить текущий 3D-вид в PNG"><i class="fas fa-camera"></i><span>Снимок</span></button>
+                </div>
+                <div class="dw-act-grid m3-reset-row">
                     <button class="dw-act" id="m3Reset" title="Вернуть настройки 3D по умолчанию"><i class="fas fa-rotate-left"></i><span>Сбросить</span></button>
                 </div>
             </div>
         </div><!-- /bp-pane 3d -->
+
+        <!-- ВКЛАДКА «ЭКСПОРТ»: выгрузка карты в изображение / PDF / GeoTIFF с привязкой -->
+        <div class="bottom-panel-body bp-pane bp-draw bp-export" data-bp-pane="export" role="tabpanel">
+            <div class="dw-block">
+                <div class="dw-title">Формат и качество</div>
+                <div class="dw-row"><label>Формат</label>
+                    <select id="exFmt">
+                        <option value="pdf">PDF</option>
+                        <option value="png">PNG</option>
+                        <option value="jpg">JPEG (JPG)</option>
+                        <option value="webp">WebP</option>
+                        <option value="tiff">TIFF / GeoTIFF</option>
+                    </select>
+                </div>
+                <div class="dw-row"><label>Разрешение</label>
+                    <select id="exDpi">
+                        <option value="72">72 dpi (экран)</option>
+                        <option value="96">96 dpi</option>
+                        <option value="150" selected>150 dpi</option>
+                        <option value="200">200 dpi</option>
+                        <option value="300">300 dpi (печать)</option>
+                        <option value="450">450 dpi</option>
+                        <option value="600">600 dpi</option>
+                    </select>
+                </div>
+                <div class="dw-row"><label>Качество</label><input type="range" id="exQuality" min="40" max="100" step="5" value="90"><span class="dw-val" id="exQualityVal">90%</span></div>
+            </div>
+
+            <div class="dw-block">
+                <div class="dw-title">Размер листа</div>
+                <div class="dw-row"><label>Лист</label>
+                    <select id="exPaper">
+                        <option value="a4" selected>A4</option>
+                        <option value="a3">A3</option>
+                        <option value="a2">A2</option>
+                        <option value="a1">A1</option>
+                        <option value="a0">A0</option>
+                        <option value="a5">A5</option>
+                        <option value="letter">Letter</option>
+                        <option value="legal">Legal</option>
+                        <option value="tabloid">Tabloid</option>
+                        <option value="screen">Как на экране</option>
+                        <option value="custom">Свой размер (мм)</option>
+                    </select>
+                </div>
+                <div class="dw-row"><label>Ориентация</label>
+                    <select id="exOrient">
+                        <option value="auto" selected>Как на экране</option>
+                        <option value="landscape">Альбомная</option>
+                        <option value="portrait">Книжная</option>
+                    </select>
+                </div>
+                <div class="dw-row" id="exCustomRow" hidden><label>Ш × В, мм</label><input type="number" id="exCW" min="20" max="3000" value="297"><input type="number" id="exCH" min="20" max="3000" value="210"></div>
+                <div class="dw-row"><label>Поля, мм</label><input type="number" id="exMargin" min="0" max="50" step="1" value="8"></div>
+                <div class="m3-hint" id="exSizeInfo"></div>
+            </div>
+
+            <div class="dw-block">
+                <div class="dw-title">Содержимое</div>
+                <label class="dw-check"><input type="checkbox" id="exBase" checked> Подложка (снимки / карта)</label>
+                <label class="dw-check"><input type="checkbox" id="exDrawn" checked> Участки (нарисованные и загруженные)</label>
+                <label class="dw-check"><input type="checkbox" id="exSketch" checked> Рисунки (фигуры, значки, текст)</label>
+                <div class="m3-hint">В 3D-режиме сохраняется текущий 3D-вид</div>
+            </div>
+
+            <div class="dw-block">
+                <div class="dw-title">Элементы карты</div>
+                <div class="dw-row"><label>Заголовок</label><input type="text" id="exTitle" placeholder="Название карты"></div>
+                <div class="dw-row"><label>Подпись</label><input type="text" id="exNote" placeholder="Примечание"></div>
+                <label class="dw-check"><input type="checkbox" id="exLegend" checked> Легенда слоя</label>
+                <label class="dw-check"><input type="checkbox" id="exScale" checked> Масштабная линейка</label>
+                <label class="dw-check"><input type="checkbox" id="exNorth" checked> Стрелка севера</label>
+                <label class="dw-check"><input type="checkbox" id="exGrid"> Сетка координат</label>
+                <label class="dw-check"><input type="checkbox" id="exFrame" checked> Рамка</label>
+                <label class="dw-check"><input type="checkbox" id="exDate" checked> Дата</label>
+                <label class="dw-check"><input type="checkbox" id="exCoords"> Координаты центра</label>
+                <label class="dw-check"><input type="checkbox" id="exAttr" checked> Источник подложки</label>
+            </div>
+
+            <div class="dw-block">
+                <div class="dw-title">Привязка</div>
+                <label class="dw-check"><input type="checkbox" id="exGeo" checked> Пространственная привязка</label>
+                <div class="m3-hint" id="exGeoHint"></div>
+                <div class="m3-hint">Карта выгружается севером вверх. GeoPDF / GeoTIFF открываются в Avenza Maps и QGIS — приложение покажет ваше положение на карте</div>
+            </div>
+
+            <div class="dw-block dw-listblock ex-preview">
+                <div class="dw-title">Предпросмотр</div>
+                <div class="ex-canvas-wrap"><canvas id="exPreview" width="10" height="10"></canvas></div>
+                <div class="ex-info" id="exInfo"></div>
+                <div class="ex-warn" id="exWarn" hidden></div>
+                <div class="dw-act-grid">
+                    <button class="dw-act" id="exRefresh" title="Обновить предпросмотр"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
+                    <button class="dw-act ex-go" id="exDownload" title="Собрать и скачать файл"><i class="fas fa-download"></i><span>Экспорт</span></button>
+                </div>
+                <div class="ex-info" id="exStatus"></div>
+            </div>
+        </div><!-- /bp-pane export -->
 
         <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
         <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">

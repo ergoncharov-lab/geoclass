@@ -842,7 +842,6 @@ function updateObjectList() {
         }
     });
     document.getElementById('objectsCountBadge').textContent = layers.length;
-    document.getElementById('objectsCount').textContent = layers.length;
     html += `
         <div class="object-total">
             <span>📊 Всего объектов: ${layers.length}</span>
@@ -850,12 +849,7 @@ function updateObjectList() {
         </div>
     `;
     container.innerHTML = html;
-    document.getElementById('areaDisplay').textContent = totalArea.toFixed(3) + ' га';
     areaHa = totalArea;
-    const baseRate = 250;
-    let calculated = totalArea * baseRate;
-    estimatedCost = Math.max(500, Math.round(calculated / 50) * 50);
-    document.getElementById('costDisplay').textContent = estimatedCost.toLocaleString('ru-RU') + ' ₽';
 }
 
 window.selectObject = function(index) {
@@ -2318,78 +2312,6 @@ document.getElementById('vectorFileInput').addEventListener('change', function(e
         reader.readAsText(file);
     }
     this.value = '';
-});
-
-// ---------- КНОПКА "ЗАПУСТИТЬ КЛАССИФИКАЦИЮ" ----------
-document.getElementById('calculateBtn').addEventListener('click', function() {
-    if (drawnItems.getLayers().length === 0) {
-        updateStatus('⚠️ Сначала нарисуйте полигон или загрузите файл!', true);
-        return;
-    }
-    this.disabled = true;
-    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обработка...';
-    setTimeout(() => {
-        this.disabled = false;
-        this.innerHTML = '<i class="fas fa-rocket"></i> ЗАПУСТИТЬ КЛАССИФИКАЦИЮ';
-        document.getElementById('exportReportBtn').disabled = false;
-        document.getElementById('exportVectorBtn').disabled = false;
-        alert(
-            '✅ Классификация выполнена!\n\n' +
-            '📐 Площадь: ' + areaHa.toFixed(3) + ' га\n' +
-            '📦 Объектов: ' + objectsCount + '\n' +
-            '💰 Стоимость: ' + estimatedCost.toLocaleString('ru-RU') + ' ₽\n\n' +
-            '📄 Отчёт и векторный слой готовы к скачиванию.'
-        );
-        updateStatus('✅ Классификация завершена!');
-    }, 1500);
-});
-
-// ---------- ЭКСПОРТ ----------
-document.getElementById('exportReportBtn').addEventListener('click', function() {
-    const report = `
-        📊 ОТЧЁТ О КЛАССИФИКАЦИИ ЗЕМНОЙ ПОВЕРХНОСТИ
-        ============================================
-        📅 Дата: ${new Date().toLocaleString('ru-RU')}
-        📐 Общая площадь: ${areaHa.toFixed(3)} га
-        📦 Количество объектов: ${objectsCount}
-        💰 Стоимость: ${estimatedCost.toLocaleString('ru-RU')} ₽
-        ============================================
-        Результаты классификации (демо):
-        - Леса: ${(areaHa * 0.35).toFixed(2)} га (35%)
-        - Водные объекты: ${(areaHa * 0.08).toFixed(2)} га (8%)
-        - Застройка: ${(areaHa * 0.22).toFixed(2)} га (22%)
-        - Сельхозугодья: ${(areaHa * 0.25).toFixed(2)} га (25%)
-        - Прочее: ${(areaHa * 0.10).toFixed(2)} га (10%)
-        ============================================
-        GeoClass — классификация земной поверхности
-    `;
-    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `отчёт_классификация_${new Date().toISOString().slice(0,10)}.txt`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    updateStatus('📄 Отчёт скачан');
-});
-
-document.getElementById('exportVectorBtn').addEventListener('click', function() {
-    if (drawnItems.getLayers().length === 0) {
-        updateStatus('Нет данных для экспорта', true);
-        return;
-    }
-    const features = [];
-    drawnItems.eachLayer(layer => {
-        features.push(layer.toGeoJSON());
-    });
-    const geojson = { type: 'FeatureCollection', features: features };
-    const kml = geojsonToKml(geojson);
-    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `классификация_${new Date().toISOString().slice(0,10)}.kml`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    updateStatus('🗺️ Векторный слой скачан');
 });
 
 function geojsonToKml(geojson) {
@@ -4928,7 +4850,10 @@ const M3D = {
     DEM: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     OSM: 'https://tiles.openfreemap.org/planet',
     GLYPHS: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-    FONT: ['Noto Sans Regular']
+    FONT: ['Noto Sans Regular'],
+    TREE_MINZ: 14,      // деревья рисуются с этого масштаба MapLibre
+    TREE_MAX: 60000,    // максимум деревьев одновременно
+    TREE_HINT: 'Деревья случайно рассыпаются по лесным полигонам OSM (с масштаба z14)'
 };
 
 function m3DefaultOpts() {
@@ -4937,14 +4862,16 @@ function m3DefaultOpts() {
         buildings: true, bColor: '#d8dee9', bOpacity: 0.92, bHeight: 1, bByHeight: false,
         roads: false, water: false, landcover: false, labels: false,
         sunAz: 210, sunAlt: 45, sunInt: 0.55,
-        userObjects: true, extrude: false, extrudeH: 20
+        userObjects: true, extrude: false, extrudeH: 20,
+        trees: false, treeDens: 100
     };
 }
 
 const m3d = {
     active: false, map: null, ready: false, guard: false, seq: 0, baseIds: [],
     items: [], nextId: 1, selected: null, placing: false, orbit: 0, marker: null,
-    lights: [], bingReg: false, opts: m3DefaultOpts()
+    lights: [], bingReg: false, opts: m3DefaultOpts(),
+    trees: { n: 0, timer: 0, retry: 0, origin: null, cosO: 1, trunk: null, crown: null, sun: null }
 };
 
 // [id элемента, ключ настройки, тип значения]
@@ -4955,13 +4882,14 @@ const M3_CONTROLS = [
     ['m3BH', 'bHeight', 'num'], ['m3BByH', 'bByHeight', 'bool'],
     ['m3Roads', 'roads', 'bool'], ['m3Water', 'water', 'bool'], ['m3Land', 'landcover', 'bool'], ['m3Labels', 'labels', 'bool'],
     ['m3SunAz', 'sunAz', 'num'], ['m3SunAlt', 'sunAlt', 'num'], ['m3SunInt', 'sunInt', 'num'],
-    ['m3User', 'userObjects', 'bool'], ['m3Extrude', 'extrude', 'bool'], ['m3ExtH', 'extrudeH', 'num']
+    ['m3User', 'userObjects', 'bool'], ['m3Extrude', 'extrude', 'bool'], ['m3ExtH', 'extrudeH', 'num'],
+    ['m3Trees', 'trees', 'bool'], ['m3TreeDens', 'treeDens', 'num']
 ];
 const M3_FMT = {
     m3Exag: v => '×' + (+v).toFixed(1), m3HillInt: v => Math.round(v * 100) + '%',
     m3BOp: v => Math.round(v * 100) + '%', m3BH: v => '×' + (+v).toFixed(1),
     m3SunAz: v => Math.round(v) + '°', m3SunAlt: v => Math.round(v) + '°', m3SunInt: v => Math.round(v * 100) + '%',
-    m3ExtH: v => Math.round(v) + ' м'
+    m3ExtH: v => Math.round(v) + ' м', m3TreeDens: v => Math.round(v) + '/га'
 };
 
 const m3El = id => document.getElementById(id);
@@ -5061,6 +4989,9 @@ function m3AddOverlays(m) {
             'wetland', '#0d9488', 'sand', '#fcd34d', '#84cc16'],
         'fill-opacity': 0.38
     } });
+    m.addLayer({ id: 'gc-forest', type: 'fill', source: 'gc-osm', 'source-layer': 'landcover',
+        filter: ['in', ['get', 'class'], ['literal', ['wood', 'forest']]], layout: { visibility: 'none' },
+        paint: { 'fill-color': '#166534', 'fill-opacity': 0.22 } });
     m.addLayer({ id: 'gc-water', type: 'fill', source: 'gc-osm', 'source-layer': 'water', layout: { visibility: 'none' }, paint: {
         'fill-color': '#38bdf8', 'fill-opacity': 0.6
     } });
@@ -5137,6 +5068,7 @@ function m3Apply() {
     m.setLayoutProperty('gc-water', 'visibility', vis(o.water));
     m.setLayoutProperty('gc-landcover', 'visibility', vis(o.landcover));
     m.setLayoutProperty('gc-labels', 'visibility', vis(o.labels));
+    m.setLayoutProperty('gc-forest', 'visibility', vis(o.trees));
 
     ['gc-user-line', 'gc-user-pt', 'gc-user-txt'].forEach(id => m.setLayoutProperty(id, 'visibility', vis(o.userObjects)));
     m.setLayoutProperty('gc-user-fill', 'visibility', vis(o.userObjects && !o.extrude));
@@ -5144,6 +5076,7 @@ function m3Apply() {
     m.setPaintProperty('gc-user-ext', 'fill-extrusion-height', o.extrudeH);
 
     m3UpdateLights();
+    if (o.trees || m3d.trees.n) m3TreesSchedule();
     m.triggerRepaint();
 }
 
@@ -5255,6 +5188,184 @@ function m3UpdateLights() {
         d.position.set(Math.sin(az) * Math.cos(alt), Math.sin(alt), -Math.cos(az) * Math.cos(alt));
         d.intensity = 0.3 + m3d.opts.sunInt * 1.2;
     });
+    m3TreesLight();
+}
+
+// ---------- 3D-деревья на лесных полигонах OSM (three.js, InstancedMesh) ----------
+// Точки-деревья берутся псевдослучайно из глобальной сетки: в каждой ячейке одна точка со случайным
+// смещением (генератор зависит только от номера ячейки), после чего остаются точки внутри лесных
+// полигонов OSM. Поэтому деревья не «прыгают» при движении карты и не дублируются на стыках тайлов.
+function m3TreesLight() {
+    const T = m3d.trees;
+    if (!T.sun) return;
+    const az = m3d.opts.sunAz * m3Rad, alt = Math.max(m3d.opts.sunAlt, 5) * m3Rad;
+    T.sun.position.set(Math.sin(az) * Math.cos(alt), Math.cos(az) * Math.cos(alt), Math.sin(alt));   // восток, север, вверх
+    T.sun.intensity = 0.3 + m3d.opts.sunInt * 1.2;
+}
+
+function m3AddTreesLayer(m) {
+    if (typeof THREE === 'undefined') return;
+    const T = m3d.trees;
+    m.addLayer({
+        id: 'gc-trees', type: 'custom', renderingMode: '3d',
+        onAdd: function (map, gl) {
+            this.camera = new THREE.Camera();
+            this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            const cap = M3D.TREE_MAX, scene = new THREE.Scene();
+            scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+            T.sun = new THREE.DirectionalLight(0xffffff, 0.9);
+            scene.add(T.sun);
+            const tg = new THREE.CylinderGeometry(1, 1, 1, 5);   // ствол: ось Z, основание в z=0
+            tg.rotateX(Math.PI / 2); tg.translate(0, 0, 0.5);
+            const mk = (geo, color) => {
+                const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: color }), cap);
+                mesh.count = 0; mesh.frustumCulled = false; scene.add(mesh);
+                return mesh;
+            };
+            T.trunk = mk(tg, 0x5b3a1e);
+            T.crown = mk(new THREE.IcosahedronGeometry(1, 0), 0xffffff);   // крона
+            T.crown.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+            this.scene = scene;
+            m3TreesLight();
+        },
+        render: function (gl, matrix) {
+            if (!T.n || !T.origin) return;
+            const s = T.origin.meterInMercatorCoordinateUnits();
+            const l = new THREE.Matrix4().makeTranslation(T.origin.x, T.origin.y, T.origin.z)
+                .scale(new THREE.Vector3(s, -s, s));   // x — восток, y — север, z — вверх (метры)
+            this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+        }
+    });
+}
+
+function m3TreesInfo(t) { const el = m3El('m3TreesInfo'); if (el) el.textContent = t; }
+
+function m3TreesSchedule(retry) {
+    const T = m3d.trees;
+    clearTimeout(T.timer);
+    if (!retry) T.retry = 0;
+    T.timer = setTimeout(m3TreesRebuild, retry ? 800 : 250);
+}
+
+function m3TreesClear(msg) {
+    const T = m3d.trees;
+    T.n = 0;
+    if (T.trunk) { T.trunk.count = 0; T.crown.count = 0; }
+    m3TreesInfo(msg || M3D.TREE_HINT);
+    if (m3d.map) m3d.map.triggerRepaint();
+}
+
+function m3Hash(i, j) {
+    let h = (Math.imul(i | 0, 374761393) + Math.imul(j | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return (h ^ (h >>> 16)) >>> 0;
+}
+function m3Rng(seed) {   // mulberry32
+    return () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function m3InPoly(x, y, rings) {   // чётно-нечётное правило: дырки в полигоне учитываются
+    let inside = false;
+    for (let k = 0; k < rings.length; k++) {
+        const r = rings[k];
+        for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+            const xi = r[a][0], yi = r[a][1], xj = r[b][0], yj = r[b][1];
+            if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+        }
+    }
+    return inside;
+}
+
+function m3TreesRebuild() {
+    const T = m3d.trees, m = m3d.map, o = m3d.opts;
+    if (!m || !m3d.ready || !T.trunk) return;
+    if (!o.trees) { m3TreesClear(); return; }
+    if (m.getZoom() < M3D.TREE_MINZ) { m3TreesClear('Приблизьте карту (масштаб z' + M3D.TREE_MINZ + ' и крупнее), чтобы появились деревья'); return; }
+
+    const R = 6378137, k = m3Rad;
+    const mx = lng => R * lng * k;
+    const my = lat => R * Math.log(Math.tan(Math.PI / 4 + lat * k / 2));
+    const invLat = y => (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) / k;
+    const c = m.getCenter(), b = m.getBounds();
+    const cosO = Math.cos(c.lat * k), cosG = Math.cos(Math.round(c.lat) * k);
+    const X0 = mx(c.lng), Y0 = my(c.lat), half = 1500 / cosO;   // деревья строим в радиусе ~1,5 км от центра
+    const vx0 = Math.max(mx(b.getWest()), X0 - half), vx1 = Math.min(mx(b.getEast()), X0 + half);
+    const vy0 = Math.max(my(b.getSouth()), Y0 - half), vy1 = Math.min(my(b.getNorth()), Y0 + half);
+    const lng0 = vx0 / (R * k), lng1 = vx1 / (R * k), lat0 = invLat(vy0), lat1 = invLat(vy1);
+    const cell = Math.sqrt(10000 / Math.max(o.treeDens, 1)) / cosG;   // сторона ячейки, м (Меркатор)
+
+    const feats = m.querySourceFeatures('gc-osm', { sourceLayer: 'landcover', filter: ['in', ['get', 'class'], ['literal', ['wood', 'forest']]] });
+    const cap = M3D.TREE_MAX, seen = new Set();
+    const tm = T.trunk.instanceMatrix.array, cm = T.crown.instanceMatrix.array, cc = T.crown.instanceColor.array;
+    const setM = (a, off, sx, sy, sz, x, y, z) => {
+        a[off] = sx; a[off + 1] = 0; a[off + 2] = 0; a[off + 3] = 0;
+        a[off + 4] = 0; a[off + 5] = sy; a[off + 6] = 0; a[off + 7] = 0;
+        a[off + 8] = 0; a[off + 9] = 0; a[off + 10] = sz; a[off + 11] = 0;
+        a[off + 12] = x; a[off + 13] = y; a[off + 14] = z; a[off + 15] = 1;
+    };
+    const useTerr = !!(o.terrain && m.queryTerrainElevation);
+    const col = new THREE.Color();
+    let n = 0, full = false, miss = 0, polys = 0;
+
+    for (let fi = 0; fi < feats.length && !full; fi++) {
+        const g = feats[fi].geometry;
+        if (!g) continue;
+        const list = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : null;
+        if (!list) continue;
+        for (let pi = 0; pi < list.length && !full; pi++) {
+            const poly = list[pi];
+            let a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9;
+            poly[0].forEach(p => { if (p[0] < a0) a0 = p[0]; if (p[0] > a1) a1 = p[0]; if (p[1] < b0) b0 = p[1]; if (p[1] > b1) b1 = p[1]; });
+            if (a1 < lng0 || a0 > lng1 || b1 < lat0 || b0 > lat1) continue;   // вне области построения
+            polys++;
+            const rings = poly.map(r => r.map(p => [mx(p[0]), my(p[1])]));
+            const minX = Math.max(mx(a0), vx0), maxX = Math.min(mx(a1), vx1);
+            const minY = Math.max(my(b0), vy0), maxY = Math.min(my(b1), vy1);
+            for (let i = Math.floor(minX / cell); i <= Math.floor(maxX / cell) && !full; i++) {
+                for (let j = Math.floor(minY / cell); j <= Math.floor(maxY / cell); j++) {
+                    const key = (i + 5e6) * 1e7 + (j + 5e6);
+                    if (seen.has(key)) continue;
+                    const rnd = m3Rng(m3Hash(i, j));
+                    const X = (i + rnd()) * cell, Y = (j + rnd()) * cell;
+                    if (X < vx0 || X > vx1 || Y < vy0 || Y > vy1 || !m3InPoly(X, Y, rings)) continue;
+                    seen.add(key);
+                    let z = 0;
+                    if (useTerr) {
+                        const e = m.queryTerrainElevation([X / (R * k), invLat(Y)]);
+                        if (e == null) miss++; else z = e;
+                    }
+                    const H = 8 + rnd() * 8, cr = 1.8 + rnd() * 1.6, tr = 0.22 + rnd() * 0.12;
+                    const ex = (X - X0) * cosO, ny = (Y - Y0) * cosO, o16 = n * 16;
+                    setM(tm, o16, tr, tr, H * 0.4, ex, ny, z);
+                    setM(cm, o16, cr, cr, H * 0.35, ex, ny, z + H * 0.65);
+                    col.setHSL(0.24 + rnd() * 0.09, 0.45 + rnd() * 0.15, 0.17 + rnd() * 0.10);
+                    cc[n * 3] = col.r; cc[n * 3 + 1] = col.g; cc[n * 3 + 2] = col.b;
+                    if (++n >= cap) { full = true; break; }
+                }
+            }
+        }
+    }
+
+    T.n = n;
+    T.trunk.count = n; T.crown.count = n;
+    T.trunk.instanceMatrix.needsUpdate = true;
+    T.crown.instanceMatrix.needsUpdate = true;
+    T.crown.instanceColor.needsUpdate = true;
+    T.origin = maplibregl.MercatorCoordinate.fromLngLat([c.lng, c.lat], 0);
+    T.cosO = cosO;
+    m.triggerRepaint();
+
+    m3TreesInfo(n ? `Деревьев: ${n}${full ? ' (показана часть — приблизьте карту или уменьшите густоту)' : ''}`
+        : (polys ? 'В этой области деревья не поместились — увеличьте густоту' : 'Лесных полигонов OSM в этой области нет (или тайлы ещё грузятся)'));
+    if (miss > 0 && T.retry < 3) { T.retry++; m3TreesSchedule(true); }   // рельеф ещё грузится — пересаживаем деревья на землю
 }
 
 function m3AddModel(obj, name) {
@@ -5523,11 +5634,14 @@ function m3Init() {
         m3RebuildBasemap();
         m3AddUserLayers(m);
         m3AddModelLayer(m);
+        m3AddTreesLayer(m);
         m3Apply();
         m3RefreshUser();
         m3UpdateViewControls();
     });
     m.on('moveend', () => { if (m3d.active && !m3d.orbit) m3SyncToLeaflet(); });
+    m.on('moveend', () => { if (m3d.opts.trees) m3TreesSchedule(); });
+    m.on('sourcedata', e => { if (e.sourceId === 'gc-osm' && m3d.opts.trees) m3TreesSchedule(); });   // подгрузились тайлы OSM
     m.on('move', m3UpdateViewControls);
     m.on('click', m3OnClick);
     m.on('contextmenu', e => {   // правый клик → меню «Что здесь?»
@@ -5539,15 +5653,21 @@ function m3Init() {
 
 // ---------- Включение / выключение ----------
 function m3SetTabEnabled(on) {
-    const tab = document.querySelector('.bp-tab[data-bp-tab="3d"]');
-    if (!tab) return;
-    tab.disabled = !on;
+    // вкладка «3D» доступна всегда; пока 3D выключен, её инструменты неактивны
+    const pane = document.querySelector('[data-bp-pane="3d"]');
+    if (!pane) return;
+    pane.classList.toggle('m3-off', !on);
+    pane.querySelectorAll('.dw-block:not(.m3-switch)').forEach(b => { b.inert = !on; });
+    const t = m3El('m3ToggleBtn');
+    if (t) {
+        t.classList.toggle('on', on);
+        t.querySelector('span').textContent = on ? 'Выключить 3D' : 'Включить 3D';
+    }
     if (on) {
         const bp = m3El('bottomPanel');
         if (bp.classList.contains('collapsed')) m3El('bottomPanelToggle').click();
-        tab.click();
-    } else if (tab.classList.contains('active')) {
-        document.querySelector('.bp-tab[data-bp-tab="main"]').click();
+        const tab = document.querySelector('.bp-tab[data-bp-tab="3d"]');
+        if (tab && !tab.classList.contains('active')) tab.click();
     }
 }
 
@@ -5730,6 +5850,10 @@ function m3BindUI() {
         e.stopPropagation();
         if (m3d.active) exit3D(); else enter3D();
     });
+    // кнопка включения 3D на самой вкладке «3D»
+    m3El('m3ToggleBtn').addEventListener('click', function () {
+        if (m3d.active) exit3D(); else enter3D();
+    });
 }
 
 // Leaflet → 3D: поиск, кнопки масштаба, стрелка севера, история экстентов
@@ -5793,3 +5917,589 @@ if (window.ResizeObserver) {
 }
 
 m3BindUI();
+
+m3SetTabEnabled(false);   // при запуске вкладка «3D» открыта, но инструменты неактивны
+
+// ============================================================
+//  ЭКСПОРТ КАРТЫ (нижняя панель → вкладка «Экспорт»)
+// ============================================================
+//  Карта собирается на canvas: тайлы подложки, нарисованные объекты, сетка координат, легенда,
+//  масштабная линейка, стрелка севера, заголовок. Форматы: PNG, JPEG, WebP, PDF, TIFF.
+//  Привязка (EPSG:3857 / WGS 84): GeoTIFF, GeoPDF (для Avenza Maps, QGIS, Acrobat)
+//  или ZIP «изображение + world-файл + .prj» для PNG/JPEG/WebP.
+//  В 3D-режиме экспортируется текущий 3D-вид (привязка — только при виде строго сверху).
+// ============================================================
+(function () {
+    const pane = document.querySelector('[data-bp-pane="export"]');
+    if (!pane) return;
+    const $ = id => document.getElementById(id);
+    const R = 6378137, HALF = Math.PI * R, D2R = Math.PI / 180;
+    const PAPER = { a0: [841, 1189], a1: [594, 841], a2: [420, 594], a3: [297, 420], a4: [210, 297], a5: [148, 210],
+                    letter: [215.9, 279.4], legal: [215.9, 355.6], tabloid: [279.4, 431.8] };
+    const FONT = '"Segoe UI", Arial, sans-serif';
+    const PRJ = 'PROJCS["WGS_1984_Web_Mercator_Auxiliary_Sphere",GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Mercator_Auxiliary_Sphere"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],PARAMETER["Standard_Parallel_1",0.0],PARAMETER["Auxiliary_Sphere_Type",0.0],UNIT["Meter",1.0]]';
+
+    const mx = lng => R * lng * D2R;
+    const my = lat => R * Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2));
+    const toLng = x => x / R / D2R;
+    const toLat = y => (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) / D2R;
+    const niceStep = x => { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; };
+    const blobBytes = async b => new Uint8Array(await b.arrayBuffer());
+    const canvasBlob = (c, type, q) => new Promise(r => c.toBlob(r, type, q));
+
+    // ---------- Настройки ----------
+    function readOpts() {
+        const num = (id, d) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
+        const ch = id => $(id).checked;
+        return {
+            fmt: $('exFmt').value, q: num('exQuality', 90) / 100, dpi: num('exDpi', 150),
+            paper: $('exPaper').value, orient: $('exOrient').value, cw: Math.max(20, num('exCW', 297)), ch: Math.max(20, num('exCH', 210)),
+            margin: Math.max(0, num('exMargin', 8)),
+            base: ch('exBase'), drawn: ch('exDrawn'), sketch: ch('exSketch'),
+            title: $('exTitle').value.trim(), note: $('exNote').value.trim(),
+            legend: ch('exLegend'), scale: ch('exScale'), north: ch('exNorth'), grid: ch('exGrid'), frame: ch('exFrame'),
+            date: ch('exDate'), attr: ch('exAttr'), coords: ch('exCoords'), geo: ch('exGeo')
+        };
+    }
+
+    function viewInfo() {
+        if (m3d.active && m3d.map) {
+            const m = m3d.map, c = m.getCenter(), cv = m.getContainer(), res = 2 * HALF / (512 * Math.pow(2, m.getZoom()));
+            return { is3d: true, wPx: cv.clientWidth, hPx: cv.clientHeight, cx: mx(c.lng), cy: my(c.lat),
+                     wM: cv.clientWidth * res, hM: cv.clientHeight * res, flat: Math.abs(m.getPitch()) < 0.5 && Math.abs(m.getBearing()) < 0.5 };
+        }
+        const c = map.getCenter(), s = map.getSize(), res = 2 * HALF / (256 * Math.pow(2, map.getZoom()));
+        return { is3d: false, wPx: s.x, hPx: s.y, cx: mx(c.lng), cy: my(c.lat), wM: s.x * res, hM: s.y * res, flat: true };
+    }
+
+    // раскладка листа в мм: поля, шапка, подвал, рамка карты
+    function layout(o, v) {
+        let pw, ph;
+        if (o.paper === 'screen') { pw = v.wPx * 25.4 / 96; ph = v.hPx * 25.4 / 96; }
+        else if (o.paper === 'custom') { pw = o.cw; ph = o.ch; }
+        else {
+            [pw, ph] = PAPER[o.paper];
+            const land = o.orient === 'auto' ? v.wPx >= v.hPx : o.orient === 'landscape';
+            if (land !== pw > ph) [pw, ph] = [ph, pw];
+        }
+        const geo = o.geo && v.flat;
+        const mapOnly = geo && o.fmt !== 'pdf';     // растр с привязкой = только карта, без полей
+        const m = mapOnly ? 0 : Math.min(o.margin, Math.min(pw, ph) / 4);
+        const head = mapOnly ? 0 : (o.title ? 9 : 0) + (o.note ? 5 : 0) + (o.title || o.note ? 1.5 : 0);
+        const foot = mapOnly ? 0 : ((o.date || o.attr || o.coords || o.scale) ? 6 : 0);
+        return { pw, ph, m, head, foot, mapOnly, geo,
+                 fx: m, fy: m + head, fw: Math.max(10, pw - 2 * m), fh: Math.max(10, ph - 2 * m - head - foot) };
+    }
+
+    function finalScale(Lo, o) {
+        let ppm = o.dpi / 25.4;
+        const W = Lo.pw * ppm, H = Lo.ph * ppm, cap = o.fmt === 'tiff' ? 30e6 : 60e6;
+        const k = Math.min(1, 12000 / Math.max(W, H), Math.sqrt(cap / (W * H)));
+        return { ppm: ppm * k, limited: k < 0.999 };
+    }
+
+    // ---------- Тайлы ----------
+    const imgCache = new Map();
+    function loadImg(url) {
+        if (imgCache.has(url)) return imgCache.get(url);
+        const p = new Promise(res => {
+            const im = new Image();
+            im.crossOrigin = 'anonymous';
+            im.onload = () => res(im);
+            im.onerror = () => { imgCache.delete(url); res(null); };
+            im.src = url;
+        });
+        imgCache.set(url, p);
+        if (imgCache.size > 900) imgCache.delete(imgCache.keys().next().value);
+        return p;
+    }
+    async function pool(tasks, n) {
+        let i = 0;
+        await Promise.all(Array.from({ length: n }, async () => { while (i < tasks.length) await tasks[i++](); }));
+    }
+    function baseTileLayers() {
+        const out = [];
+        (function walk(l) { if (!l) return; if (l instanceof L.TileLayer) out.push(l); else if (l.eachLayer) l.eachLayer(walk); })(currentTileLayer);
+        return out;
+    }
+
+    async function drawTiles(ctx, ext, F, stat, onProgress) {
+        const ew = ext.maxx - ext.minx, eh = ext.maxy - ext.miny;
+        for (const layer of baseTileLayers()) {
+            const ts = layer.getTileSize().x || 256;
+            const maxZ = layer.options.maxNativeZoom != null ? layer.options.maxNativeZoom : (layer.options.maxZoom || 19);
+            let z = Math.ceil(Math.log2(2 * HALF / (ts * (ew / F.w))));
+            z = Math.max(layer.options.minZoom || 0, Math.min(maxZ, z, 22));
+            const cnt = zz => { const T = 2 * HALF / Math.pow(2, zz); return (Math.floor(ew / T) + 2) * (Math.floor(eh / T) + 2); };
+            while (z > 0 && cnt(z) > 1600) z--;
+            const T = 2 * HALF / Math.pow(2, z), n = Math.pow(2, z);
+            const x0 = Math.floor((ext.minx + HALF) / T), x1 = Math.floor((ext.maxx + HALF) / T);
+            const y0 = Math.max(0, Math.floor((HALF - ext.maxy) / T)), y1 = Math.min(n - 1, Math.floor((HALF - ext.miny) / T));
+            const jobs = [], saved = layer._tileZoom;
+            layer._tileZoom = z;
+            try {
+                for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+                    const xw = ((x % n) + n) % n;
+                    let url; try { url = layer.getTileUrl({ x: xw, y, z }); } catch (e) { continue; }
+                    jobs.push({ x, y, url });
+                }
+            } finally { layer._tileZoom = saved; }
+            let done = 0;
+            ctx.save();
+            ctx.beginPath(); ctx.rect(F.x, F.y, F.w, F.h); ctx.clip();
+            ctx.globalAlpha = layer.options.opacity != null ? layer.options.opacity : 1;
+            await pool(jobs.map(j => async () => {
+                const im = await loadImg(j.url);
+                stat.total++;
+                if (!im) { stat.failed++; }
+                else {
+                    const px = F.x + (j.x * T - HALF - ext.minx) / ew * F.w, py = F.y + (ext.maxy - (HALF - j.y * T)) / eh * F.h;
+                    ctx.drawImage(im, px, py, T / ew * F.w + 0.6, T / eh * F.h + 0.6);
+                }
+                if (onProgress && ++done % 8 === 0) onProgress(done, jobs.length);
+            }), 24);
+            ctx.restore();
+        }
+    }
+
+    function grab3d() {
+        return new Promise(res => {
+            const m = m3d.map;
+            m.once('render', () => {
+                const c = document.createElement('canvas'), src = m.getCanvas();
+                c.width = src.width; c.height = src.height;
+                c.getContext('2d').drawImage(src, 0, 0);
+                res(c);
+            });
+            m.triggerRepaint();
+        });
+    }
+
+    // ---------- Векторные объекты ----------
+    function flat(g, out) {
+        if (g && typeof g.eachLayer === 'function') g.eachLayer(c => flat(c, out)); else out.push(g);
+        return out;
+    }
+    function drawVectors(ctx, ext, F, k, layers) {
+        const ew = ext.maxx - ext.minx, eh = ext.maxy - ext.miny;
+        const P = ll => [F.x + (mx(ll.lng) - ext.minx) / ew * F.w, F.y + (ext.maxy - my(ll.lat)) / eh * F.h];
+        const rings = a => { const out = []; (function w(x) { if (x.length && x[0].lat !== undefined) out.push(x); else x.forEach(w); })(a); return out; };
+        ctx.save();
+        ctx.beginPath(); ctx.rect(F.x, F.y, F.w, F.h); ctx.clip();
+        layers.forEach(l => {
+            try {
+                const o = l.options || {};
+                const stroke = () => {
+                    if (o.stroke === false) return;
+                    ctx.globalAlpha = o.opacity != null ? o.opacity : 1;
+                    ctx.strokeStyle = o.color || '#3388ff'; ctx.lineWidth = (o.weight != null ? o.weight : 3) * k;
+                    ctx.lineCap = o.lineCap || 'round'; ctx.lineJoin = 'round';
+                    ctx.setLineDash(o.dashArray ? String(o.dashArray).split(/[ ,]+/).map(Number).filter(n => n > 0).map(n => n * k) : []);
+                    ctx.stroke();
+                };
+                const fill = () => {
+                    if (!o.fill) return;
+                    ctx.globalAlpha = o.fillOpacity != null ? o.fillOpacity : 0.2;
+                    ctx.fillStyle = o.fillColor || o.color || '#3388ff';
+                    ctx.fill('evenodd');
+                };
+                if (l instanceof L.Marker) return drawMarker(ctx, l, P(l.getLatLng()), k);
+                if (l instanceof L.Circle) {
+                    const c = l.getLatLng(), p = P(c), r = l.getRadius() / Math.cos(c.lat * D2R) / ew * F.w;
+                    ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 7); fill(); stroke();
+                } else if (l instanceof L.CircleMarker) {
+                    const p = P(l.getLatLng());
+                    ctx.beginPath(); ctx.arc(p[0], p[1], (l.getRadius() || 6) * k, 0, 7); fill(); stroke();
+                } else if (l instanceof L.Polyline) {
+                    const closed = l instanceof L.Polygon;
+                    ctx.beginPath();
+                    rings(l.getLatLngs()).forEach(r => {
+                        r.forEach((ll, i) => { const p = P(ll); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+                        if (closed) ctx.closePath();
+                    });
+                    if (closed) fill();
+                    stroke();
+                }
+            } catch (e) { /* объект не критичен для экспорта */ }
+        });
+        ctx.restore();
+    }
+    function drawMarker(ctx, l, p, k) {
+        const sk = l._sk, s = sk ? sk.style : null;
+        ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        if (sk && sk.kind === 'text') {
+            const fs = (s.textSize || 16) * k, t = sk.text || 'Текст';
+            ctx.font = `${s.italic ? 'italic ' : ''}${s.bold ? 'bold ' : ''}${fs}px ${FONT}`;
+            if (s.textBg) { const w = ctx.measureText(t).width + fs * 0.6; ctx.fillStyle = s.textBgColor || '#fff'; ctx.fillRect(p[0] - w / 2, p[1] - fs * 0.75, w, fs * 1.5); }
+            if (s.halo) { ctx.lineWidth = fs / 4; ctx.lineJoin = 'round'; ctx.strokeStyle = s.haloColor || '#fff'; ctx.strokeText(t, p[0], p[1]); }
+            ctx.fillStyle = s.textColor || '#0f172a'; ctx.fillText(t, p[0], p[1]);
+            return;
+        }
+        const S = ((s && s.iconSize) || 30) * k, shape = s ? s.iconShape : 'pin', bg = s ? s.iconBg : '#2563eb';
+        let cy = p[1];
+        ctx.fillStyle = bg;
+        if (shape === 'pin') {
+            cy = p[1] - S * 0.62;
+            ctx.beginPath(); ctx.arc(p[0], cy, S * 0.4, 0, 7); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(p[0] - S * 0.3, cy + S * 0.28); ctx.lineTo(p[0], p[1]); ctx.lineTo(p[0] + S * 0.3, cy + S * 0.28); ctx.fill();
+        } else if (shape === 'circle') { ctx.beginPath(); ctx.arc(p[0], cy, S * 0.45, 0, 7); ctx.fill(); }
+        else if (shape === 'square') { ctx.fillRect(p[0] - S * 0.42, cy - S * 0.42, S * 0.84, S * 0.84); }
+        const el = l.getElement && l.getElement(), ic = el && el.querySelector && el.querySelector('i');
+        const content = ic ? getComputedStyle(ic, '::before').content : '';
+        if (content && content !== 'none' && content !== 'normal') {
+            ctx.font = `900 ${S * (shape === 'plain' ? 0.8 : 0.42)}px "Font Awesome 6 Free"`;
+            ctx.fillStyle = s ? s.iconColor : '#fff';
+            ctx.fillText(content.replace(/^["']|["']$/g, ''), p[0], cy);
+        }
+    }
+
+    // ---------- Элементы карты ----------
+    function txt(ctx, s, x, y, px, opt) {
+        opt = opt || {};
+        ctx.font = `${opt.bold ? 'bold ' : ''}${px}px ${FONT}`;
+        ctx.textAlign = opt.align || 'left'; ctx.textBaseline = opt.base || 'alphabetic'; ctx.globalAlpha = 1;
+        if (opt.halo) { ctx.lineWidth = px / 4; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeText(s, x, y); }
+        ctx.fillStyle = opt.color || '#0f172a';
+        ctx.fillText(s, x, y);
+    }
+    function fit(ctx, s, px, maxW) {
+        ctx.font = `${px}px ${FONT}`;
+        while (s.length > 3 && ctx.measureText(s).width > maxW) s = s.slice(0, -2).replace(/\s+$/, '') + '…';
+        return s;
+    }
+    function wrap(ctx, s, px, maxW) {
+        ctx.font = `${px}px ${FONT}`;
+        const words = String(s).split(/\s+/), lines = []; let cur = '';
+        words.forEach(w => {
+            const t = cur ? cur + ' ' + w : w;
+            if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = w; } else cur = t;
+        });
+        if (cur) lines.push(cur);
+        return lines;
+    }
+    const box = (ctx, x, y, w, h) => { ctx.globalAlpha = 0.88; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(15,23,42,.35)'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.strokeRect(x + 0.5, y + 0.5, w, h); };
+
+    function drawGrid(ctx, ext, F, mm) {
+        const ew = ext.maxx - ext.minx, eh = ext.maxy - ext.miny;
+        const step = niceStep((toLng(ext.maxx) - toLng(ext.minx)) / 5), dec = Math.max(0, Math.ceil(-Math.log10(step)));
+        const X = lng => F.x + (mx(lng) - ext.minx) / ew * F.w, Y = lat => F.y + (ext.maxy - my(lat)) / eh * F.h;
+        ctx.save(); ctx.beginPath(); ctx.rect(F.x, F.y, F.w, F.h); ctx.clip();
+        ctx.strokeStyle = 'rgba(15,23,42,.35)'; ctx.lineWidth = Math.max(1, mm(0.15)); ctx.setLineDash([mm(1.2), mm(1.2)]);
+        for (let g = Math.ceil(toLng(ext.minx) / step) * step; g <= toLng(ext.maxx); g += step) {
+            const x = X(g); ctx.beginPath(); ctx.moveTo(x, F.y); ctx.lineTo(x, F.y + F.h); ctx.stroke();
+            txt(ctx, g.toFixed(dec) + '°', x + mm(0.8), F.y + mm(3), mm(2.3), { halo: true });
+        }
+        for (let g = Math.ceil(toLat(ext.miny) / step) * step; g <= toLat(ext.maxy); g += step) {
+            const y = Y(g); ctx.beginPath(); ctx.moveTo(F.x, y); ctx.lineTo(F.x + F.w, y); ctx.stroke();
+            txt(ctx, g.toFixed(dec) + '°', F.x + mm(0.8), y - mm(0.8), mm(2.3), { halo: true });
+        }
+        ctx.restore();
+    }
+
+    function drawScale(ctx, F, mm, mpp, bottom) {
+        const L = niceStep(mm(28) * mpp), bar = L / mpp, x = F.x + mm(3), pad = mm(2), h = mm(8);
+        const y = bottom - h;
+        box(ctx, x, y, bar + 2 * pad + mm(6), h);
+        const by = y + mm(2.2), bh = mm(1.6);
+        for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? '#fff' : '#0f172a'; ctx.fillRect(x + pad + i * bar / 4, by, bar / 4, bh); }
+        ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1; ctx.strokeRect(x + pad, by, bar, bh);
+        const lab = v => v >= 1000 ? (v / 1000) + ' км' : v + ' м';
+        txt(ctx, '0', x + pad, y + mm(6.6), mm(2.2), { align: 'center' });
+        txt(ctx, lab(L / 2), x + pad + bar / 2, y + mm(6.6), mm(2.2), { align: 'center' });
+        txt(ctx, lab(L), x + pad + bar, y + mm(6.6), mm(2.2), { align: 'center' });
+    }
+
+    function drawNorth(ctx, F, mm) {
+        const r = mm(7), cx = F.x + F.w - mm(3) - r, cy = F.y + mm(3) + r;
+        ctx.globalAlpha = 0.88; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(15,23,42,.35)'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+        txt(ctx, 'N', cx, cy - mm(3.6), mm(2.8), { bold: true, align: 'center', base: 'middle' });
+        ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.moveTo(cx, cy - mm(1.8)); ctx.lineTo(cx + mm(2), cy + mm(4.6)); ctx.lineTo(cx, cy + mm(3.2)); ctx.lineTo(cx - mm(2), cy + mm(4.6)); ctx.closePath(); ctx.fill();
+    }
+
+    function drawLegend(ctx, F, mm, bottom) {
+        const def = typeof LAYER_LEGENDS !== 'undefined' ? LAYER_LEGENDS[currentLayer] : null;
+        if (!def) return false;
+        const W = mm(60), inner = W - mm(6), rows = [];
+        rows.push({ t: 'title', lines: wrap(ctx, def.title, mm(2.7), inner), h: 0 });
+        (def.items || []).forEach(it => rows.push({ t: 'item', c: it[0], lines: wrap(ctx, it[1], mm(2.3), inner - mm(5)) }));
+        if (def.gradient) rows.push({ t: 'grad', g: def.gradient });
+        rows.forEach(r => { r.h = r.t === 'title' ? r.lines.length * mm(3.3) + mm(1.2) : r.t === 'item' ? Math.max(mm(3.6), r.lines.length * mm(2.9)) + mm(0.6) : mm(11); });
+        const H = rows.reduce((s, r) => s + r.h, 0) + mm(4), x = F.x + F.w - mm(3) - W, y0 = bottom - H;
+        box(ctx, x, y0, W, H);
+        let y = y0 + mm(2.2);
+        rows.forEach(r => {
+            if (r.t === 'title') r.lines.forEach((ln, i) => txt(ctx, ln, x + mm(3), y + mm(2.4) + i * mm(3.3), mm(2.7), { bold: true }));
+            else if (r.t === 'item') {
+                ctx.fillStyle = r.c; ctx.fillRect(x + mm(3), y + mm(0.3), mm(3.6), mm(3)); ctx.strokeStyle = 'rgba(15,23,42,.4)'; ctx.strokeRect(x + mm(3), y + mm(0.3), mm(3.6), mm(3));
+                r.lines.forEach((ln, i) => txt(ctx, ln, x + mm(8), y + mm(2.5) + i * mm(2.9), mm(2.3)));
+            } else {
+                const g = r.g, gx = x + mm(3), gw = inner, grd = ctx.createLinearGradient(gx, 0, gx + gw, 0);
+                g.colors.forEach((c, i) => grd.addColorStop(i / (g.colors.length - 1), c));
+                ctx.fillStyle = grd; ctx.fillRect(gx, y + mm(1), gw, mm(3)); ctx.strokeStyle = 'rgba(15,23,42,.4)'; ctx.strokeRect(gx, y + mm(1), gw, mm(3));
+                g.ticks.forEach((t, i) => txt(ctx, String(t), gx + (t - g.min) / (g.max - g.min) * gw, y + mm(7), mm(2.2), { align: i === 0 ? 'left' : i === g.ticks.length - 1 ? 'right' : 'center' }));
+                txt(ctx, `${g.low} · ${g.unit} · ${g.high}`, gx + gw / 2, y + mm(10), mm(2.1), { align: 'center', color: '#64748b' });
+            }
+            y += r.h;
+        });
+        return true;
+    }
+
+    function footerParts(o, ext, F, ppm, mpp) {
+        const parts = [];
+        if (o.date) parts.push(new Date().toLocaleDateString('ru-RU'));
+        if (o.coords) parts.push(`Центр: ${toLat((ext.miny + ext.maxy) / 2).toFixed(5)}, ${toLng((ext.minx + ext.maxx) / 2).toFixed(5)}`);
+        if (o.scale && o.paper !== 'screen') parts.push('1 : ' + Math.round(mpp * ppm * 1000).toLocaleString('ru-RU'));
+        if (o.attr) {
+            const a = baseTileLayers().map(l => l.options.attribution || '').join(' ').replace(/<[^>]+>/g, '').replace(/&copy;/g, '©').replace(/&amp;/g, '&').trim();
+            parts.push('Подложка: ' + (LAYER_NAMES[currentLayer] || currentLayer) + (a ? ' · ' + a : ''));
+        }
+        return parts;
+    }
+
+    // ---------- Сборка карты ----------
+    async function compose(cv, o, Lo, ppm, onProgress) {
+        const v = viewInfo(), mm = x => x * ppm, k = ppm * 25.4 / 96;
+        const W = Math.round(Lo.pw * ppm), H = Math.round(Lo.ph * ppm);
+        cv.width = W; cv.height = H;
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        const F = Lo.mapOnly ? { x: 0, y: 0, w: W, h: H }
+            : { x: Math.round(mm(Lo.fx)), y: Math.round(mm(Lo.fy)), w: Math.round(mm(Lo.fw)), h: Math.round(mm(Lo.fh)) };
+        // охват: текущий вид, вписанный в рамку карты (север сверху)
+        const a = F.w / F.h; let ew = v.wM, eh = v.hM;
+        if (ew / eh > a) eh = ew / a; else ew = eh * a;
+        const ext = { minx: v.cx - ew / 2, maxx: v.cx + ew / 2, miny: v.cy - eh / 2, maxy: v.cy + eh / 2 };
+        const mpp = ew / F.w * Math.cos(toLat(v.cy) * D2R), stat = { total: 0, failed: 0 };
+
+        ctx.fillStyle = '#e5e7eb'; ctx.fillRect(F.x, F.y, F.w, F.h);
+        if (o.base) {
+            if (v.is3d) {
+                const c3 = await grab3d(), dw = F.w * v.wM / ew, dh = dw * c3.height / c3.width;
+                ctx.save(); ctx.beginPath(); ctx.rect(F.x, F.y, F.w, F.h); ctx.clip();
+                ctx.drawImage(c3, F.x + (F.w - dw) / 2, F.y + (F.h - dh) / 2, dw, dh);
+                ctx.restore();
+            } else await drawTiles(ctx, ext, F, stat, onProgress);
+        }
+        if (!v.is3d) {   // в 3D нарисованные объекты уже есть на 3D-виде (если включены в «Мои объекты»)
+            const ls = [];
+            if (o.drawn) flat(drawnItems, ls);
+            if (o.sketch) flat(sketchItems, ls);
+            if (ls.length) drawVectors(ctx, ext, F, k, ls);
+        }
+        if (o.grid) drawGrid(ctx, ext, F, mm);
+        if (o.frame) { ctx.strokeStyle = '#0f172a'; ctx.lineWidth = Math.max(1, mm(0.35)); ctx.setLineDash([]); ctx.strokeRect(F.x, F.y, F.w, F.h); }
+
+        // заголовок и подвал
+        const parts = footerParts(o, ext, F, ppm, mpp), footTxt = parts.join('   |   ');
+        let botPad = 0;
+        if (Lo.mapOnly) {
+            if (o.title || o.note) {
+                const tw = Math.max(o.title ? (ctx.font = `bold ${mm(5)}px ${FONT}`, ctx.measureText(o.title).width) : 0, o.note ? (ctx.font = `${mm(3)}px ${FONT}`, ctx.measureText(o.note).width) : 0);
+                const bh = (o.title ? mm(7.5) : 0) + (o.note ? mm(5) : 0) + mm(1.5);
+                box(ctx, F.x + mm(3), F.y + mm(3), Math.min(tw + mm(6), F.w - mm(30)), bh);
+                if (o.title) txt(ctx, fit(ctx, o.title, mm(5), F.w - mm(36)), F.x + mm(6), F.y + mm(9), mm(5), { bold: true });
+                if (o.note) txt(ctx, fit(ctx, o.note, mm(3), F.w - mm(36)), F.x + mm(6), F.y + mm(3) + bh - mm(2.2), mm(3), { color: '#475569' });
+            }
+            if (footTxt) {
+                botPad = mm(5);
+                ctx.globalAlpha = 0.88; ctx.fillStyle = '#fff'; ctx.fillRect(F.x, F.y + F.h - botPad, F.w, botPad); ctx.globalAlpha = 1;
+                txt(ctx, fit(ctx, footTxt, mm(2.4), F.w - mm(4)), F.x + mm(2), F.y + F.h - mm(1.6), mm(2.4), { color: '#334155' });
+            }
+        } else {
+            if (o.title) txt(ctx, fit(ctx, o.title, mm(5.5), W - mm(2 * Lo.m)), mm(Lo.m), mm(Lo.m + 6.5), mm(5.5), { bold: true });
+            if (o.note) txt(ctx, fit(ctx, o.note, mm(3), W - mm(2 * Lo.m)), mm(Lo.m), mm(Lo.m + (o.title ? 11.5 : 4)), mm(3), { color: '#475569' });
+            if (footTxt) txt(ctx, fit(ctx, footTxt, mm(2.4), W - mm(2 * Lo.m)), mm(Lo.m), F.y + F.h + mm(4.2), mm(2.4), { color: '#334155' });
+        }
+        const bottom = F.y + F.h - mm(3) - botPad;
+        if (o.scale) drawScale(ctx, F, mm, mpp, bottom);
+        if (o.north) drawNorth(ctx, F, mm);
+        if (o.legend) drawLegend(ctx, F, mm, bottom);
+        return { ext, F, W, H, stat };
+    }
+
+    // ---------- Кодировщики ----------
+    function makeTiff(cv, ext) {
+        const W = cv.width, H = cv.height, px = cv.getContext('2d').getImageData(0, 0, W, H).data;
+        const rgb = new Uint8Array(W * H * 3);
+        for (let i = 0, j = 0; i < px.length; i += 4) { rgb[j++] = px[i]; rgb[j++] = px[i + 1]; rgb[j++] = px[i + 2]; }
+        const geo = !!ext, n = geo ? 13 : 10;
+        let off = 8 + 2 + n * 12 + 4;
+        const bpsOff = off; off += 6;
+        let scaleOff = 0, tieOff = 0, keyOff = 0;
+        if (geo) { scaleOff = off; off += 24; tieOff = off; off += 48; keyOff = off; off += 32; }
+        const dataOff = off, buf = new ArrayBuffer(dataOff), dv = new DataView(buf);
+        dv.setUint8(0, 0x49); dv.setUint8(1, 0x49); dv.setUint16(2, 42, true); dv.setUint32(4, 8, true);
+        let p = 8; dv.setUint16(p, n, true); p += 2;
+        const ent = (tag, type, count, val) => {
+            dv.setUint16(p, tag, true); dv.setUint16(p + 2, type, true); dv.setUint32(p + 4, count, true);
+            if (type === 3 && count === 1) dv.setUint16(p + 8, val, true); else dv.setUint32(p + 8, val, true);
+            p += 12;
+        };
+        ent(256, 4, 1, W); ent(257, 4, 1, H); ent(258, 3, 3, bpsOff); ent(259, 3, 1, 1); ent(262, 3, 1, 2);
+        ent(273, 4, 1, dataOff); ent(277, 3, 1, 3); ent(278, 4, 1, H); ent(279, 4, 1, W * H * 3); ent(284, 3, 1, 1);
+        if (geo) { ent(33550, 12, 3, scaleOff); ent(33922, 12, 6, tieOff); ent(34735, 3, 16, keyOff); }
+        dv.setUint32(p, 0, true);
+        [8, 8, 8].forEach((v, i) => dv.setUint16(bpsOff + i * 2, v, true));
+        if (geo) {
+            [(ext.maxx - ext.minx) / W, (ext.maxy - ext.miny) / H, 0].forEach((v, i) => dv.setFloat64(scaleOff + i * 8, v, true));
+            [0, 0, 0, ext.minx, ext.maxy, 0].forEach((v, i) => dv.setFloat64(tieOff + i * 8, v, true));
+            [1, 1, 0, 3, 1024, 0, 1, 1, 1025, 0, 1, 1, 3072, 0, 1, 3857].forEach((v, i) => dv.setUint16(keyOff + i * 2, v, true));
+        }
+        return new Blob([buf, rgb], { type: 'image/tiff' });
+    }
+
+    async function makePdf(cv, q, Lo, F, ext, geo) {
+        const jpg = await blobBytes(await canvasBlob(cv, 'image/jpeg', q));
+        const Wp = Lo.pw * 72 / 25.4, Hp = Lo.ph * 72 / 25.4, enc = new TextEncoder();
+        const parts = [], offs = []; let len = 0;
+        const push = d => { const u = typeof d === 'string' ? enc.encode(d) : d; parts.push(u); len += u.length; };
+        const f = x => x.toFixed(4);
+        let vp = '';
+        if (geo) {
+            const bx0 = F.x / cv.width * Wp, bx1 = (F.x + F.w) / cv.width * Wp, by0 = Hp - (F.y + F.h) / cv.height * Hp, by1 = Hp - F.y / cv.height * Hp;
+            const la0 = toLat(ext.miny), la1 = toLat(ext.maxy), lo0 = toLng(ext.minx), lo1 = toLng(ext.maxx);
+            vp = `/VP [<< /Type /Viewport /BBox [${f(bx0)} ${f(by0)} ${f(bx1)} ${f(by1)}] /Name (Map) /Measure << /Type /Measure /Subtype /GEO /Bounds [0 0 0 1 1 1 1 0] /LPTS [0 0 0 1 1 1 1 0] /GPTS [${la0.toFixed(8)} ${lo0.toFixed(8)} ${la1.toFixed(8)} ${lo0.toFixed(8)} ${la1.toFixed(8)} ${lo1.toFixed(8)} ${la0.toFixed(8)} ${lo1.toFixed(8)}] /GCS << /Type /GEOGCS /EPSG 4326 /WKT (GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.0174532925199433]]) >> >> >>]`;
+        }
+        const obj = (n, body) => { offs[n] = len; push(`${n} 0 obj\n${body}\nendobj\n`); };
+        push('%PDF-1.7\n%\u00e2\u00e3\u00cf\u00d3\n');
+        obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+        obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+        obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(Wp)} ${f(Hp)}] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> ${vp} >>`);
+        const cs = `q ${f(Wp)} 0 0 ${f(Hp)} 0 0 cm /Im0 Do Q`;
+        obj(4, `<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`);
+        offs[5] = len;
+        push(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+        push(jpg); push('\nendstream\nendobj\n');
+        const xr = len;
+        push(`xref\n0 6\n0000000000 65535 f \n${[1, 2, 3, 4, 5].map(i => String(offs[i]).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+        return new Blob(parts, { type: 'application/pdf' });
+    }
+
+    const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let i = 0; i < 8; i++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+    const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+    function makeZip(files) {
+        const enc = new TextEncoder(), parts = [], cd = []; let off = 0;
+        files.forEach(f => {
+            const name = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+            const h = new DataView(new ArrayBuffer(30));
+            h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x21, true);
+            h.setUint32(14, crc, true); h.setUint32(18, sz, true); h.setUint32(22, sz, true); h.setUint16(26, name.length, true);
+            parts.push(h.buffer, name, f.data);
+            const c = new DataView(new ArrayBuffer(46));
+            c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(14, 0x21, true);
+            c.setUint32(16, crc, true); c.setUint32(20, sz, true); c.setUint32(24, sz, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+            cd.push(c.buffer, name);
+            off += 30 + name.length + sz;
+        });
+        const e = new DataView(new ArrayBuffer(22));
+        e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+        e.setUint32(12, cd.reduce((s, x) => s + x.byteLength, 0), true); e.setUint32(16, off, true);
+        return new Blob([...parts, ...cd, e.buffer], { type: 'application/zip' });
+    }
+
+    function download(blob, name) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+
+    // ---------- Интерфейс ----------
+    const setStatus = (s, warn) => { const el = $('exStatus'); el.textContent = s || ''; el.className = warn ? 'ex-warn' : 'ex-info'; };
+    const isVisible = () => pane.classList.contains('active') && !$('bottomPanel').classList.contains('collapsed');
+
+    function syncUI() {
+        const o = readOpts(), v = viewInfo();
+        $('exCustomRow').hidden = o.paper !== 'custom';
+        $('exOrient').disabled = o.paper === 'custom' || o.paper === 'screen';
+        $('exQuality').disabled = !(o.fmt === 'jpg' || o.fmt === 'webp' || o.fmt === 'pdf');
+        $('exQualityVal').textContent = $('exQuality').value + '%';
+        const hints = {
+            png: 'ZIP: изображение + world-файл (.pgw) + .prj, EPSG:3857 (QGIS, ArcGIS). Только карта, без полей',
+            jpg: 'ZIP: изображение + world-файл (.jgw) + .prj, EPSG:3857 (QGIS, ArcGIS). Только карта, без полей',
+            webp: 'ZIP: изображение + world-файл (.wpw) + .prj, EPSG:3857. Только карта, без полей',
+            tiff: 'GeoTIFF, EPSG:3857 — Avenza Maps, QGIS, ArcGIS. Только карта, без полей',
+            pdf: 'GeoPDF (WGS 84) — Avenza Maps, Adobe Acrobat, QGIS. Лист с полями и подписями, привязана рамка карты'
+        };
+        let h = o.geo ? hints[o.fmt] : 'Экспорт без привязки — обычное изображение / документ';
+        if (o.geo && !v.flat) h = '⚠ Привязка недоступна: в 3D включите вид «Сверху» (наклон 0°, поворот 0°)';
+        $('exGeoHint').textContent = h;
+        const Lo = layout(o, v), { ppm, limited } = finalScale(Lo, o);
+        $('exSizeInfo').textContent = `${Math.round(Lo.pw)}×${Math.round(Lo.ph)} мм · ${Math.round(Lo.pw * ppm)}×${Math.round(Lo.ph * ppm)} px` + (limited ? ' (снижено до лимита)' : '');
+        return { o, v, Lo };
+    }
+
+    let timer = null, busy = false, again = false;
+    function schedule(ms) { clearTimeout(timer); timer = setTimeout(renderPreview, ms == null ? 250 : ms); }
+    async function renderPreview() {
+        if (!isVisible()) return;
+        if (busy) { again = true; return; }
+        busy = true;
+        try {
+            const { o, Lo } = syncUI();
+            const tmp = document.createElement('canvas'), ppm = Math.min(360 / Lo.pw, 240 / Lo.ph) * 1.5;
+            const r = await compose(tmp, o, Lo, ppm);
+            const cv = $('exPreview');
+            cv.width = tmp.width; cv.height = tmp.height;
+            cv.getContext('2d').drawImage(tmp, 0, 0);
+            const lat0 = toLat(r.ext.miny), lat1 = toLat(r.ext.maxy), lon0 = toLng(r.ext.minx), lon1 = toLng(r.ext.maxx);
+            $('exInfo').textContent = `Охват: ${lat0.toFixed(4)}…${lat1.toFixed(4)} с.ш., ${lon0.toFixed(4)}…${lon1.toFixed(4)} в.д.`;
+            const w = $('exWarn');
+            w.hidden = !(r.stat.failed > 0);
+            if (r.stat.failed) w.textContent = `⚠ Не загрузилось тайлов: ${r.stat.failed} из ${r.stat.total}. Подложка может блокировать экспорт (CORS) — для надёжного результата выберите OSM или Esri.`;
+        } catch (e) { console.error(e); setStatus('Не удалось построить превью: ' + e.message, true); }
+        busy = false;
+        if (again) { again = false; schedule(50); }
+    }
+
+    async function doExport() {
+        const btn = $('exDownload');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+            const { o, v, Lo } = syncUI();
+            const geo = Lo.geo, { ppm, limited } = finalScale(Lo, o);
+            if (o.geo && !geo) setStatus('Привязка отключена: 3D-вид наклонён или повёрнут', true);
+            setStatus('Сборка карты…');
+            const cv = document.createElement('canvas');
+            const r = await compose(cv, o, Lo, ppm, (d, n) => setStatus(`Загрузка тайлов: ${d}/${n}`));
+            const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})/, '$1_');
+            const base = 'geoclass_karta_' + stamp;
+            setStatus('Кодирование файла…');
+            if (o.fmt === 'pdf') download(await makePdf(cv, o.q, Lo, r.F, r.ext, geo), base + '.pdf');
+            else if (o.fmt === 'tiff') download(makeTiff(cv, geo ? r.ext : null), base + (geo ? '_geo' : '') + '.tif');
+            else {
+                const mime = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[o.fmt];
+                const blob = await canvasBlob(cv, mime, o.q);
+                if (!blob) throw new Error('браузер не смог закодировать изображение');
+                if (geo) {
+                    const rx = (r.ext.maxx - r.ext.minx) / r.W, ry = (r.ext.maxy - r.ext.miny) / r.H;
+                    const wf = [rx, 0, 0, -ry, r.ext.minx + rx / 2, r.ext.maxy - ry / 2].map(x => x.toFixed(10)).join('\n') + '\n';
+                    const enc = new TextEncoder(), we = { png: 'pgw', jpg: 'jgw', webp: 'wpw' }[o.fmt];
+                    download(makeZip([{ name: base + '.' + o.fmt, data: await blobBytes(blob) }, { name: base + '.' + we, data: enc.encode(wf) }, { name: base + '.prj', data: enc.encode(PRJ) }]), base + '_geo.zip');
+                } else download(blob, base + '.' + o.fmt);
+            }
+            let msg = '✅ Карта экспортирована' + (geo ? ' с привязкой' : '');
+            if (limited) msg += ' (размер снижен до безопасного лимита браузера)';
+            if (r.stat.failed) msg += `. ⚠ Пропущено тайлов: ${r.stat.failed} (CORS/сеть)`;
+            setStatus(msg, !!r.stat.failed);
+            updateStatus(msg);
+        } catch (e) {
+            console.error(e);
+            setStatus('Ошибка экспорта: ' + (e.name === 'SecurityError' ? 'подложка не разрешает экспорт (CORS), выберите OSM или Esri' : e.message), true);
+        }
+        btn.disabled = false;
+    }
+
+    pane.addEventListener('input', () => { syncUI(); schedule(); });
+    pane.addEventListener('change', () => { syncUI(); schedule(); });
+    $('exRefresh').addEventListener('click', () => { imgCache.clear(); schedule(0); });
+    $('exDownload').addEventListener('click', doExport);
+    document.querySelector('.bp-tab[data-bp-tab="export"]').addEventListener('click', () => { syncUI(); schedule(50); });
+    $('bottomPanelToggle').addEventListener('click', () => schedule(350));
+    map.on('moveend', () => schedule(400));
+    map.on('layeradd layerremove', () => schedule(500));
+    document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.layer-chip, #mode3dBtn, #m3ToggleBtn')) schedule(900); });
+    syncUI();
+})();
