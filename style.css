@@ -1902,3 +1902,30 @@ body.resizing-x *, body.resizing-y * { user-select: none; }
 .ex-warn { font-size: 10px; color: #b45309; line-height: 1.35; }
 .ex-go { background: #059669; border-color: #059669; color: #ffffff; }
 .ex-go:hover:not(:disabled) { background: #047857; color: #ffffff; }
+
+/* ===== ШТОРКА: режим дублирования и 3D ===== */
+.swipe-mode-btn {
+    position: absolute; bottom: 14px; left: var(--swipe-x); transform: translateX(-50%);
+    pointer-events: auto; display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 14px;
+    background: #ffffff; color: #334155; font-size: 12px; font-weight: 600; font-family: inherit;
+    cursor: pointer; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.swipe-mode-btn:hover { border-color: #34d399; color: #059669; }
+.swipe-mode-btn.on { background: #059669; border-color: #059669; color: #ffffff; }
+.map-stage.swipe-dual #map { width: 50%; }
+.map-stage.swipe-dual .swipe-map-left { width: 50%; }
+.map-stage.swipe-dual .swipe-map-right { left: 50%; width: 50%; }
+.swipe-ui.dual .swipe-divider { cursor: default; pointer-events: none; }
+.swipe-ui.dual .swipe-grip { display: none; }
+.map-stage.mode-3d .swipe-map { display: none; }
+.map-stage.swipe-dual .map3d { right: 50%; }
+.map-stage.swipe-dual .map3d.map3d-r { left: 50%; right: 0; }
+
+/* ===== Вкладка «3D»: компактная лента в одну строку, длинные ползунки ===== */
+.bp-pane.bp-3d.active { gap: 0 6px; padding: 6px 8px; }
+.bp-3d .dw-block:not(.m3-import) { flex: 0 0 auto; min-width: 0; max-width: 250px; padding-right: 6px; }
+.bp-3d .dw-row > label:first-child { flex: 0 0 58px; }
+.bp-3d.bp-pane .dw-row:has(> input[type="range"]) { display: flex; align-items: center; gap: 5px; min-height: 20px; }
+.bp-3d.bp-pane .dw-row > input[type="range"] { flex: 1 1 130px; width: 130px; min-width: 110px; }
+.bp-3d .dw-val { flex: 0 0 32px; }

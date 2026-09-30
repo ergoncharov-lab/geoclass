@@ -597,7 +597,7 @@ function updateWidgetButtons() {
 }
 
 // Состояние виджета «Шторка» (подробности — в разделе «ВИДЖЕТ «ШТОРКА»» ниже)
-const swipeState = { active: false, sides: {}, sideEls: {}, lastByGroup: { left: {}, right: {} }, ui: null, frac: 0.5, holdUntil: 0, lastKey: '', raf: 0, prevMaxZoom: undefined };
+const swipeState = { active: false, sides: {}, sideEls: {}, lastByGroup: { left: {}, right: {} }, ui: null, frac: 0.5, holdUntil: 0, lastKey: '', raf: 0, prevMaxZoom: undefined, mode: 'swipe' };
 
 function switchLayer(layerKey) {
     // При включённой шторке подложку основной карты выбирают виджеты половин, а не эта функция
@@ -3580,15 +3580,18 @@ function createSwipeMap(side) {
 }
 
 // Положение линии → обрезка половин и позиция виджетов
+// В режиме дублирования обрезки нет: окна лежат рядом (левое — основная карта, правое — вторая карта)
 function applySwipeClip() {
     if (!swipeState.active) return;
     const w = mapStageEl.clientWidth;
-    const x = Math.round(swipeState.frac * w);
-    const leftClip = `inset(0 ${Math.max(w - x, 0)}px 0 0)`;
-    const rightClip = `inset(0 0 0 ${x}px)`;
-    const leftStyle = swipeState.sides.left.el.style, rightStyle = swipeState.sides.right.el.style;
-    leftStyle.clipPath = leftClip;   leftStyle.webkitClipPath = leftClip;
-    rightStyle.clipPath = rightClip; rightStyle.webkitClipPath = rightClip;
+    const dual = swipeState.mode === 'dual';
+    const x = Math.round((dual ? 0.5 : swipeState.frac) * w);
+    const leftClip = dual ? 'none' : `inset(0 ${Math.max(w - x, 0)}px 0 0)`;
+    const rightClip = dual ? 'none' : `inset(0 0 0 ${x}px)`;
+    const setClip = (el, c) => { if (el) { el.style.clipPath = c; el.style.webkitClipPath = c; } };
+    setClip(swipeState.sides.left.el, leftClip);
+    setClip(swipeState.sides.right.el, rightClip);
+    if (m3d.active) { setClip(document.getElementById('map3d'), leftClip); setClip(document.getElementById('map3dR'), rightClip); }
     swipeState.ui.style.setProperty('--swipe-x', x + 'px');
 }
 
@@ -3691,6 +3694,7 @@ function setSwipeLayer(side, key) {
         currentTileLayer = baseLayers[key];
         updateActiveChips(key);
     }
+    if (m3d.active) { if (side === 'left') m3RebuildBasemap(); else m3RebuildBasemap2(); }   // подложка в 3D-окне
     applySwipeMaxZoom();
     updateSwipeLabels();
     updateLayerLegend();
@@ -3806,17 +3810,67 @@ function ensureSwipeUI() {
                     <path d="M9 6l-6 6 6 6M15 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </div>
-        </div>`;
+        </div>
+        <button type="button" class="swipe-mode-btn" id="swipeModeBtn" title="Обычная шторка ⇄ две карты рядом (дублирование)"><i class="fas fa-table-columns"></i><span>Дублирование</span></button>`;
     ui.appendChild(buildSwipeSide('left'));
     ui.appendChild(buildSwipeSide('right'));
     mapStageEl.appendChild(ui);
     swipeState.ui = ui;
     bindSwipeDrag(ui.querySelector('#swipeDivider'));
+    ui.querySelector('#swipeModeBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        setSwipeMode(swipeState.mode === 'dual' ? 'swipe' : 'dual');
+    });
 }
 
 document.addEventListener('click', function(e) {
     if (swipeState.active && !e.target.closest('.swipe-side')) closeSwipeLists();
 });
+
+// ---------- Режим дублирования (две карты рядом) ----------
+function swipeModeUI() {
+    const dual = swipeState.mode === 'dual';
+    mapStageEl.classList.toggle('swipe-dual', dual);
+    if (!swipeState.ui) return;
+    swipeState.ui.classList.toggle('dual', dual);
+    const b = swipeState.ui.querySelector('#swipeModeBtn');
+    if (b) { b.classList.toggle('on', dual); b.querySelector('span').textContent = dual ? 'Шторка' : 'Дублирование'; }
+}
+
+function setSwipeMode(mode) {
+    if (!swipeState.active || swipeState.mode === mode) return;
+    swipeState.mode = mode;
+    swipeModeUI();
+    map.invalidateSize({ animate: false });
+    ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+    if (m3d.active) [m3d.map, m3d.map2].forEach(m => { if (m) m.resize(); });
+    applySwipeClip();
+    syncSwipeMaps(true);
+    updateStatus(mode === 'dual' ? '🗺️ Дублирование: две карты рядом, у каждой своя подложка' : '↔️ Обычная шторка');
+}
+
+// В режиме дублирования правое окно (Leaflet) тоже двигает и масштабирует общий вид
+function bindDualRightControl(el) {
+    let last = null;
+    el.addEventListener('pointerdown', e => {
+        if (swipeState.mode !== 'dual' || e.button !== 0) return;
+        last = [e.clientX, e.clientY];
+        try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    el.addEventListener('pointermove', e => {
+        if (!last) return;
+        map.panBy([last[0] - e.clientX, last[1] - e.clientY], { animate: false });
+        last = [e.clientX, e.clientY];
+    });
+    const end = () => { last = null; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('wheel', e => {
+        if (swipeState.mode !== 'dual') return;
+        e.preventDefault();
+        map.setZoom(map.getZoom() + (e.deltaY < 0 ? 1 : -1));
+    }, { passive: false });
+}
 
 // ---------- Включение / выключение ----------
 function activateSwipe() {
@@ -3825,13 +3879,16 @@ function activateSwipe() {
     const rightKey = leftKey === 'esri_sat' ? 'google' : 'esri_sat';
 
     swipeState.prevMaxZoom = map.options.maxZoom;
-    map.removeLayer(currentTileLayer);          // тайлы теперь рисуют половины
+    if (map.hasLayer(currentTileLayer)) map.removeLayer(currentTileLayer);   // тайлы теперь рисуют половины (в 3D — MapLibre)
     swipeState.active = true;
     mapStageEl.classList.add('swipe-active');
 
     swipeState.sides.left = createSwipeMap('left');
     swipeState.sides.right = createSwipeMap('right');
+    bindDualRightControl(swipeState.sides.right.el);
     ensureSwipeUI();
+    swipeState.mode = 'swipe';
+    swipeModeUI();
 
     // память кнопок: левая половина продолжает основную карту, правая начинает с первых в списках
     swipeState.lastByGroup = { left: {}, right: {} };
@@ -3846,6 +3903,7 @@ function activateSwipe() {
     applySwipeClip();
     syncSwipeMaps(true);
     swipeState.raf = requestAnimationFrame(swipeTick);
+    if (m3d.active) m3EnterSplit();   // 3D уже включён — второе 3D-окно
 
     document.getElementById('swipeBtn').classList.add('active');
     updateStatus('↔️ Шторка включена: выберите подложки слева и справа от линии');
@@ -3866,11 +3924,14 @@ function deactivateSwipe() {
     });
     swipeState.sides = {};
     mapStageEl.classList.remove('swipe-active');
+    swipeState.mode = 'swipe';
+    swipeModeUI();
+    map.invalidateSize({ animate: false });
 
     // основная карта возвращает себе подложку (левой половины)
     map.options.maxZoom = swipeState.prevMaxZoom;
     currentTileLayer = baseLayers[currentLayer];
-    currentTileLayer.addTo(map);
+    if (m3d.active) m3DestroySplit(); else currentTileLayer.addTo(map);
     updateActiveChips(currentLayer);
     updateLayerLegend();
 
@@ -3885,6 +3946,7 @@ document.getElementById('swipeBtn').addEventListener('click', function(e) {
     document.querySelectorAll('.widget-btn').forEach(b => {
         if (b.id === 'swipeBtn') return;
         if (b.id === 'measureBtn' && measureMode) return;
+        if (b.id === 'mode3dBtn' && m3d.active) return;
         b.classList.remove('active');
     });
     activePanel = null;
@@ -4870,6 +4932,7 @@ function m3DefaultOpts() {
 const m3d = {
     active: false, map: null, ready: false, guard: false, seq: 0, baseIds: [],
     items: [], nextId: 1, selected: null, placing: false, orbit: 0, marker: null,
+    map2: null, ready2: false, baseIds2: [], unlink: null,   // второе 3D-окно (шторка / дублирование)
     lights: [], bingReg: false, opts: m3DefaultOpts(),
     trees: { n: 0, timer: 0, retry: 0, origin: null, cosO: 1, trunk: null, crown: null, sun: null }
 };
@@ -4933,22 +4996,93 @@ function m3LayerToRasters(layer, out) {
     return out;
 }
 
-function m3RebuildBasemap() {
-    const m = m3d.map;
-    if (!m || !m3d.ready) return;
-    m3d.baseIds.forEach(id => {
+function m3RebuildBasemapOn(m, ids, key) {
+    ids.forEach(id => {
         if (m.getLayer('l-' + id)) m.removeLayer('l-' + id);
         if (m.getSource(id)) m.removeSource(id);
     });
-    m3d.baseIds = [];
-    m3LayerToRasters(baseLayers[currentLayer] || currentTileLayer, []).forEach(spec => {
+    ids.length = 0;
+    m3LayerToRasters(baseLayers[key] || currentTileLayer, []).forEach(spec => {
         const id = 'gc-base-' + (++m3d.seq);
         const opacity = spec.opacity;
         delete spec.opacity;
         m.addSource(id, spec);
         m.addLayer({ id: 'l-' + id, type: 'raster', source: id, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 120 } }, 'gc-hillshade');
-        m3d.baseIds.push(id);
+        ids.push(id);
     });
+}
+
+function m3RebuildBasemap() {
+    if (m3d.map && m3d.ready) m3RebuildBasemapOn(m3d.map, m3d.baseIds, currentLayer);
+    m3RebuildBasemap2();
+}
+
+// Подложка второго 3D-окна = подложка правой половины шторки
+function m3RebuildBasemap2() {
+    if (m3d.map2 && m3d.ready2 && swipeState.active && swipeState.sides.right && swipeState.sides.right.layerKey) {
+        m3RebuildBasemapOn(m3d.map2, m3d.baseIds2, swipeState.sides.right.layerKey);
+    }
+}
+
+// ---------- Второе 3D-окно (правая половина шторки / правое окно дублирования) ----------
+function m3InitRight() {
+    const src = m3d.map;
+    let el = m3El('map3dR');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'map3dR';
+        el.className = 'map3d map3d-r';
+        mapStageEl.insertBefore(el, m3El('map3d').nextSibling);
+    }
+    const c = src.getCenter();
+    const m = new maplibregl.Map({
+        container: el,
+        style: { version: 8, glyphs: M3D.GLYPHS, sources: {}, layers: [{ id: 'gc-bg', type: 'background', paint: { 'background-color': '#dfe7ee' } }] },
+        center: [c.lng, c.lat], zoom: src.getZoom(), bearing: src.getBearing(), pitch: src.getPitch(),
+        maxPitch: 85, maxZoom: 21, attributionControl: false, preserveDrawingBuffer: true, antialias: true
+    });
+    m3d.map2 = m;
+    m3d.ready2 = false;
+    m.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    m.on('load', () => {
+        m3d.ready2 = true;
+        m3AddOverlays(m);
+        m3RebuildBasemap2();
+        m3Apply();
+    });
+    // камеры обоих окон движутся вместе
+    let busy = false;
+    const mirror = (from, to) => () => {
+        if (busy) return;
+        busy = true;
+        to.jumpTo({ center: from.getCenter(), zoom: from.getZoom(), bearing: from.getBearing(), pitch: from.getPitch() });
+        busy = false;
+    };
+    const h1 = mirror(src, m), h2 = mirror(m, src);
+    src.on('move', h1);
+    m.on('move', h2);
+    m3d.unlink = () => src.off('move', h1);
+    ['mousedown', 'touchstart', 'wheel'].forEach(ev => m.on(ev, m3StopOrbit));
+}
+
+function m3EnterSplit() {
+    if (!m3d.map || m3d.map2) return;
+    m3InitRight();
+    applySwipeClip();
+    m3d.map.resize();
+    m3d.map2.resize();
+}
+
+function m3DestroySplit() {
+    if (m3d.unlink) { m3d.unlink(); m3d.unlink = null; }
+    if (m3d.map2) { m3d.map2.remove(); m3d.map2 = null; }
+    m3d.ready2 = false;
+    m3d.baseIds2 = [];
+    const r = m3El('map3dR');
+    if (r && r.parentNode) r.parentNode.removeChild(r);
+    const l = m3El('map3d');
+    if (l) { l.style.clipPath = ''; l.style.webkitClipPath = ''; }
+    if (m3d.map) m3d.map.resize();
 }
 
 // ---------- Синхронизация с основной (Leaflet) картой ----------
@@ -5034,8 +5168,13 @@ function m3AddUserLayers(m) {
 
 // Применить все настройки к карте
 function m3Apply() {
-    const m = m3d.map, o = m3d.opts;
-    if (!m || !m3d.ready) return;
+    m3ApplyTo(m3d.map, true);
+    if (m3d.map2 && m3d.ready2) m3ApplyTo(m3d.map2, false);
+}
+
+function m3ApplyTo(m, main) {
+    const o = m3d.opts;
+    if (!m || !(main ? m3d.ready : m3d.ready2)) return;
     const vis = on => on ? 'visible' : 'none';
 
     try { m.setTerrain(o.terrain ? { source: 'gc-dem', exaggeration: o.exaggeration } : null); } catch (e) { console.warn('terrain', e); }
@@ -5070,13 +5209,15 @@ function m3Apply() {
     m.setLayoutProperty('gc-labels', 'visibility', vis(o.labels));
     m.setLayoutProperty('gc-forest', 'visibility', vis(o.trees));
 
-    ['gc-user-line', 'gc-user-pt', 'gc-user-txt'].forEach(id => m.setLayoutProperty(id, 'visibility', vis(o.userObjects)));
-    m.setLayoutProperty('gc-user-fill', 'visibility', vis(o.userObjects && !o.extrude));
-    m.setLayoutProperty('gc-user-ext', 'visibility', vis(o.userObjects && o.extrude));
-    m.setPaintProperty('gc-user-ext', 'fill-extrusion-height', o.extrudeH);
+    if (main) {   // объекты пользователя, модели и деревья — только в основном (левом) 3D-окне
+        ['gc-user-line', 'gc-user-pt', 'gc-user-txt'].forEach(id => m.setLayoutProperty(id, 'visibility', vis(o.userObjects)));
+        m.setLayoutProperty('gc-user-fill', 'visibility', vis(o.userObjects && !o.extrude));
+        m.setLayoutProperty('gc-user-ext', 'visibility', vis(o.userObjects && o.extrude));
+        m.setPaintProperty('gc-user-ext', 'fill-extrusion-height', o.extrudeH);
 
-    m3UpdateLights();
-    if (o.trees || m3d.trees.n) m3TreesSchedule();
+        m3UpdateLights();
+        if (o.trees || m3d.trees.n) m3TreesSchedule();
+    }
     m.triggerRepaint();
 }
 
@@ -5677,9 +5818,8 @@ function enter3D() {
         updateStatus('⚠️ MapLibre GL не загрузился — проверьте подключение к интернету', true);
         return;
     }
-    if (swipeState.active) deactivateSwipe();
     document.querySelectorAll('.widget-panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.widget-btn').forEach(b => { if (b.id !== 'mode3dBtn') b.classList.remove('active'); });
+    document.querySelectorAll('.widget-btn').forEach(b => { if (b.id !== 'mode3dBtn' && !(b.id === 'swipeBtn' && swipeState.active)) b.classList.remove('active'); });
     activePanel = null;
     try { if (measureMode) deactivateMeasureMode(); } catch (e) { /* не критично */ }
     try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
@@ -5700,6 +5840,7 @@ function enter3D() {
     }
     if (geoMarker) m3PutMarker(geoMarker.getLatLng());
 
+    if (swipeState.active) m3EnterSplit();   // шторка / дублирование → два 3D-окна
     m3El('mode3dBtn').classList.add('active');
     m3SetTabEnabled(true);
     updateStatus('🧊 3D включён: ЛКМ — сдвиг, ПКМ / Ctrl+ЛКМ — поворот и наклон, колесо — масштаб');
@@ -5713,8 +5854,14 @@ function exit3D() {
     mapStageEl.classList.remove('mode-3d');
     m3CancelPlacing();
     m3RemoveMarker();
-    if (!map.hasLayer(currentTileLayer)) currentTileLayer.addTo(map);
+    m3DestroySplit();
+    if (!swipeState.active && !map.hasLayer(currentTileLayer)) currentTileLayer.addTo(map);
     map.invalidateSize();
+    if (swipeState.active) {   // вернуть Leaflet-половины шторки
+        ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+        applySwipeClip();
+        syncSwipeMaps(true);
+    }
     m3El('mode3dBtn').classList.remove('active');
     m3SetTabEnabled(false);
     updateStatus(`🧊 3D выключен. Подложка: ${LAYER_NAMES[currentLayer] || currentLayer}`);
@@ -5907,13 +6054,12 @@ document.querySelector('.map-container').addEventListener('click', e => {
     }
 }, true);
 
-// Включение шторки выключает 3D
-m3El('swipeWidget').addEventListener('click', () => { if (m3d.active) exit3D(); }, true);
+// Шторка и 3D работают вместе: в 3D шторка / дублирование показывают два 3D-окна
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && m3d.placing) m3CancelPlacing(); });
 
 if (window.ResizeObserver) {
-    new ResizeObserver(() => { if (m3d.map && m3d.active) m3d.map.resize(); }).observe(mapStageEl);
+    new ResizeObserver(() => { if (m3d.map && m3d.active) { m3d.map.resize(); if (m3d.map2) m3d.map2.resize(); } }).observe(mapStageEl);
 }
 
 m3BindUI();
