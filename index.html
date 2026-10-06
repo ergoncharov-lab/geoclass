@@ -14,8 +14,11 @@
     <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@5.8.0/dist/togeojson.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+    <script src="https://unpkg.com/proj4@2.9.2/dist/proj4.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="site.css" />
         <!-- Плагин для трансформации фигур -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-path-transform@1.0.0/dist/leaflet-path-transform.css" />
     <script src="https://unpkg.com/leaflet-path-transform@1.0.0/dist/leaflet-path-transform.js"></script>
@@ -26,60 +29,168 @@
 </head>
 <body>
 
+<!-- ============ ШАПКА САЙТА ============ -->
+<header class="s-header" id="siteHeader">
+  <div class="s-wrap">
+    <a class="s-brand" href="#top"><i class="fas fa-seedling"></i> GeoClass</a>
+    <button class="s-burger" id="siteBurger" aria-label="Меню"><i class="fas fa-bars"></i></button>
+    <nav class="s-nav" id="siteNav">
+      <a href="#top">Главная</a>
+      <a href="#map-section" class="s-nav-map"><i class="fas fa-map-location-dot"></i> Карта</a>
+      <a href="#data-catalog">Каталог данных</a>
+      <a href="#features">Возможности</a>
+      <a href="#how">Как это работает</a>
+      <a href="#faq">Частые вопросы</a>
+      <a href="#contacts">Контакты</a>
+      <a href="#pricing" class="s-cta"><i class="fas fa-file-lines"></i> Полный анализ</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ БЛОК 1: ГЛАВНАЯ (на всю страницу, фон — картинка, блоки полупрозрачные) ============ -->
+<section class="s-hero" id="top">
+  <div class="s-wrap">
+    <div class="s-hero-main s-glass">
+      <div class="s-hero-tag"><i class="fas fa-wheat-awn"></i> Геоаналитика для агро</div>
+      <h1>Больше, чем <em>просто карта</em></h1>
+      <p class="lead">Исследуйте поля и территорию, анализируйте данные дистанционного зондирования, принимайте обоснованные решения.</p>
+      <div class="s-hero-actions">
+        <a class="s-btn s-btn-primary" href="#map-section">Начать работу <i class="fas fa-arrow-right"></i></a>
+        <a class="s-btn s-btn-ghost" href="#features"><i class="far fa-circle-play"></i> Узнать больше</a>
+      </div>
+    </div>
+    <aside class="s-hero-about s-glass">
+      <div class="ab-eyebrow">О проекте</div>
+      <h2>Предварительная проверка земельного участка за несколько минут</h2>
+      <p>GeoClass — геоаналитический портал для оценки земельных участков. Вы изучаете территорию бесплатными инструментами, а затем заказываете машинный комплексный анализ и получаете структурированный отчёт.</p>
+      <ul>
+        <li><b>Бесплатно:</b> карта, слои, измерения, профили рельефа</li>
+        <li><b>Полный анализ:</b> рельеф, вода, инфраструктура, спутниковые индексы, классификация земель</li>
+        <li><b>Результат:</b> паспорт участка и отчёт в PDF</li>
+      </ul>
+    </aside>
+    <div class="s-tiles">
+      <div class="s-tile"><i class="fas fa-satellite"></i><b>Мониторинг посевов</b><span>Снимки Sentinel-2 и временные ряды NDVI</span></div>
+      <div class="s-tile"><i class="fas fa-seedling"></i><b>Почвы и влага</b><span>pH, органический углерод, NDMI, NDWI</span></div>
+      <div class="s-tile"><i class="fas fa-mountain-sun"></i><b>Рельеф и логистика</b><span>Уклоны, профили, дороги и водоёмы рядом</span></div>
+      <div class="s-tile"><i class="fas fa-file-lines"></i><b>Паспорт участка</b><span>Пашня, луга, лес — площади, графики и отчёт</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ БЛОК 2: КАРТА (текущее приложение без изменений) ============ -->
+<section id="map-section" aria-label="Карта">
 <div class="app-container">
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
-    <div class="panel" id="mainPanel">
-        <div class="panel-header">
-            <h3><i class="fas fa-globe-americas"></i> GeoClass</h3>
-            <p>Классификация земной поверхности</p>
+    <div class="panel" id="mainPanel" data-view="home">
+        <!-- ЗАСТАВКА АНАЛИЗА: крупная анимация поверх инструментов, пока идёт расчёт (логистика, профиль, гипсометрия, погода, экспорт). Управляется из site.js: AnLoader.start / progress / end -->
+        <div class="an-loader" id="anLoader" hidden role="status" aria-live="polite">
+            <div class="an-loader-box">
+                <div class="an-card">
+                    <div class="an-viz" aria-hidden="true">
+                        <div class="an-sweep"></div>
+                        <svg class="an-svg" viewBox="0 0 240 240">
+                            <defs>
+                                <linearGradient id="anGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#059669"/><stop offset="1" stop-color="#6ee7b7"/></linearGradient>
+                                <linearGradient id="anRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#047857"/></linearGradient>
+                            </defs>
+                            <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(52,211,153,.2)" stroke-width="1"/>
+                            <circle class="an-r1" cx="120" cy="120" r="98" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 11" opacity=".75"/>
+                            <circle class="an-r2" cx="120" cy="120" r="80" fill="none" stroke="url(#anRing)" stroke-width="3" stroke-linecap="round" stroke-dasharray="46 20 8 20"/>
+                            <circle class="an-r3" cx="120" cy="120" r="62" fill="none" stroke="#a7f3d0" stroke-width="1.5" stroke-dasharray="3 7" opacity=".7"/>
+                            <g class="an-o1"><circle cx="120" cy="22" r="5" fill="#34d399"/><circle cx="120" cy="22" r="9" fill="none" stroke="#34d399" stroke-opacity=".4"/></g>
+                            <g class="an-o2"><circle cx="120" cy="40" r="3.5" fill="#fff"/></g>
+                            <g class="an-o3"><circle cx="120" cy="58" r="4" fill="#a7f3d0"/></g>
+                            <rect class="an-b an-b1" x="86" y="88" width="9" height="56" rx="3" fill="url(#anGrad)"/>
+                            <rect class="an-b an-b2" x="100" y="88" width="9" height="56" rx="3" fill="url(#anGrad)"/>
+                            <rect class="an-b an-b3" x="114" y="88" width="9" height="56" rx="3" fill="url(#anGrad)"/>
+                            <rect class="an-b an-b4" x="128" y="88" width="9" height="56" rx="3" fill="url(#anGrad)"/>
+                            <rect class="an-b an-b5" x="142" y="88" width="9" height="56" rx="3" fill="url(#anGrad)"/>
+                            <line x1="80" y1="147" x2="157" y2="147" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-linecap="round"/>
+                            <polyline class="an-trend" pathLength="100" points="82,128 98,114 112,121 130,98 154,84" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="154" cy="84" r="3.5" fill="#fff"/>
+                            <circle class="an-end" cx="154" cy="84" r="3.5" fill="none" stroke="#34d399" stroke-width="1.5"/>
+                        </svg>
+                    </div>
+                    <div class="an-title" id="anTitle">Анализ</div>
+                    <div class="an-text" id="anText">Обработка данных…</div>
+                    <div class="an-bar ind" id="anBarWrap"><i id="anBar"></i></div>
+                    <div class="an-meta"><span id="anPct">&nbsp;</span><span id="anTime">0 с</span></div>
+                    <button type="button" class="an-cancel" id="anCancel" hidden><i class="fas fa-xmark"></i> Остановить</button>
+                </div>
+            </div>
+        </div>
+        <!-- ВЕРХ БОКОВОЙ ПАНЕЛИ: поиск и построение маршрута (как в Яндекс Картах), ниже — стрелка «назад» -->
+        <div class="sp-head">
+            <div class="sp-search">
+            <div class="map-search">
+        <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Поиск города или улицы..." autocomplete="off">
+        <button id="searchBtn"><i class="fas fa-search"></i></button>
+    </div>
+    <div id="searchResults" class="search-results"></div>
+    </div>
+                <button type="button" class="sp-route" id="routeBtn" title="Построить маршрут"><i class="fas fa-diamond-turn-right"></i></button>
+            </div>
+            <!-- МОЁ МЕСТОПОЛОЖЕНИЕ: определяется при загрузке карты (заполняется из script.js) -->
+            <div class="sp-loc" id="spLoc" title="Ваше местоположение"><i class="fas fa-location-dot"></i><b id="spLocName">Определение местоположения…</b><span class="sp-wx" id="spWx" hidden><i class="fas fa-cloud-sun"></i><b></b></span><span id="spLocRegion"></span></div>
+            <div class="sp-back" id="spBack" hidden>
+                <button type="button" class="sp-back-btn" id="spBackBtn" title="Назад"><i class="fas fa-arrow-left"></i></button>
+                <span class="sp-back-title" id="spBackTitle"></span>
+            </div>
         </div>
 
-        <!-- ВКЛАДКИ БОКОВОЙ ПАНЕЛИ (названия временные) -->
+                <!-- ВКЛАДКИ БОКОВОЙ ПАНЕЛИ -->
         <div class="panel-tabs" role="tablist">
             <button class="panel-tab active" role="tab" aria-selected="true" data-tab="main" title="Главная"><i class="fas fa-house"></i><span>Главная</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="data" title="Данные"><i class="fas fa-database"></i><span>Данные</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="layers" title="Слои"><i class="fas fa-layer-group"></i><span>Слои</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ"><i class="fas fa-chart-pie"></i><span>Анализ</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="reports" title="Отчёты"><i class="fas fa-file-lines"></i><span>Отчёты</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ участка"><i class="fas fa-draw-polygon"></i><span>Анализ</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="reports" title="Мои отчёты"><i class="fas fa-file-lines"></i><span>Отчёты</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="catalog" title="Каталог геоданных"><i class="fas fa-store"></i><span>Каталог</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="help" title="Инструкции"><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
         </div>
 
-        <!-- ВКЛАДКА «ГЛАВНАЯ»: всё текущее содержимое панели -->
+        <!-- ВКЛАДКА 1 «ГЛАВНАЯ»: меню разделов + место под рекламный блок -->
         <div class="tab-pane active" data-pane="main" role="tabpanel">
-
-        <!-- ПОИСК -->
-        <div class="section" style="background: #f8fafc;">
-            <div class="section-title"><i class="fas fa-search"></i> Поиск адреса</div>
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Поиск города или улицы..." autocomplete="off">
-                <button id="searchBtn"><i class="fas fa-search"></i></button>
-            </div>
-            <div id="searchResults" class="search-results"></div>
-        </div>
-
-        <!-- КООРДИНАТЫ И АДРЕС (правый клик «Что здесь?» или выбор в поиске) -->
-        <div class="section geo-section" id="geoSection">
-            <div class="section-title">
-                <i class="fas fa-location-crosshairs"></i> Координаты и адрес
-                <button class="geo-close" id="geoCloseBtn" title="Убрать точку с карты" hidden>
-                    <i class="fas fa-xmark"></i>
-                </button>
-            </div>
-            <div class="geo-info" id="geoInfo">
-                <div class="geo-empty" id="geoEmpty">Правый клик по карте → «Что здесь?» или выберите результат поиска</div>
-                <div class="geo-row" id="geoCoordsRow" hidden>
-                    <i class="fas fa-location-dot geo-icon"></i>
-                    <span class="geo-value" id="geoCoords"></span>
-                    <button class="copy-btn" data-copy="coords" title="Копировать координаты"><i class="fas fa-copy"></i></button>
+            <!-- МЕНЮ РАЗДЕЛОВ: цветные кнопки, как в Яндекс Картах. По нажатию кнопки скрываются, остаётся стрелка «назад» -->
+            <div class="section sp-home">
+                <div class="sp-grid">
+                    <button type="button" class="sp-tile" data-goto="analysis" style="--c:#10b981" title="Анализ участка&#10;Загрузите контур участка (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его на карте и запустите анализ. В этом разделе — список объектов участка и запуск расчёта."><i class="fas fa-draw-polygon"></i><span>Анализ участка</span></button>
+                    <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты: показатели, таблицы и карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
+                    <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
+                    <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
                 </div>
-                <div class="geo-row" id="geoAddressRow" hidden>
-                    <i class="fas fa-house geo-icon"></i>
-                    <span class="geo-value" id="geoAddress"></span>
-                    <button class="copy-btn" data-copy="address" title="Копировать адрес"><i class="fas fa-copy"></i></button>
+                <div class="sp-grid">
+                    <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
+                    <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
+                    <button type="button" class="sp-tile" data-bp="weather" style="--c:#0ea5e9" title="Погода&#10;Текущая погода и прогноз на 7 дней для видимой области карты (Open-Meteo, сетка 5×5 точек): температура, осадки, влажность, ветер, сумма температур выше 5 °C, дни с заморозком."><i class="fas fa-cloud-sun-rain"></i><span>Погода</span></button>
+                    <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Доступны при включённом 3D (кнопка «3D» справа на карте). Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
+                </div>
+                <div class="sp-grid">
+                    <button type="button" class="sp-tile" data-bp="dates" style="--c:#ec4899" title="Снимки&#10;Снимки Sentinel-2 (10 м) по датам: естественные и ложные цвета (CIR), календарь, превью с облачностью, рисование области и скачивание цветного GeoTIFF в максимальном разрешении."><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
+                    <button type="button" class="sp-tile" data-bp="ndvi" style="--c:#22c55e" title="NDVI — вегетационный индекс&#10;Показывает густоту и состояние растительности: низкие значения — вода, голая почва и застройка, высокие — густые посевы и лес. Есть «Контрастный NDVI» с настраиваемой шкалой и калькулятор статистики по полигону. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-leaf"></i><span>NDVI</span></button>
+                    <button type="button" class="sp-tile" data-bp="ndwi" style="--c:#06b6d4" title="NDWI — индекс воды&#10;Выделяет водные объекты и переувлажнённые участки: высокие значения соответствуют открытой воде. Есть вариант MNDWI. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-droplet"></i><span>NDWI</span></button>
+                    <button type="button" class="sp-tile" data-bp="ndmi" style="--c:#0284c7" title="NDMI — влажность растительности&#10;Оценивает содержание влаги в растениях: помогает заметить засуху и водный стресс посевов. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
+                    <button type="button" class="sp-tile" data-bp="nbr" style="--c:#f59e0b" title="NBR — индекс гарей&#10;Показывает гари и повреждение растительности; сравнение «до и после» помогает оценить площадь и тяжесть пожара. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-fire"></i><span>NBR</span></button>
+                </div>
+                <div class="sp-grid">
+                    <button type="button" class="sp-tile" data-bp="change" style="--c:#a855f7" title="Изменения&#10;Сравнение снимков на две даты, чтобы увидеть, что изменилось на территории: вырубки, застройка, паводок, состояние посевов. Раздел в разработке."><i class="fas fa-code-compare"></i><span>Изменения</span></button>
+                    <button type="button" class="sp-tile" data-goto="catalog" style="--c:#d97706" title="Каталог геоданных&#10;Готовые наборы данных для приобретения: векторные данные OSM (здания, дороги, вода), спутниковые снимки и аналитические данные. Выберите нужные позиции — оформление заказа пока заготовка."><i class="fas fa-store"></i><span>Каталог геоданных</span></button>
+                    <button type="button" class="sp-tile" data-bp="catalog" style="--c:#84cc16" title="Каталог данных&#10;Быстрый доступ к каталогу данных из панели инструментов. Раздел в разработке — полный каталог откройте в соседней плитке «Каталог геоданных»."><i class="fas fa-folder-open"></i><span>Каталог данных</span></button>
+                    <button type="button" class="sp-tile" data-goto="help" style="--c:#eab308" title="Инструкции&#10;Краткая справка по работе с картой: подложки и слои, измерения и сетка, рисование, 3D, логистика, погода и экспорт."><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
                 </div>
             </div>
-        </div>
+            <div class="section">
+                <div class="hm-ad" id="adSlot"><div class="hm-ad-anim"></div><span><i class="fas fa-bullhorn"></i> Место под рекламный анимационный блок</span></div>
+            </div>
+        </div><!-- /tab-pane main -->
 
-        <!-- ЗАГРУЗКА ДАННЫХ -->
+        <!-- ВКЛАДКА 2 «АНАЛИЗ УЧАСТКА» -->
+        <div class="tab-pane" data-pane="analysis" role="tabpanel">
+            <div class="section an-howto">
+                <div class="section-title"><i class="fas fa-list-check"></i> Как запустить анализ</div>
+                <ol><li>Найдите место через поиск в левом верхнем углу карты.</li><li>Загрузите контур файлом или нарисуйте участок.</li><li>Проверьте площадь и свойства объекта.</li><li>Нажмите «Запустить анализ участка».</li></ol>
+            </div>
+<!-- ЗАГРУЗКА ДАННЫХ -->
         <div class="section">
             <div class="section-title"><i class="fas fa-file-import"></i> Загрузка данных</div>
             <div class="file-area" onclick="document.getElementById('vectorFileInput').click()">
@@ -90,7 +201,33 @@
             <input type="file" id="vectorFileInput" accept=".kml,.geojson,.json,.xlsx,.xls,.xml" />
         </div>
 
-        <!-- ИНФОРМАЦИЯ ОБ ОБЪЕКТЕ -->
+                <!-- ИНСТРУМЕНТЫ РИСОВАНИЯ УЧАСТКА (перенесены с карты) -->
+        <div class="section">
+            <div class="section-title"><i class="fas fa-pen-ruler"></i> Нарисовать участок</div>
+            <div class="an-draw">
+                <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
+                            <i class="fas fa-draw-polygon"></i>
+                        </button>
+                        <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
+                            <i class="fas fa-vector-square"></i>
+                        </button>
+                        <button class="map-btn draw-tool-btn" data-tool="circle" title="Круг / Овал">
+                            <i class="fas fa-circle"></i>
+                        </button>
+                        <button class="map-btn" id="editMapBtn" title="Редактировать">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="map-btn" id="deleteMapBtn" title="Удалить выбранное">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="map-btn" id="clearMapBtn" title="Очистить всё">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+            </div>
+            <div class="an-hint">Выберите фигуру и кликните по карте. Полигон — клики по вершинам, двойной клик завершает. <i class="fas fa-edit"></i> правка, <i class="fas fa-trash"></i> удаление выбранного, <i class="fas fa-eraser"></i> очистка всего.</div>
+        </div>
+
+<!-- ИНФОРМАЦИЯ ОБ ОБЪЕКТЕ -->
         <div class="section" id="infoSection" style="display: none;">
             <div class="section-title"><i class="fas fa-info-circle"></i> Свойства объекта</div>
             <div class="info-card">
@@ -119,21 +256,671 @@
             <div id="objectListContainer" class="object-list-container"></div>
         </div>
 
-        </div><!-- /tab-pane main -->
+                <div class="section">
+            <button type="button" class="an-run" id="runAnalysisBtn"><i class="fas fa-play"></i> Запустить анализ участка</button>
+            <div class="an-hint">Анализ выполняется в фоне, результат появится на вкладке «Отчёты».</div>
+        </div>
+        </div><!-- /tab-pane analysis -->
 
-        <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК -->
-        <div class="tab-pane" data-pane="data" role="tabpanel">
-            <div class="tab-placeholder"><i class="fas fa-database"></i><p>Данные</p><span>Раздел в разработке</span></div>
-        </div>
-        <div class="tab-pane" data-pane="layers" role="tabpanel">
-            <div class="tab-placeholder"><i class="fas fa-layer-group"></i><p>Слои</p><span>Раздел в разработке</span></div>
-        </div>
-        <div class="tab-pane" data-pane="analysis" role="tabpanel">
-            <div class="tab-placeholder"><i class="fas fa-chart-pie"></i><p>Анализ</p><span>Раздел в разработке</span></div>
-        </div>
+        <!-- ВКЛАДКА 3 «ОТЧЁТЫ»: список анализов пользователя; клик по отчёту раскрывает паспорт участка -->
         <div class="tab-pane" data-pane="reports" role="tabpanel">
-            <div class="tab-placeholder"><i class="fas fa-file-lines"></i><p>Отчёты</p><span>Раздел в разработке</span></div>
+            <div class="section">
+                <div class="section-title"><i class="fas fa-file-lines"></i> Мои отчёты <span class="badge">1</span></div>
+                <div class="an-hint" style="margin:0 0 10px">Демо-отчёт доступен без регистрации. Ваши отчёты появятся здесь после анализа.</div>
+                <button type="button" class="rp-item" data-open-passport>
+                    <i class="fas fa-file-pdf"></i>
+                    <span><b>Участок № 50:21:0000000:1234</b><small>14.7 га · пашня 57% · анализ от — (шаблон)</small></span>
+                    <span class="s-demo">Демо</span>
+                </button>
+            </div>
         </div>
+
+        <!-- ВКЛАДКА 4 «КАТАЛОГ» -->
+        <div class="tab-pane" data-pane="catalog" role="tabpanel">
+            <div class="section ct">
+                <div class="section-title"><i class="fas fa-store"></i> Каталог геоданных</div>
+                <details class="ct-grp" open><summary><i class="fas fa-vector-square"></i> Векторные данные OSM</summary>
+                    <div class="ct-item"><span><b>Здания</b><small>Контуры, этажность, тип</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Дороги</b><small>Сеть дорог с классами и покрытием</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Водные объекты</b><small>Реки, озёра, пруды, каналы</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Землепользование</b><small>Поля, леса, луга, застройка</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Населённые пункты</b><small>Границы и названия</small></span><em>— ₽</em></div>
+                </details>
+                <details class="ct-grp"><summary><i class="fas fa-satellite"></i> Спутниковые снимки</summary>
+                    <div class="ct-item"><span><b>Sentinel-2</b><small>10 м, мультиспектральные, любая дата</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Landsat 8/9</b><small>30 м, архив с 2013 года</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Безоблачная мозаика</b><small>Годовой композит на территорию</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Снимки высокого разрешения</b><small>Под заказ, до 0.5 м</small></span><em>— ₽</em></div>
+                </details>
+                <details class="ct-grp"><summary><i class="fas fa-map"></i> Готовые карты</summary>
+                    <div class="ct-item"><span><b>Рельеф и уклоны</b><small>Карта высот, уклонов, экспозиции</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>NDVI / NDWI / NDMI</b><small>Индексы за выбранный период</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Классификация земель</b><small>Пашня, луга, лес, вода, застройка</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>Почвенные карты</b><small>pH, органический углерод, гранулометрия</small></span><em>— ₽</em></div>
+                </details>
+                <div class="an-hint">Цены и оформление заказа — заготовка, будут добавлены позже.</div>
+            </div>
+        </div>
+
+        <!-- ВКЛАДКА 5 «ИНСТРУКЦИИ» (аккордеон по блокам карты; тексты — черновик) -->
+        <div class="tab-pane" data-pane="help" role="tabpanel">
+            <div class="section ct">
+                <div class="section-title"><i class="fas fa-circle-question"></i> Инструкции</div>
+                <details class="ct-grp" open><summary><i class="fas fa-location-crosshairs"></i> Поиск и координаты</summary><ul class="hp"><li>Поле поиска — в левом верхнем углу карты: введите город или улицу и выберите результат.</li><li>Правый клик по карте → «Что здесь?» покажет координаты и адрес точки (блок «Координаты и адрес» на вкладке «Главная»).</li><li>Кнопки копирования рядом с полями сохранят значения в буфер.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-draw-polygon"></i> Анализ участка</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-file-lines"></i> Отчёты и паспорт участка</summary><ul class="hp"><li>Нажмите на отчёт в списке — паспорт раскроется на всю область карты.</li><li>«К карте» или Esc возвращают обычный вид.</li><li>Из паспорта можно скачать PDF.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-store"></i> Каталог геоданных</summary><ul class="hp"><li>Данные разбиты на группы: векторы OSM, спутниковые снимки, готовые карты.</li><li>Раскройте группу, выберите набор и оформите заказ (в разработке).</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-layer-group"></i> Подложки и слои (кнопки справа)</summary><ul class="hp"><li>«Базовые карты», «Спутник» и «Аналитические подложки» меняют основу карты.</li><li>Легенда аналитического слоя — на вкладке «Главная» нижней панели.</li><li>«Шторка» делит карту на две подложки для сравнения.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-ruler-combined"></i> Измерения, сетка и навигация</summary><ul class="hp"><li>«Измерения» — длина и площадь по клику; «Очистить» убирает результат.</li><li>«Сетка координат» — формат, шаг и цвет настраиваются в выпадающей панели.</li><li>Колесо — масштаб, правая кнопка мыши или Shift + колесо — поворот, стрелка севера сбрасывает его.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-pen-ruler"></i> Рисование (нижняя панель)</summary><ul class="hp"><li>Вкладка «Рисование»: значки, текст, линии и фигуры со стилями.</li><li>«Выбрать» позволяет менять стиль, «Двигать» — перемещать, «Вершины» — править контур.</li><li>Ctrl+Z / Ctrl+Y — отмена и повтор, «GeoJSON» — выгрузка рисунков.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-mountain"></i> Профиль рельефа</summary><ul class="hp"><li>«По линии»: нарисуйте линию — получите график высот и уклонов.</li><li>«По площади»: гипсометрическая кривая и ступени высот полигона.</li><li>Результаты выгружаются в CSV и PNG.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-cube"></i> 3D-режим</summary><ul class="hp"><li>Кнопка «3D» среди виджетов справа на карте включает 3D: рельеф, здания OSM, деревья.</li><li>Сцену можно вращать и наклонять, потянув кнопку «3D / 2D» на карте; добавленные модели выделяются и двигаются мышью. Освещение, готовые модели и импорт GLB/GLTF — вкладка «3D».</li><li>Рисование и измерения работают только в 2D.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-route"></i> Логистика</summary><ul class="hp"><li>Задайте точку или фигуру, радиус и нажмите «Буфер и анализ».</li><li>«Рассчитать расстояния» найдёт ближайшие дорогу и водоём.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-cloud-sun-rain"></i> Погода</summary><ul class="hp"><li>Раздел «Погода» боковой панели показывает текущие данные и прогноз на 7 дней по экстенту карты.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-file-export"></i> Экспорт карты</summary><ul class="hp"><li>Выберите формат (PDF, PNG, JPEG, WebP, GeoTIFF), лист и разрешение.</li><li>Отметьте элементы: легенда, масштаб, север, сетка, рамка.</li><li>Проверьте предпросмотр и нажмите «Экспорт».</li></ul></details>
+            </div>
+        </div>
+
+        <!-- МАРШРУТ (как в Яндекс Картах): откуда/куда/промежуточные точки, способ, варианты, пошаговый маршрут. Расчёт — OSRM -->
+        <div class="rt" id="routePane">
+            <div class="rt-modes" id="rtModes">
+                <button type="button" class="rt-mode active" data-mode="car" title="На машине"><i class="fas fa-car-side"></i></button>
+                <button type="button" class="rt-mode" data-mode="foot" title="Пешком"><i class="fas fa-person-walking"></i></button>
+                <button type="button" class="rt-mode" data-mode="bike" title="На велосипеде"><i class="fas fa-person-biking"></i></button>
+            </div>
+            <div class="rt-points" id="rtPoints"></div>
+            <div class="rt-tools">
+                <button type="button" class="rt-link" id="rtAdd"><i class="fas fa-plus"></i> Добавить пункт</button>
+                <button type="button" class="rt-link" id="rtSwap"><i class="fas fa-arrow-right-arrow-left fa-rotate-90"></i> Поменять местами</button>
+            </div>
+            <div class="rt-state" id="rtState">Укажите, откуда и куда ехать: введите адрес, выберите на карте или нажмите «Моё местоположение».</div>
+            <div class="rt-alts" id="rtAlts"></div>
+            <div class="rt-steps" id="rtSteps" hidden></div>
+        </div>
+
+        <!-- «ЧТО ЗДЕСЬ?»: карточка появляется, только когда выбрана точка на карте (правый клик или результат поиска) -->
+        <div class="section geo-section" id="geoSection">
+            <div class="section-title">
+                <i class="fas fa-location-crosshairs"></i> Координаты и адрес
+                <button class="geo-close" id="geoCloseBtn" title="Убрать точку с карты" hidden>
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="geo-info" id="geoInfo">
+                <div class="geo-empty" id="geoEmpty">Правый клик по карте → «Что здесь?» или выберите результат поиска</div>
+                <div class="geo-row" id="geoCoordsRow" hidden>
+                    <i class="fas fa-location-dot geo-icon"></i>
+                    <span class="geo-value" id="geoCoords"></span>
+                    <button class="copy-btn" data-copy="coords" title="Копировать координаты"><i class="fas fa-copy"></i></button>
+                </div>
+                <div class="geo-row" id="geoAddressRow" hidden>
+                    <i class="fas fa-house geo-icon"></i>
+                    <span class="geo-value" id="geoAddress"></span>
+                    <button class="copy-btn" data-copy="address" title="Копировать адрес"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- НИЖНЯЯ ПАНЕЛЬ (теперь внутри боковой панели): инструменты показываются, когда выбрана кнопка в меню разделов -->
+        <div class="bottom-panel" id="bottomPanel">
+          <!-- РУЧКА ИЗМЕНЕНИЯ ВЫСОТЫ (тянуть мышью вверх/вниз) -->
+          <div class="bp-resizer" id="bpResizer" title="Потяните, чтобы изменить высоту панели (двойной клик — сбросить)"></div>
+          <div class="bottom-panel-header">
+              <button class="bottom-panel-toggle" id="bottomPanelToggle" title="Свернуть/развернуть панель">
+                  <i class="fas fa-chevron-down"></i>
+              </button>
+          </div>
+          <!-- ВКЛАДКИ НИЖНЕЙ ПАНЕЛИ (пока кроме «Главной» пустые — под будущий растровый анализ) -->
+          <div class="bp-tabs" id="bpTabs" role="tablist">
+              <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой «3D» на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="logistics" title="Логистический анализ: буфер, дороги и водоёмы OSM, расстояния до ближайших"><i class="fas fa-route"></i><span>Логистика</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="weather" title="Погода: анализ и прогноз в текущем экстенте карты"><i class="fas fa-cloud-sun-rain"></i><span>Погода</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Снимки Sentinel-2: выбор даты, область, скачивание GeoTIFF"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
+          </div>
+
+          <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
+          <div class="bottom-panel-body bp-pane active" data-bp-pane="main" role="tabpanel">
+              <div class="bp-empty-note">Легенда аналитических слоёв на карте не показывается.</div>
+          </div><!-- /bp-pane main -->
+
+          <!-- ВКЛАДКА «РИСОВАНИЕ»: виджет рисования (стили, фигуры, значки, текст) -->
+          <div class="bottom-panel-body bp-pane bp-draw" data-bp-pane="draw" role="tabpanel">
+
+              <!-- Инструменты -->
+              <div class="dw-block dw-tools">
+                  <div class="dw-title">Инструменты</div>
+                  <div class="dw-tool-grid">
+                      <button class="dw-tool" data-sk-tool="icon" title="Значок"><i class="fas fa-location-dot"></i><span>Значок</span></button>
+                      <button class="dw-tool" data-sk-tool="point" title="Точка"><i class="fas fa-circle-dot"></i><span>Точка</span></button>
+                      <button class="dw-tool" data-sk-tool="text" title="Текст"><i class="fas fa-font"></i><span>Текст</span></button>
+                      <button class="dw-tool" data-sk-tool="line" title="Линия (ломаная)"><i class="fas fa-route"></i><span>Линия</span></button>
+                      <button class="dw-tool" data-sk-tool="freeline" title="Свободная линия"><i class="fas fa-pencil"></i><span>Свободная</span></button>
+                      <button class="dw-tool" data-sk-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
+                      <button class="dw-tool" data-sk-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
+                      <button class="dw-tool" data-sk-tool="circle" title="Круг"><i class="far fa-circle"></i><span>Круг</span></button>
+                  </div>
+                  <label class="dw-check"><input type="checkbox" id="skRepeat"> Не отключать инструмент после рисования</label>
+                  <label class="dw-check"><input type="checkbox" id="skMeasure"> Показывать размеры (длина, площадь)</label>
+              </div>
+
+              <!-- Линия и контур -->
+              <div class="dw-block dw-style" data-for="point line polygon rectangle circle">
+                  <div class="dw-title">Линия / контур</div>
+                  <div class="dw-row"><label>Цвет</label><input type="color" id="skColor"></div>
+                  <div class="dw-swatches" data-target="skColor"></div>
+                  <div class="dw-row"><label>Толщина</label><input type="range" id="skWeight" min="1" max="20" step="1"><span class="dw-val" id="skWeightVal"></span></div>
+                  <div class="dw-row"><label>Прозрачность</label><input type="range" id="skOpacity" min="0" max="100" step="5"><span class="dw-val" id="skOpacityVal"></span></div>
+                  <div class="dw-row"><label>Стиль</label>
+                      <select id="skDash">
+                          <option value="solid">Сплошная</option>
+                          <option value="dash">Пунктир</option>
+                          <option value="long">Длинный пунктир</option>
+                          <option value="dot">Точки</option>
+                          <option value="dashdot">Штрих-пунктир</option>
+                      </select>
+                  </div>
+                  <div class="dw-row"><label>Концы</label>
+                      <select id="skCap">
+                          <option value="round">Скруглённые</option>
+                          <option value="butt">Плоские</option>
+                          <option value="square">Квадратные</option>
+                      </select>
+                  </div>
+              </div>
+
+              <!-- Заливка -->
+              <div class="dw-block dw-style" data-for="point polygon rectangle circle">
+                  <div class="dw-title">Заливка</div>
+                  <label class="dw-check"><input type="checkbox" id="skFillOn"> Залить фигуру</label>
+                  <div class="dw-row"><label>Цвет</label><input type="color" id="skFillColor"></div>
+                  <div class="dw-swatches" data-target="skFillColor"></div>
+                  <div class="dw-row"><label>Прозрачность</label><input type="range" id="skFillOpacity" min="0" max="100" step="5"><span class="dw-val" id="skFillOpacityVal"></span></div>
+                  <div class="dw-row"><label>Размер точки</label><input type="range" id="skRadius" min="2" max="30" step="1"><span class="dw-val" id="skRadiusVal"></span></div>
+              </div>
+
+              <!-- Значок -->
+              <div class="dw-block dw-style dw-icon-block" data-for="icon">
+                  <div class="dw-title">Значок</div>
+                  <div class="dw-icon-grid" id="skIconGrid"></div>
+                  <div class="dw-row"><label>Форма</label>
+                      <select id="skIconShape">
+                          <option value="pin">Булавка</option>
+                          <option value="circle">Круг</option>
+                          <option value="square">Квадрат</option>
+                          <option value="plain">Без фона</option>
+                      </select>
+                  </div>
+                  <div class="dw-row"><label>Цвет фона</label><input type="color" id="skIconBg"></div>
+                  <div class="dw-swatches" data-target="skIconBg"></div>
+                  <div class="dw-row"><label>Цвет значка</label><input type="color" id="skIconColor"></div>
+                  <div class="dw-row"><label>Размер</label><input type="range" id="skIconSize" min="16" max="64" step="2"><span class="dw-val" id="skIconSizeVal"></span></div>
+              </div>
+
+              <!-- Текст -->
+              <div class="dw-block dw-style" data-for="text">
+                  <div class="dw-title">Текст</div>
+                  <div class="dw-row"><label>Надпись</label><input type="text" id="skText" placeholder="Введите текст"></div>
+                  <div class="dw-row"><label>Размер</label><input type="range" id="skTextSize" min="8" max="48" step="1"><span class="dw-val" id="skTextSizeVal"></span></div>
+                  <div class="dw-row"><label>Цвет</label><input type="color" id="skTextColor"></div>
+                  <div class="dw-swatches" data-target="skTextColor"></div>
+                  <div class="dw-row dw-row-checks">
+                      <label class="dw-check"><input type="checkbox" id="skBold"> <b>Ж</b></label>
+                      <label class="dw-check"><input type="checkbox" id="skItalic"> <i>К</i></label>
+                  </div>
+                  <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skHalo"> Обводка</label><input type="color" id="skHaloColor"></div>
+                  <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skTextBg"> Фон</label><input type="color" id="skTextBgColor"></div>
+              </div>
+
+              <!-- Список объектов -->
+              <div class="dw-block dw-listblock">
+                  <div class="dw-title">Объекты <span class="badge" id="skCount">0</span></div>
+                  <div class="dw-list" id="skList"></div>
+              </div>
+          </div><!-- /bp-pane draw -->
+
+          <!-- ВКЛАДКА «3D»: настройки 3D режима (активна после включения кнопки «3D» на карте) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-3d m3-off" data-bp-pane="3d" role="tabpanel">
+
+              <!-- Облёт и снимок (наклон и поворот сцены — прямо на кнопке «3D / 2D» на карте) -->
+              <div class="dw-block m3-topbar">
+                  <div class="m3-tb-row">
+                      <button class="m3-chip" id="m3Orbit" title="Автоматическое вращение камеры"><i class="fas fa-rotate"></i><span>Облёт</span></button>
+                      <button class="m3-chip" id="m3Shot" title="Сохранить текущий 3D-вид в PNG"><i class="fas fa-camera"></i><span>Снимок</span></button>
+                  </div>
+                  <div class="m3-hint">Вращать и наклонять сцену — потяните кнопку «2D» на карте · ЛКМ — сдвиг · колесо — масштаб · клик по модели — выделить, перетаскивание — двигать</div>
+              </div>
+
+              <!-- Рельеф -->
+              <div class="dw-block">
+                  <div class="dw-title">Рельеф</div>
+                  <label class="dw-check"><input type="checkbox" id="m3Terrain"> 3D-рельеф (холмы и впадины)</label>
+                  <div class="dw-row"><label>Высота ×</label><input type="range" id="m3Exag" min="0.5" max="5" step="0.1"><span class="dw-val" id="m3ExagVal"></span></div>
+                  <label class="dw-check"><input type="checkbox" id="m3Hill"> Тени рельефа</label>
+                  <div class="dw-row"><label>Тени</label><input type="range" id="m3HillInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3HillIntVal"></span></div>
+                  <label class="dw-check"><input type="checkbox" id="m3Sky"> Небо и дымка</label>
+              </div>
+
+              <!-- Здания OSM -->
+              <div class="dw-block">
+                  <div class="dw-title">Здания OSM</div>
+                  <label class="dw-check"><input type="checkbox" id="m3Bld"> 3D-здания (с масштаба z13)</label>
+                  <div class="dw-row"><label>Цвет</label><input type="color" id="m3BColor"></div>
+                  <label class="dw-check"><input type="checkbox" id="m3BByH"> Цвет по высоте здания</label>
+                  <div class="dw-row"><label>Непрозр.</label><input type="range" id="m3BOp" min="0.2" max="1" step="0.02"><span class="dw-val" id="m3BOpVal"></span></div>
+                  <div class="dw-row"><label>Высота ×</label><input type="range" id="m3BH" min="0.5" max="3" step="0.1"><span class="dw-val" id="m3BHVal"></span></div>
+              </div>
+
+              <!-- Слои OSM -->
+              <div class="dw-block">
+                  <div class="dw-title">Слои OSM</div>
+                  <label class="dw-check"><input type="checkbox" id="m3Roads"> Дороги</label>
+                  <label class="dw-check"><input type="checkbox" id="m3Water"> Водные объекты</label>
+                  <label class="dw-check"><input type="checkbox" id="m3Land"> Леса, луга, поля</label>
+                  <label class="dw-check"><input type="checkbox" id="m3Labels"> Названия населённых пунктов</label>
+                  <div class="m3-hint">Клик по зданию — показать его высоту</div>
+              </div>
+
+              <!-- Деревья на лесных полигонах OSM -->
+              <div class="dw-block">
+                  <div class="dw-title">Деревья</div>
+                  <label class="dw-check"><input type="checkbox" id="m3Trees"> 3D-деревья на лесах OSM</label>
+                  <div class="dw-row"><label>Густота</label><input type="range" id="m3TreeDens" min="10" max="300" step="10"><span class="dw-val" id="m3TreeDensVal"></span></div>
+                  <div class="m3-hint" id="m3TreesInfo">Деревья случайно рассыпаются по лесным полигонам OSM (с масштаба z14)</div>
+              </div>
+
+              <!-- Освещение -->
+              <div class="dw-block">
+                  <div class="dw-title">Освещение (солнце)</div>
+                  <div class="dw-row"><label>Азимут</label><input type="range" id="m3SunAz" min="0" max="360" step="5"><span class="dw-val" id="m3SunAzVal"></span></div>
+                  <div class="dw-row"><label>Высота</label><input type="range" id="m3SunAlt" min="5" max="90" step="1"><span class="dw-val" id="m3SunAltVal"></span></div>
+                  <div class="dw-row"><label>Яркость</label><input type="range" id="m3SunInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3SunIntVal"></span></div>
+              </div>
+
+              <!-- Мои объекты -->
+              <div class="dw-block">
+                  <div class="dw-title">Мои объекты <span class="badge" id="m3UserCount">0</span></div>
+                  <label class="dw-check"><input type="checkbox" id="m3User"> Показывать нарисованные и загруженные объекты</label>
+                  <label class="dw-check"><input type="checkbox" id="m3Extrude"> Выдавить полигоны в 3D</label>
+                  <div class="dw-row"><label>Высота</label><input type="range" id="m3ExtH" min="1" max="300" step="1"><span class="dw-val" id="m3ExtHVal"></span></div>
+                  <button class="dw-act" id="m3RefreshUser" title="Перечитать объекты из 2D-карты"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
+              </div>
+
+              <!-- Готовые 3D-модели для визуала: агрономическая тема (собираются в браузере, файлы не нужны) -->
+              <div class="dw-block m3-presets">
+                  <div class="dw-title">Готовые 3D-модели</div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" data-m3-preset="tractor" title="Трактор: добавить на карту"><i class="fas fa-tractor"></i><span>Трактор</span></button>
+                      <button class="dw-act" data-m3-preset="combine" title="Комбайн: добавить на карту"><i class="fas fa-wheat-awn"></i><span>Комбайн</span></button>
+                      <button class="dw-act" data-m3-preset="truck" title="Зерновоз: добавить на карту"><i class="fas fa-truck"></i><span>Зерновоз</span></button>
+                      <button class="dw-act" data-m3-preset="barn" title="Амбар: добавить на карту"><i class="fas fa-warehouse"></i><span>Амбар</span></button>
+                      <button class="dw-act" data-m3-preset="silo" title="Силос: добавить на карту"><i class="fas fa-database"></i><span>Силос</span></button>
+                      <button class="dw-act" data-m3-preset="hangar" title="Ангар: добавить на карту"><i class="fas fa-warehouse"></i><span>Ангар</span></button>
+                      <button class="dw-act" data-m3-preset="greenhouse" title="Теплица: добавить на карту"><i class="fas fa-seedling"></i><span>Теплица</span></button>
+                      <button class="dw-act" data-m3-preset="windmill" title="Ветрогенератор: добавить на карту"><i class="fas fa-fan"></i><span>Ветрогенератор</span></button>
+                      <button class="dw-act" data-m3-preset="tower" title="Водонапорная башня: добавить на карту"><i class="fas fa-droplet"></i><span>Водонапорная башня</span></button>
+                      <button class="dw-act" data-m3-preset="hay" title="Рулоны сена: добавить на карту"><i class="fas fa-circle"></i><span>Рулоны сена</span></button>
+                      <button class="dw-act" data-m3-preset="irrigation" title="Поливная машина: добавить на карту"><i class="fas fa-shower"></i><span>Поливная машина</span></button>
+                      <button class="dw-act" data-m3-preset="sprayer" title="Опрыскиватель: добавить на карту"><i class="fas fa-spray-can-sparkles"></i><span>Опрыскиватель</span></button>
+                      <button class="dw-act" data-m3-preset="house" title="Жилой дом: добавить на карту"><i class="fas fa-house"></i><span>Жилой дом</span></button>
+                      <button class="dw-act" data-m3-preset="car" title="Автомобиль: добавить на карту"><i class="fas fa-car"></i><span>Автомобиль</span></button>
+                      <button class="dw-act" data-m3-preset="tree" title="Дерево: добавить на карту"><i class="fas fa-tree"></i><span>Дерево</span></button>
+                      <button class="dw-act" data-m3-preset="tank" title="Ёмкость для воды / топлива: добавить на карту"><i class="fas fa-gas-pump"></i><span>Ёмкость</span></button>
+                      <button class="dw-act" data-m3-preset="pole" title="Опора ЛЭП: добавить на карту"><i class="fas fa-bolt"></i><span>Опора ЛЭП</span></button>
+                      <button class="dw-act" data-m3-preset="cow" title="Корова: добавить на карту"><i class="fas fa-cow"></i><span>Корова</span></button>
+                  </div>
+                  <div class="m3-hint">Нажмите на модель и кликните по карте, чтобы поставить её. Модели на карте выделяются кликом (появляется полупрозрачная маска) и двигаются перетаскиванием. Размер, поворот и высоту меняйте в блоке «Выбранный».</div>
+              </div>
+
+              <!-- Импорт 3D-объектов -->
+              <div class="dw-block dw-listblock m3-import">
+                  <div class="dw-title">3D-объекты (импорт)</div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" id="m3ImportModelBtn" title="Импорт 3D-модели GLB / GLTF (как в Google Earth)"><i class="fas fa-cube"></i><span>Модель</span></button>
+                      <button class="dw-act" id="m3ImportVecBtn" title="Импорт GeoJSON / KML: полигоны выдавливаются в 3D по высоте из атрибутов"><i class="fas fa-building"></i><span>GeoJSON/KML</span></button>
+                  </div>
+                  <input type="file" id="m3ModelFile" accept=".glb,.gltf" hidden />
+                  <input type="file" id="m3VecFile" accept=".geojson,.json,.kml" hidden />
+                  <div class="dw-row"><label>Высота, м</label><input type="number" id="m3ImpH" min="1" max="1000" step="1" value="20" title="Высота по умолчанию, если в файле нет height / building:levels"><input type="color" id="m3ImpColor" value="#f59e0b" title="Цвет выдавливаемых объектов"></div>
+                  <div class="dw-list" id="m3List"></div>
+              </div>
+
+              <!-- Выбранный объект -->
+              <div class="dw-block dw-dim" id="m3SelBlock">
+                  <div class="dw-title">Выбранный: <span id="m3SelName" class="m3-selname">не выбран</span></div>
+                  <div class="dw-row"><label>Масштаб</label><input type="range" id="m3SelScale" min="-1" max="2.5" step="0.02" value="0" disabled><span class="dw-val" id="m3SelScaleVal"></span></div>
+                  <div class="dw-row"><label>Поворот</label><input type="range" id="m3SelHeading" min="-180" max="180" step="1" value="0" disabled><span class="dw-val" id="m3SelHeadingVal"></span></div>
+                  <div class="dw-row"><label>Над землёй</label><input type="range" id="m3SelAlt" min="-50" max="500" step="1" value="0" disabled><span class="dw-val" id="m3SelAltVal"></span></div>
+                  <div class="dw-row"><label>Цвет</label><input type="color" id="m3SelColor" value="#f59e0b" disabled></div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" id="m3MoveBtn" title="Кликнуть по карте, чтобы переставить модель" disabled><i class="fas fa-up-down-left-right"></i><span>Переместить</span></button>
+                      <button class="dw-act dw-danger" id="m3DelBtn" title="Удалить выбранный объект" disabled><i class="fas fa-trash"></i><span>Удалить</span></button>
+                  </div>
+              </div>
+
+              <!-- Сервис -->
+              <div class="dw-block dw-listblock">
+                  <div class="dw-title">Сервис</div>
+                  <div class="dw-act-grid m3-reset-row">
+                      <button class="dw-act" id="m3Reset" title="Вернуть настройки 3D по умолчанию"><i class="fas fa-rotate-left"></i><span>Сбросить</span></button>
+                  </div>
+              </div>
+          </div><!-- /bp-pane 3d -->
+
+          <!-- ВКЛАДКА «ПРОФИЛЬ»: профиль рельефа по линии (высоты — Terrarium DEM) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-profile" data-bp-pane="profile" role="tabpanel">
+              <div class="dw-block hy-mode">
+                  <div class="dw-title">Режим</div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act pf-on" data-pf-mode="line" title="Профиль рельефа по линии"><i class="fas fa-chart-line"></i><span>По линии</span></button>
+                      <button class="dw-act" data-pf-mode="area" title="Гипсометрическая кривая: распределение высот по площади полигона"><i class="fas fa-chart-area"></i><span>По площади</span></button>
+                  </div>
+              </div>
+              <div class="dw-block pf-ctrl">
+                  <div class="dw-title">Профиль рельефа</div>
+                  <div class="dw-row"><label>Точек</label>
+                      <select id="pfN"><option value="100">100</option><option value="200" selected>200</option><option value="300">300</option><option value="500">500</option></select>
+                  </div>
+                  <div class="dw-row"><label>Сглаживание</label><input type="range" id="pfSmooth" min="0" max="6" step="1" value="2"><span class="dw-val" id="pfSmoothVal">2</span></div>
+                  <label class="dw-check"><input type="checkbox" id="pfSlopeColor" checked> Цвет линии по уклону</label>
+                  <label class="dw-check" style="display:none"><input type="checkbox" id="pfHeat"> Тепловая карта высот вдоль линии</label>
+                  <div class="dw-row" style="display:none"><label>Ширина полосы</label>
+                      <select id="pfBand"><option value="0" selected>Авто</option><option value="50">50 м</option><option value="100">100 м</option><option value="250">250 м</option><option value="500">500 м</option><option value="1000">1 км</option></select>
+                  </div>
+                  <div class="m3-hint">Рисование включено сразу: ЛКМ — точка, двойной клик или Enter — завершить, Esc — сбросить. Новая линия заменяет прежнюю</div>
+              </div>
+              <div class="dw-block pf-stats">
+                  <div class="dw-title">Показатели</div>
+                  <div class="pf-stat-grid" id="pfStats"></div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" id="pfCsv" title="Скачать таблицу профиля (CSV)" disabled><i class="fas fa-file-csv"></i><span>CSV</span></button>
+                      <button class="dw-act" id="pfPng" title="Скачать график (PNG)" disabled><i class="fas fa-image"></i><span>PNG</span></button>
+                  </div>
+              </div>
+              <div class="dw-block pf-chartblock">
+                  <div class="dw-title">График высот <span class="pf-legend" title="Уклон"><i style="background:#10b981"></i>&lt;3% <i style="background:#eab308"></i>3–8% <i style="background:#f97316"></i>8–15% <i style="background:#dc2626"></i>&gt;15%</span></div>
+                  <div class="pf-chart-wrap" id="pfWrap">
+                      <canvas id="pfCanvas"></canvas>
+                      <div class="pf-empty" id="pfEmpty">Рисуйте линию на карте: ЛКМ — точки, двойной клик или Enter — завершить</div>
+                  </div>
+              </div>
+              <!-- Режим «По площади»: гипсометрическая кривая полигона -->
+              <div class="dw-block hy-blk hy-ctrl">
+                  <div class="dw-title">Гипсометрия полигона</div>
+                  <label class="dw-check"><input type="checkbox" id="hyHeat" checked> Тепловая карта высот на полигоне</label>
+                  <div class="dw-row"><label>Вид</label>
+                      <select id="hyView"><option value="abs" selected>Кривая, м</option><option value="rel">Кривая, отн.</option><option value="belts">Ступени высот</option></select>
+                  </div>
+                  <div class="dw-row"><label>Ступень</label>
+                      <select id="hyStep"><option value="0" selected>Авто</option><option value="1">1 м</option><option value="2">2 м</option><option value="5">5 м</option><option value="10">10 м</option><option value="20">20 м</option><option value="50">50 м</option><option value="100">100 м</option></select>
+                  </div>
+                  <div class="m3-hint">Рисование включено сразу: обведите полигон на карте (двойной клик по последней точке — завершить). Высоты — Terrarium DEM, сетка внутри полигона</div>
+              </div>
+              <div class="dw-block hy-blk hy-stats">
+                  <div class="dw-title">Показатели</div>
+                  <div class="pf-stat-grid" id="hyStats"></div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" id="hyCsv" title="Скачать ступени и кривую (CSV)" disabled><i class="fas fa-file-csv"></i><span>CSV</span></button>
+                      <button class="dw-act" id="hyPng" title="Скачать график (PNG)" disabled><i class="fas fa-image"></i><span>PNG</span></button>
+                  </div>
+              </div>
+              <div class="dw-block hy-blk hy-chartblock">
+                  <div class="dw-title">Гипсометрическая кривая</div>
+                  <div class="pf-chart-wrap" id="hyWrap">
+                      <canvas id="hyCanvas"></canvas>
+                      <div class="pf-empty" id="hyEmpty"></div>
+                  </div>
+              </div>
+          </div><!-- /bp-pane profile -->
+
+          <!-- ВКЛАДКА «ЭКСПОРТ»: выгрузка карты в изображение / PDF / GeoTIFF с привязкой -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-export" data-bp-pane="export" role="tabpanel">
+              <div class="dw-block">
+                  <div class="dw-title">Формат и качество</div>
+                  <div class="dw-row"><label>Формат</label>
+                      <select id="exFmt">
+                          <option value="pdf">PDF</option>
+                          <option value="png">PNG</option>
+                          <option value="jpg">JPEG (JPG)</option>
+                          <option value="webp">WebP</option>
+                          <option value="tiff">TIFF / GeoTIFF</option>
+                      </select>
+                  </div>
+                  <div class="dw-row"><label>Разрешение</label>
+                      <select id="exDpi">
+                          <option value="72">72 dpi (экран)</option>
+                          <option value="96">96 dpi</option>
+                          <option value="150" selected>150 dpi</option>
+                          <option value="200">200 dpi</option>
+                          <option value="300">300 dpi (печать)</option>
+                          <option value="450">450 dpi</option>
+                          <option value="600">600 dpi</option>
+                      </select>
+                  </div>
+                  <div class="dw-row"><label>Качество</label><input type="range" id="exQuality" min="40" max="100" step="5" value="90"><span class="dw-val" id="exQualityVal">90%</span></div>
+              </div>
+
+              <div class="dw-block">
+                  <div class="dw-title">Размер листа</div>
+                  <div class="dw-row"><label>Лист</label>
+                      <select id="exPaper">
+                          <option value="a4" selected>A4</option>
+                          <option value="a3">A3</option>
+                          <option value="a2">A2</option>
+                          <option value="a1">A1</option>
+                          <option value="a0">A0</option>
+                          <option value="a5">A5</option>
+                          <option value="letter">Letter</option>
+                          <option value="legal">Legal</option>
+                          <option value="tabloid">Tabloid</option>
+                          <option value="screen">Как на экране</option>
+                          <option value="custom">Свой размер (мм)</option>
+                      </select>
+                  </div>
+                  <div class="dw-row"><label>Ориентация</label>
+                      <select id="exOrient">
+                          <option value="auto" selected>Как на экране</option>
+                          <option value="landscape">Альбомная</option>
+                          <option value="portrait">Книжная</option>
+                      </select>
+                  </div>
+                  <div class="dw-row" id="exCustomRow" hidden><label>Ш × В, мм</label><input type="number" id="exCW" min="20" max="3000" value="297"><input type="number" id="exCH" min="20" max="3000" value="210"></div>
+                  <div class="dw-row"><label>Поля, мм</label><input type="number" id="exMargin" min="0" max="50" step="1" value="8"></div>
+                  <div class="m3-hint" id="exSizeInfo"></div>
+              </div>
+
+              <div class="dw-block">
+                  <div class="dw-title">Содержимое</div>
+                  <label class="dw-check"><input type="checkbox" id="exBase" checked> Подложка (снимки / карта)</label>
+                  <label class="dw-check"><input type="checkbox" id="exDrawn" checked> Участки (нарисованные и загруженные)</label>
+                  <label class="dw-check"><input type="checkbox" id="exSketch" checked> Рисунки (фигуры, значки, текст)</label>
+                  <div class="m3-hint">В 3D-режиме сохраняется текущий 3D-вид</div>
+              </div>
+
+              <div class="dw-block">
+                  <div class="dw-title">Элементы карты</div>
+                  <div class="dw-row"><label>Заголовок</label><input type="text" id="exTitle" placeholder="Название карты"></div>
+                  <div class="dw-row"><label>Подпись</label><input type="text" id="exNote" placeholder="Примечание"></div>
+                  <label class="dw-check"><input type="checkbox" id="exLegend" checked> Легенда слоя</label>
+                  <label class="dw-check"><input type="checkbox" id="exScale" checked> Масштабная линейка</label>
+                  <label class="dw-check"><input type="checkbox" id="exNorth" checked> Стрелка севера</label>
+                  <label class="dw-check"><input type="checkbox" id="exGrid"> Сетка координат</label>
+                  <label class="dw-check"><input type="checkbox" id="exFrame" checked> Рамка</label>
+                  <label class="dw-check"><input type="checkbox" id="exDate" checked> Дата</label>
+                  <label class="dw-check"><input type="checkbox" id="exCoords"> Координаты центра</label>
+                  <label class="dw-check"><input type="checkbox" id="exAttr" checked> Источник подложки</label>
+              </div>
+
+              <div class="dw-block">
+                  <div class="dw-title">Привязка</div>
+                  <label class="dw-check"><input type="checkbox" id="exGeo" checked> Пространственная привязка</label>
+                  <div class="m3-hint" id="exGeoHint"></div>
+                  <div class="m3-hint">Карта выгружается севером вверх. GeoPDF / GeoTIFF открываются в Avenza Maps и QGIS — приложение покажет ваше положение на карте</div>
+              </div>
+
+              <div class="dw-block dw-listblock ex-preview">
+                  <div class="dw-title">Экспорт</div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act ex-go" id="exDownload" title="Собрать и скачать файл"><i class="fas fa-download"></i><span>Экспорт</span></button>
+                  </div>
+                  <div class="ex-info" id="exStatus"></div>
+              </div>
+          </div><!-- /bp-pane export -->
+
+          <!-- ВКЛАДКА «ЛОГИСТИКА»: буфер от точки/полигона, дороги и водоёмы OSM, ближайшие объекты -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-logi" data-bp-pane="logistics" role="tabpanel">
+              <div class="dw-block lg-obj">
+                  <div class="dw-title">Объект (один)</div>
+                  <div class="dw-act-grid lg-tools">
+                      <button class="dw-act" data-lg-tool="point" title="Точка: кликните по карте"><i class="fas fa-location-dot"></i><span>Точка</span></button>
+                      <button class="dw-act" data-lg-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
+                      <button class="dw-act" data-lg-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
+                      <button class="dw-act" data-lg-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i><span>Круг</span></button>
+                      <button class="dw-act" id="lgEdit" title="Редактировать объект"><i class="fas fa-edit"></i><span>Правка</span></button>
+                      <button class="dw-act" id="lgFromSel" title="Взять фигуру, выбранную на карте или на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>Выбранная</span></button>
+                      <button class="dw-act dw-danger" id="lgClear" title="Удалить объект, буфер и результаты"><i class="fas fa-trash"></i><span>Удалить</span></button>
+                  </div>
+                  <div class="lg-obj-name" id="lgObj">Объект не задан</div>
+                  <div class="m3-hint" id="lgStatus">Нарисуйте точку или фигуру. Для полигона расстояния считаются от внутренней точки</div>
+              </div>
+              <div class="dw-block lg-buf">
+                  <div class="dw-title">Буфер и анализ OSM</div>
+                  <div class="dw-row"><label>Радиус</label><input type="number" id="lgR" min="1" value="1000" step="100"><select id="lgU"><option value="m" selected>м</option><option value="km">км</option></select></div>
+                  <label class="dw-check"><input type="checkbox" id="lgShowRoads" checked> Показывать дороги</label>
+                  <label class="dw-check"><input type="checkbox" id="lgShowWater" checked> Показывать водоёмы</label>
+                  <div class="dw-act-grid lg-one">
+                      <button class="dw-act" id="lgBuffer" title="Построить буфер и найти дороги и водоёмы OSM внутри него"><i class="fas fa-circle-dot"></i><span>Буфер и анализ</span></button>
+                  </div>
+              </div>
+              <div class="dw-block lg-prog" id="lgProg">
+                  <div class="dw-title">Ход обработки</div>
+                  <div class="lg-prog-bar"><i id="lgProgBar"></i></div>
+                  <div class="lg-prog-row"><span id="lgProgTxt">Ожидание запуска</span><b id="lgProgPct">0%</b></div>
+                  <div class="dw-act-grid lg-one">
+                      <button class="dw-act dw-danger" id="lgStop" disabled title="Прервать текущий расчёт"><i class="fas fa-ban"></i><span>Отмена</span></button>
+                  </div>
+              </div>
+              <div class="dw-block lg-res">
+                  <div class="dw-title">Внутри буфера</div>
+                  <div class="pf-stat-grid" id="lgStats"><div class="m3-hint">Постройте буфер</div></div>
+              </div>
+              <div class="dw-block lg-near-blk">
+                  <div class="dw-title">Ближайшие дорога и водоём</div>
+                  <div class="dw-row"><label>Поиск до</label><input type="number" id="lgSearch" min="0.1" max="10" step="0.5" value="3"><span class="dw-val">км</span></div>
+                  <div class="dw-act-grid lg-one">
+                      <button class="dw-act" id="lgNearest" title="Прямая линия и маршрут OSRM до ближайших дороги и водоёма"><i class="fas fa-route"></i><span>Рассчитать расстояния</span></button>
+                  </div>
+                  <div class="lg-near" id="lgNear"></div>
+              </div>
+          </div><!-- /bp-pane logistics -->
+
+          <!-- ВКЛАДКА «ПОГОДА»: анализ погоды в текущем экстенте карты (Open-Meteo, сетка 5×5 точек) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="weather" role="tabpanel">
+              <div class="dw-block wx-ctrl">
+                  <div class="dw-title">Экстент карты</div>
+                  <div class="dw-act-grid">
+                      <button class="dw-act" id="wxRefresh" title="Загрузить погоду для текущего экстента карты"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
+                  </div>
+                  <label class="dw-check"><input type="checkbox" id="wxAuto" checked> Обновлять при сдвиге карты</label>
+                  <div class="m3-hint" id="wxStatus">Нажмите «Обновить» — погода считается по сетке 5×5 точек внутри видимой области</div>
+              </div>
+              <div class="dw-block wx-now">
+                  <div class="dw-title">Сейчас (среднее, мин…макс)</div>
+                  <div class="pf-stat-grid" id="wxNow"></div>
+              </div>
+              <div class="dw-block wx-week">
+                  <div class="dw-title">7 дней</div>
+                  <div class="pf-stat-grid" id="wxWeek"></div>
+              </div>
+              <div class="dw-block pf-chartblock wx-chartblock">
+                  <div class="dw-title">Прогноз на 7 дней <span class="pf-legend"><i style="background:#ef4444"></i>макс. <i style="background:#38bdf8"></i>мин. <i style="background:#3b82f6"></i>осадки <span class="wx-note">· % под датой — вероятность осадков</span></span></div>
+                  <div class="pf-chart-wrap" id="wxWrap">
+                      <canvas id="wxCanvas"></canvas>
+                      <div class="pf-empty" id="wxEmpty">Нет данных</div>
+                  </div>
+              </div>
+          </div><!-- /bp-pane weather -->
+
+          <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDWI / NDMI / NBR): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
+          <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
+          <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndvi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-leaf"></i><div><p>NDVI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndwi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-droplet"></i><div><p>NDWI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndmi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-cloud-rain"></i><div><p>NDMI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="nbr" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-fire"></i><div><p>NBR</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="change" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Изменения</p><span>Сравнение снимков на две даты — в разработке</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="catalog" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-folder-open"></i><div><p>Каталог</p><span>Каталог данных — в разработке</span></div></div>
+          </div>
+        </div>
+
+<!-- ПАСПОРТ УЧАСТКА (болванка): раскрывается на всю область карты кнопкой в шапке панели -->
+        <div class="pp" id="passportPane">
+            <div class="pp-top">
+                <button class="pp-btn" id="ppClose" type="button"><i class="fas fa-arrow-left"></i> К карте</button>
+                <h2>Паспорт участка № 50:21:0000000:1234</h2>
+                <span class="s-demo">Демо-данные</span>
+                <span class="sp"></span>
+                <button class="pp-btn" type="button"><i class="fas fa-file-pdf"></i> Скачать PDF</button>
+                <button class="pp-btn main" type="button"><i class="fas fa-play"></i> Заказать полный анализ</button>
+            </div>
+            <div class="pp-kpis">
+                <div class="pp-kpi"><small>Площадь</small><b>14.7 га</b></div>
+                <div class="pp-kpi"><small>Периметр</small><b>2.1 км</b></div>
+                <div class="pp-kpi"><small>Высота (мин–макс)</small><b>132–167 м</b></div>
+                <div class="pp-kpi"><small>Средний уклон</small><b>4.8°</b></div>
+                <div class="pp-kpi"><small>NDVI (среднее)</small><b>0.63</b></div>
+                <div class="pp-kpi"><small>До дороги</small><b>83 м</b></div>
+            </div>
+            <div class="pp-grid">
+                <div class="pp-blk"><h4><i class="fas fa-seedling"></i> Землепользование</h4>
+                    <div class="pp-row">
+                        <svg viewBox="0 0 120 120"><g fill="none" stroke-width="22" transform="rotate(-90 60 60)"><circle cx="60" cy="60" r="40" stroke="#f59e0b" stroke-dasharray="143.5 251.3"/><circle cx="60" cy="60" r="40" stroke="#10b981" stroke-dasharray="52.8 251.3" stroke-dashoffset="-143.5"/><circle cx="60" cy="60" r="40" stroke="#166534" stroke-dasharray="30.9 251.3" stroke-dashoffset="-196.3"/><circle cx="60" cy="60" r="40" stroke="#3b82f6" stroke-dasharray="1.8 251.3" stroke-dashoffset="-227.2"/><circle cx="60" cy="60" r="40" stroke="#94a3b8" stroke-dasharray="6.8 251.3" stroke-dashoffset="-229"/><circle cx="60" cy="60" r="40" stroke="#cbd5e1" stroke-dasharray="15.6 251.3" stroke-dashoffset="-235.8"/></g><text x="60" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">14.7 га</text></svg>
+                        <div class="pp-leg"><div><i style="background:#f59e0b"></i>Пашня<b>57.1%</b></div><div><i style="background:#10b981"></i>Луга<b>21.0%</b></div><div><i style="background:#166534"></i>Лес<b>12.3%</b></div><div><i style="background:#3b82f6"></i>Вода<b>0.7%</b></div><div><i style="background:#94a3b8"></i>Антропогенные<b>2.7%</b></div><div><i style="background:#cbd5e1"></i>Прочее<b>6.2%</b></div></div>
+                    </div></div>
+                <div class="pp-blk"><h4><i class="fas fa-leaf"></i> Растительность (NDVI), 2020–2025</h4>
+                    <svg viewBox="0 0 300 120"><g stroke="#eef2f6"><line x1="10" y1="20" x2="295" y2="20"/><line x1="10" y1="60" x2="295" y2="60"/><line x1="10" y1="100" x2="295" y2="100"/></g><polyline fill="none" stroke="#10b981" stroke-width="2.5" points="20,89 72,73 124,79 176,57 228,47 280,31"/><g fill="#10b981"><circle cx="20" cy="89" r="3"/><circle cx="72" cy="73" r="3"/><circle cx="124" cy="79" r="3"/><circle cx="176" cy="57" r="3"/><circle cx="228" cy="47" r="3"/><circle cx="280" cy="31" r="3"/></g><g font-size="10" fill="#94a3b8" text-anchor="middle"><text x="20" y="115">2020</text><text x="124" y="115">2022</text><text x="228" y="115">2024</text><text x="280" y="115">2025</text></g></svg></div>
+                <div class="pp-blk"><h4><i class="fas fa-mountain"></i> Профиль рельефа</h4>
+                    <svg viewBox="0 0 300 120"><path d="M0,80 L40,70 L80,74 L120,55 L160,48 L200,52 L240,35 L280,30 L300,34 L300,110 L0,110 Z" fill="#d1fae5" stroke="#10b981" stroke-width="2"/><g font-size="10" fill="#94a3b8"><text x="4" y="104">0</text><text x="262" y="104">2.1 км</text></g></svg>
+                    <table class="pp-tbl"><tr><td>Перепад высот</td><td>35 м</td></tr><tr><td>Экспозиция</td><td>Ю-В</td></tr></table></div>
+                <div class="pp-blk"><h4><i class="fas fa-flask"></i> Почвы</h4>
+                    <div class="pp-bar"><span>pH</span><span class="t"><i style="width:68%"></i></span><b>6.8</b></div>
+                    <div class="pp-bar"><span>Орг. C</span><span class="t"><i style="width:24%"></i></span><b>2.4%</b></div>
+                    <div class="pp-bar"><span>Глина</span><span class="t"><i style="width:31%"></i></span><b>—</b></div>
+                    <div class="pp-ph">карта почв (заготовка)</div></div>
+                <div class="pp-blk"><h4><i class="fas fa-road"></i> Вода и инфраструктура</h4>
+                    <table class="pp-tbl"><tr><td>Ближайшая дорога</td><td>83 м</td></tr><tr><td>Ближайший водоём</td><td>412 м</td></tr><tr><td>Населённый пункт</td><td>— км</td></tr><tr><td>Здания в буфере 1 км</td><td>—</td></tr><tr><td>NDMI / NDWI</td><td>0.31 / —</td></tr></table></div>
+                <div class="pp-blk"><h4><i class="fas fa-triangle-exclamation"></i> Ограничения</h4>
+                    <ul class="pp-list"><li><span class="pp-tag f">Факт</span>Средний уклон 4.8°</li><li><span class="pp-tag i">Интерпретация</span>Текст-заготовка: рельеф не ограничивает механизированные работы</li><li><span class="pp-tag f">Факт</span>Водоём в 412 м</li></ul></div>
+                <div class="pp-blk"><h4><i class="fas fa-clock-rotate-left"></i> История изменений</h4>
+                    <div class="pp-ph">карта изменений 2020–2025</div>
+                    <ul class="pp-list" style="margin-top:8px"><li>Выявлено 3 изменения за период 2020–2025</li></ul></div>
+                <div class="pp-blk"><h4><i class="fas fa-chart-column"></i> Графики (заготовка)</h4><div class="pp-ph">место под дополнительные графики</div></div>
+                <div class="pp-blk"><h4><i class="fas fa-book"></i> Источники и версии</h4>
+                    <table class="pp-tbl"><tr><td>OSM</td><td>—</td></tr><tr><td>DEM</td><td>—</td></tr><tr><td>Sentinel-2</td><td>—</td></tr><tr><td>Классификатор</td><td>v—</td></tr><tr><td>Дата анализа</td><td>—</td></tr></table></div>
+            </div>
+        </div><!-- /passport -->
 
         <div class="status-bar">
             <i class="fas fa-circle" style="font-size: 8px; color: #10b981;"></i>
@@ -159,62 +946,22 @@
             <button class="map-refresh-btn" id="refreshMapBtn" title="Обновить карту">
                 <i class="fas fa-rotate-right"></i>
             </button>
-            <!-- Ряд 1: Инструменты рисования (горизонтально, со сдвигом) -->
-            <div class="draw-row">
-                <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
-                    <i class="fas fa-draw-polygon"></i>
-                </button>
-                <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
-                    <i class="fas fa-vector-square"></i>
-                </button>
-                <button class="map-btn draw-tool-btn" data-tool="circle" title="Круг / Овал">
-                    <i class="fas fa-circle"></i>
-                </button>
-                <button class="map-btn" id="editMapBtn" title="Редактировать">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="map-btn" id="deleteMapBtn" title="Удалить выбранное">
-                    <i class="fas fa-trash"></i>
-                </button>
-                <button class="map-btn" id="clearMapBtn" title="Очистить всё">
-                    <i class="fas fa-eraser"></i>
-                </button>
-            </div>
-            <!-- Ряд 2: Навигация (вертикально, компактно, выше) -->
-            <div class="nav-row">
-                <button class="map-btn" id="zoomInBtn" title="Приблизить">
-                    <i class="fas fa-plus"></i>
-                </button>
-                <button class="map-btn" id="zoomOutBtn" title="Отдалить">
-                    <i class="fas fa-minus"></i>
-                </button>
-                <button class="map-btn" id="locateBtn" title="Моё местоположение">
-                    <i class="fas fa-location-dot"></i>
-                </button>
-                <button class="map-btn" id="zoomBackBtn" title="Предыдущий экстент" disabled>
-                    <i class="fas fa-arrow-left"></i>
-                </button>
-                <button class="map-btn" id="zoomForwardBtn" title="Следующий экстент" disabled>
-                    <i class="fas fa-arrow-right"></i>
-                </button>
-                <button class="map-btn" id="northBtn" title="Стрелка севера (сбросить поворот)">
-                    <svg id="northArrow" class="north-arrow" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                        <polygon points="12,2 17.5,13 12,11 6.5,13" fill="#ef4444"/>
-                        <polygon points="12,22 17.5,13 12,11 6.5,13" fill="#94a3b8"/>
-                    </svg>
-                </button>
-                <button class="map-btn" id="fullscreenBtn" title="На весь экран">
-                    <i class="fas fa-expand"></i>
-                </button>
-                <button class="map-btn" id="toggleDrawerBtn" title="Скрыть/показать панель">
-                    <i class="fas fa-bars"></i>
+            <!-- Кнопка «Свернуть панель» (язычок на краю боковой панели) -->
+            <div class="nav-row mc-group mc-row">
+                <button class="map-btn" id="toggleDrawerBtn" title="Свернуть панель">
+                    <i class="fas fa-chevron-left"></i>
                 </button>
             </div>
         </div>
 
+        <!-- КНОПКА «ОЧИСТИТЬ»: вверху слева на карте, убирает с карты всё нарисованное, замеры, маршрут и результаты анализов -->
+        <button type="button" class="map-clear-btn" id="mapClearBtn" aria-label="Очистить карту: убрать все объекты, рисунки, замеры, маршрут и результаты анализов"><i class="fas fa-eraser"></i><span>Очистить</span></button>
+
         <!-- ПРАВАЯ ПАНЕЛЬ КНОПОК (ВЕРТИКАЛЬНО) -->
         <div class="map-controls-right">
-            <!-- КНОПКА БАЗОВЫЕ КАРТЫ -->
+            <!-- ГРУППА 1: КАРТЫ И СЛОИ (базовые карты, снимки, аналитика, слои) -->
+            <div class="mc-group">
+                <!-- КНОПКА БАЗОВЫЕ КАРТЫ -->
             <div class="side-widget" id="baseLayersWidget">
                 <button class="map-btn widget-btn" id="baseLayersBtn" title="Базовые карты">
                     <i class="fas fa-map"></i>
@@ -280,8 +1027,7 @@
                     </div>
                 </div>
             </div>
-
-            <!-- КНОПКА СПУТНИКОВЫЕ СНИМКИ -->
+                <!-- КНОПКА СПУТНИКОВЫЕ СНИМКИ -->
             <div class="side-widget" id="satelliteWidget">
                 <button class="map-btn widget-btn" id="satelliteBtn" title="Спутниковые снимки">
                     <i class="fas fa-satellite"></i>
@@ -339,8 +1085,7 @@
                     </div>
                 </div>
             </div>
-
-            <!-- КНОПКА АНАЛИТИЧЕСКИЕ ПОДЛОЖКИ -->
+                <!-- КНОПКА АНАЛИТИЧЕСКИЕ ПОДЛОЖКИ -->
             <div class="side-widget" id="analyticsWidget">
                 <button class="map-btn widget-btn" id="analyticsBtn" title="Аналитические подложки">
                     <i class="fas fa-chart-area"></i>
@@ -390,8 +1135,23 @@
                     </div>
                 </div>
             </div>
-
-            <!-- КНОПКА ИЗМЕРЕНИЯ -->
+                <!-- КНОПКА СЛОИ (дополнительные слои поверх подложки: публичная кадастровая карта) -->
+            <div class="side-widget" id="layersWidget">
+                <button class="map-btn widget-btn" id="layersBtn" title="Слои">
+                    <i class="fas fa-layer-group"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="layersPanel">
+                    <div class="widget-panel-body-horizontal grid-opts">
+                        <div class="measure-chip" id="cadToggle" title="Публичная кадастровая карта (НСПД): границы участков и кадастровые номера"><i class="fas fa-landmark"></i><span>Кадастровая карта</span></div>
+                        <label class="gr-f">Прозр. <input type="range" id="cadOpacity" min="20" max="100" step="5" value="80"></label>
+                        <span class="gr-f" id="cadStatus" style="color:#94a3b8">виден с масштаба z14</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+            <!-- ГРУППА 2: ИНСТРУМЕНТЫ (измерения, шторка, сетка координат) -->
+            <div class="mc-group">
+                <!-- КНОПКА ИЗМЕРЕНИЯ -->
             <div class="side-widget" id="measureWidget">
                 <button class="map-btn widget-btn" id="measureBtn" title="Измерения">
                     <i class="fas fa-ruler-combined"></i>
@@ -413,7 +1173,7 @@
                     </div>
                 </div>
             </div>
-            <!-- КНОПКА ШТОРКА (разделяет карту на две части с разными подложками) -->
+                <!-- КНОПКА ШТОРКА (разделяет карту на две части с разными подложками) -->
             <div class="side-widget" id="swipeWidget">
                 <button class="map-btn widget-btn" id="swipeBtn" title="Шторка">
                     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -422,13 +1182,7 @@
                     </svg>
                 </button>
             </div>
-            <!-- КНОПКА 3D РЕЖИМ (рельеф, 3D-здания OSM, импорт 3D-объектов; настройки — во вкладке «3D» нижней панели) -->
-            <div class="side-widget" id="mode3dWidget">
-                <button class="map-btn widget-btn" id="mode3dBtn" title="3D режим">
-                    <i class="fas fa-cube"></i>
-                </button>
-            </div>
-            <!-- КНОПКА СЕТКА КООРДИНАТ -->
+                <!-- КНОПКА СЕТКА КООРДИНАТ -->
             <div class="side-widget" id="gridWidget">
                 <button class="map-btn widget-btn" id="gridBtn" title="Сетка координат">
                     <i class="fas fa-border-all"></i>
@@ -443,21 +1197,66 @@
                     </div>
                 </div>
             </div>
-            <!-- КНОПКА ПРОФИЛЬ РЕЛЬЕФА (результат — на вкладке «Профиль» нижней панели) -->
+            </div>
+            <!-- ГРУППА 2а: 3D РЕЖИМ — кнопка с надписью «3D», как в Яндекс Картах (рельеф, 3D-здания OSM, импорт 3D-объектов; настройки открываются в боковой панели) -->
+            <div class="mc-group">
+            <div class="side-widget" id="mode3dWidget">
+                <button class="map-btn widget-btn" id="mode3dBtn" title="3D режим: включить / выключить"><span class="m3-ring"></span><span class="m3-txt">3D</span></button>
+            </div>
+            </div>
+            <!-- ГРУППА 3: РЕЖИМЫ И АНАЛИЗ (профиль рельефа, погода) — убрана с карты (скрыта через .mc-hidden), эти функции открываются из боковой панели -->
+            <div class="mc-group mc-hidden">
+                <!-- КНОПКА ПРОФИЛЬ РЕЛЬЕФА (результат — на вкладке «Профиль» нижней панели) -->
             <div class="side-widget" id="profileWidget">
                 <button class="map-btn widget-btn" id="profileBtn" title="Профиль рельефа: нарисуйте линию на карте">
                     <i class="fas fa-mountain"></i>
                 </button>
             </div>
+                <!-- КНОПКА ПОГОДА (слой погоды на карте; анализ по экстенту — на вкладке «Погода» нижней панели) -->
+            <div class="side-widget" id="weatherWidget">
+                <button class="map-btn widget-btn" id="weatherBtn" title="Слой погоды">
+                    <i class="fas fa-cloud-sun-rain"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="weatherPanel">
+                    <div class="widget-panel-body-horizontal grid-opts">
+                        <div class="measure-chip" data-wx="rain" title="Радар осадков (RainViewer, без ключа)"><i class="fas fa-cloud-showers-heavy"></i><span>Осадки</span></div>
+                        <div class="measure-chip" data-wx="clouds_new" title="Облачность (OpenWeatherMap, нужен ключ)"><i class="fas fa-cloud"></i><span>Облачность</span></div>
+                        <div class="measure-chip" data-wx="temp_new" title="Температура (OpenWeatherMap, нужен ключ)"><i class="fas fa-temperature-half"></i><span>Температура</span></div>
+                        <div class="measure-chip" data-wx="wind_new" title="Ветер (OpenWeatherMap, нужен ключ)"><i class="fas fa-wind"></i><span>Ветер</span></div>
+                        <div class="measure-chip" data-wx="pressure_new" title="Давление (OpenWeatherMap, нужен ключ)"><i class="fas fa-gauge"></i><span>Давление</span></div>
+                        <div class="measure-chip" data-wx="off" title="Убрать слой погоды"><i class="fas fa-eye-slash"></i><span>Выкл</span></div>
+                        <label class="gr-f">Прозр. <input type="range" id="wxOpacity" min="20" max="100" step="5" value="70"></label>
+                        <div class="measure-chip" id="wxKeyBtn" title="Ключ OpenWeatherMap (бесплатный) — для облаков, температуры, ветра и давления"><i class="fas fa-key"></i><span>Ключ OWM</span></div>
+                    </div>
+                </div>
+            </div>
+            </div>
         </div>
-        <!-- МИНИ-КАРТА СПРАВА СНИЗУ -->
-        <div class="mini-map-container" id="miniMapContainer">
-            <div id="miniMap"></div>
-            <button class="mini-map-collapse-btn" id="miniMapCollapseBtn" title="Свернуть/развернуть">
-                <i class="fas fa-times"></i>
-            </button>
+        <!-- ПРАВЫЙ НИЖНИЙ УГОЛ: навигация (масштаб, геолокация, север, весь экран) -->
+        <div class="map-controls-br">
+            <div class="mc-group">
+                <button class="map-btn" id="locateBtn" title="Моё местоположение">
+                    <i class="fas fa-location-dot"></i>
+                </button>
+                <button class="map-btn" id="northBtn" title="Стрелка севера (сбросить поворот)">
+                    <svg id="northArrow" class="north-arrow" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                        <polygon points="12,2 17.5,13 12,11 6.5,13" fill="#ef4444"/>
+                        <polygon points="12,22 17.5,13 12,11 6.5,13" fill="#94a3b8"/>
+                    </svg>
+                </button>
+                <button class="map-btn" id="fullscreenBtn" title="На весь экран">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+            <div class="mc-group">
+                <button class="map-btn" id="zoomInBtn" title="Приблизить">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="map-btn" id="zoomOutBtn" title="Отдалить">
+                    <i class="fas fa-minus"></i>
+                </button>
+            </div>
         </div>
-
         <!-- МАСШТАБНАЯ ЛИНЕЙКА СЛЕВА СНИЗУ -->
         <div class="map-bottom-left">
             <div class="scale-bar" id="scaleBar">
@@ -466,430 +1265,228 @@
             </div>
         </div>
 
+        <!-- ДЕЙСТВИЯ С НАРИСОВАННЫМ ОБЪЕКТОМ: панель при клике и меню при правом клике -->
+        <div class="sk-ctx" id="skCtx"></div>
+        <!-- ЛЕГЕНДА ТЕПЛОВОЙ КАРТЫ ВЫСОТ (вкладка «Профиль») -->
+        <div class="hm-legend" id="hmLegend" hidden><div class="hm-bar"></div><div class="hm-lab"><span id="hmMin"></span><span>высота, м</span><span id="hmMax"></span></div></div>
+
         <!-- КОНТЕКСТНОЕ МЕНЮ КАРТЫ (правый клик) -->
         <div class="map-context-menu" id="mapContextMenu">
             <div class="ctx-item" id="ctxWhatHere"><i class="fas fa-circle-question"></i> Что здесь?</div>
+            <div class="ctx-sep" id="ctxSkSep" style="display:none"></div>
+            <div class="ctx-item" id="ctxSkUndo" style="display:none"><i class="fas fa-rotate-left"></i> Отменить рисунок</div>
+            <div class="ctx-item" id="ctxSkRedo" style="display:none"><i class="fas fa-rotate-right"></i> Повторить</div>
+            <div class="ctx-item" id="ctxSkClear" style="display:none"><i class="fas fa-eraser"></i> Очистить рисунки</div>
+            <div class="ctx-item" id="ctxSkExport" style="display:none"><i class="fas fa-download"></i> Скачать рисунки (GeoJSON)</div>
         </div>
       </div>
 
-      <!-- НИЖНЯЯ ГОРИЗОНТАЛЬНАЯ ПАНЕЛЬ: легенда, отчёты, графики -->
-      <div class="bottom-panel" id="bottomPanel">
-        <!-- РУЧКА ИЗМЕНЕНИЯ ВЫСОТЫ (тянуть мышью вверх/вниз) -->
-        <div class="bp-resizer" id="bpResizer" title="Потяните, чтобы изменить высоту панели (двойной клик — сбросить)"></div>
-        <div class="bottom-panel-header">
-            <div class="bottom-panel-title"><i class="fas fa-chart-column"></i> Легенда и инструменты</div>
-            <!-- компактная кнопка 3D: видна только на вкладке «3D», не занимает место среди инструментов -->
-            <button class="m3-toggle-btn m3-mini" id="m3ToggleBtn" title="Включить / выключить 3D режим (настройки станут доступны после включения)"><i class="fas fa-cube"></i><span>Включить 3D</span></button>
-            <button class="bottom-panel-toggle" id="bottomPanelToggle" title="Свернуть/развернуть панель">
-                <i class="fas fa-chevron-down"></i>
-            </button>
-        </div>
-        <!-- ВКЛАДКИ НИЖНЕЙ ПАНЕЛИ (пока кроме «Главной» пустые — под будущий растровый анализ) -->
-        <div class="bp-tabs" id="bpTabs" role="tablist">
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="main" title="Главная: легенда включённых аналитических слоёв"><i class="fas fa-chart-column"></i><span>Главная</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
-            <button class="bp-tab active" role="tab" aria-selected="true" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой на вкладке или на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Выбор даты спутникового снимка (Sentinel-2)"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
-            <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
-        </div>
-
-        <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
-        <div class="bottom-panel-body bp-pane" data-bp-pane="main" role="tabpanel">
-            <div class="bp-block bp-legend">
-                <div class="bp-block-title">Легенда включённых аналитических слоёв</div>
-                <div class="bp-empty-note" id="layerLegendEmpty">Нет включённых аналитических слоёв. Включите слой (Land Cover, NDVI, NDWI, почвенные карты) кнопкой «Аналитические подложки» справа на карте — здесь появится его легенда.</div>
-                <!-- Легенда активной аналитической подложки (заполняется из script.js) -->
-                <div class="layer-legend" id="layerLegend" hidden></div>
-            </div>
-        </div><!-- /bp-pane main -->
-
-        <!-- ВКЛАДКА «РИСОВАНИЕ»: виджет рисования (стили, фигуры, значки, текст) -->
-        <div class="bottom-panel-body bp-pane bp-draw" data-bp-pane="draw" role="tabpanel">
-
-            <!-- Инструменты -->
-            <div class="dw-block dw-tools">
-                <div class="dw-title">Инструменты</div>
-                <div class="dw-tool-grid">
-                    <button class="dw-tool" data-sk-tool="icon" title="Значок"><i class="fas fa-location-dot"></i><span>Значок</span></button>
-                    <button class="dw-tool" data-sk-tool="point" title="Точка"><i class="fas fa-circle-dot"></i><span>Точка</span></button>
-                    <button class="dw-tool" data-sk-tool="text" title="Текст"><i class="fas fa-font"></i><span>Текст</span></button>
-                    <button class="dw-tool" data-sk-tool="line" title="Линия (ломаная)"><i class="fas fa-route"></i><span>Линия</span></button>
-                    <button class="dw-tool" data-sk-tool="freeline" title="Свободная линия"><i class="fas fa-pencil"></i><span>Свободная</span></button>
-                    <button class="dw-tool" data-sk-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
-                    <button class="dw-tool" data-sk-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
-                    <button class="dw-tool" data-sk-tool="circle" title="Круг"><i class="far fa-circle"></i><span>Круг</span></button>
-                </div>
-                <label class="dw-check"><input type="checkbox" id="skRepeat"> Не отключать инструмент после рисования</label>
-                <label class="dw-check"><input type="checkbox" id="skMeasure"> Показывать размеры (длина, площадь)</label>
-            </div>
-
-            <!-- Действия -->
-            <div class="dw-block dw-actions">
-                <div class="dw-title">Действия</div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" data-sk-mode="select" title="Выбрать объект и менять его стиль"><i class="fas fa-arrow-pointer"></i><span>Выбрать</span></button>
-                    <button class="dw-act" data-sk-mode="move" title="Перемещать объекты мышью"><i class="fas fa-up-down-left-right"></i><span>Двигать</span></button>
-                    <button class="dw-act" data-sk-mode="edit" title="Править вершины выбранного объекта"><i class="fas fa-pen-to-square"></i><span>Вершины</span></button>
-                    <button class="dw-act" data-sk-act="duplicate" title="Создать копию выбранного" disabled><i class="fas fa-clone"></i><span>Копия</span></button>
-                    <button class="dw-act" data-sk-act="front" title="На передний план" disabled><i class="fas fa-arrow-up"></i><span>Вперёд</span></button>
-                    <button class="dw-act" data-sk-act="back" title="На задний план" disabled><i class="fas fa-arrow-down"></i><span>Назад</span></button>
-                    <button class="dw-act" data-sk-act="undo" title="Отменить (Ctrl+Z)" disabled><i class="fas fa-rotate-left"></i><span>Отменить</span></button>
-                    <button class="dw-act" data-sk-act="redo" title="Повторить (Ctrl+Y)" disabled><i class="fas fa-rotate-right"></i><span>Повторить</span></button>
-                    <button class="dw-act dw-danger" data-sk-act="delete" title="Удалить выбранный (Delete)" disabled><i class="fas fa-trash"></i><span>Удалить</span></button>
-                    <button class="dw-act dw-danger" data-sk-act="clear" title="Удалить все рисунки" disabled><i class="fas fa-eraser"></i><span>Очистить</span></button>
-                    <button class="dw-act" data-sk-act="export" title="Скачать рисунки в GeoJSON" disabled><i class="fas fa-download"></i><span>GeoJSON</span></button>
-                </div>
-            </div>
-
-            <!-- Линия и контур -->
-            <div class="dw-block dw-style" data-for="point line polygon rectangle circle">
-                <div class="dw-title">Линия / контур</div>
-                <div class="dw-row"><label>Цвет</label><input type="color" id="skColor"></div>
-                <div class="dw-swatches" data-target="skColor"></div>
-                <div class="dw-row"><label>Толщина</label><input type="range" id="skWeight" min="1" max="20" step="1"><span class="dw-val" id="skWeightVal"></span></div>
-                <div class="dw-row"><label>Прозрачность</label><input type="range" id="skOpacity" min="0" max="100" step="5"><span class="dw-val" id="skOpacityVal"></span></div>
-                <div class="dw-row"><label>Стиль</label>
-                    <select id="skDash">
-                        <option value="solid">Сплошная</option>
-                        <option value="dash">Пунктир</option>
-                        <option value="long">Длинный пунктир</option>
-                        <option value="dot">Точки</option>
-                        <option value="dashdot">Штрих-пунктир</option>
-                    </select>
-                </div>
-                <div class="dw-row"><label>Концы</label>
-                    <select id="skCap">
-                        <option value="round">Скруглённые</option>
-                        <option value="butt">Плоские</option>
-                        <option value="square">Квадратные</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Заливка -->
-            <div class="dw-block dw-style" data-for="point polygon rectangle circle">
-                <div class="dw-title">Заливка</div>
-                <label class="dw-check"><input type="checkbox" id="skFillOn"> Залить фигуру</label>
-                <div class="dw-row"><label>Цвет</label><input type="color" id="skFillColor"></div>
-                <div class="dw-swatches" data-target="skFillColor"></div>
-                <div class="dw-row"><label>Прозрачность</label><input type="range" id="skFillOpacity" min="0" max="100" step="5"><span class="dw-val" id="skFillOpacityVal"></span></div>
-                <div class="dw-row"><label>Размер точки</label><input type="range" id="skRadius" min="2" max="30" step="1"><span class="dw-val" id="skRadiusVal"></span></div>
-            </div>
-
-            <!-- Значок -->
-            <div class="dw-block dw-style dw-icon-block" data-for="icon">
-                <div class="dw-title">Значок</div>
-                <div class="dw-icon-grid" id="skIconGrid"></div>
-                <div class="dw-row"><label>Форма</label>
-                    <select id="skIconShape">
-                        <option value="pin">Булавка</option>
-                        <option value="circle">Круг</option>
-                        <option value="square">Квадрат</option>
-                        <option value="plain">Без фона</option>
-                    </select>
-                </div>
-                <div class="dw-row"><label>Цвет фона</label><input type="color" id="skIconBg"></div>
-                <div class="dw-swatches" data-target="skIconBg"></div>
-                <div class="dw-row"><label>Цвет значка</label><input type="color" id="skIconColor"></div>
-                <div class="dw-row"><label>Размер</label><input type="range" id="skIconSize" min="16" max="64" step="2"><span class="dw-val" id="skIconSizeVal"></span></div>
-            </div>
-
-            <!-- Текст -->
-            <div class="dw-block dw-style" data-for="text">
-                <div class="dw-title">Текст</div>
-                <div class="dw-row"><label>Надпись</label><input type="text" id="skText" placeholder="Введите текст"></div>
-                <div class="dw-row"><label>Размер</label><input type="range" id="skTextSize" min="8" max="48" step="1"><span class="dw-val" id="skTextSizeVal"></span></div>
-                <div class="dw-row"><label>Цвет</label><input type="color" id="skTextColor"></div>
-                <div class="dw-swatches" data-target="skTextColor"></div>
-                <div class="dw-row dw-row-checks">
-                    <label class="dw-check"><input type="checkbox" id="skBold"> <b>Ж</b></label>
-                    <label class="dw-check"><input type="checkbox" id="skItalic"> <i>К</i></label>
-                </div>
-                <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skHalo"> Обводка</label><input type="color" id="skHaloColor"></div>
-                <div class="dw-row"><label class="dw-check"><input type="checkbox" id="skTextBg"> Фон</label><input type="color" id="skTextBgColor"></div>
-            </div>
-
-            <!-- Список объектов -->
-            <div class="dw-block dw-listblock">
-                <div class="dw-title">Объекты <span class="badge" id="skCount">0</span></div>
-                <div class="dw-list" id="skList"></div>
-            </div>
-        </div><!-- /bp-pane draw -->
-
-        <!-- ВКЛАДКА «3D»: настройки 3D режима (активна после включения кнопки «3D» на карте) -->
-        <div class="bottom-panel-body bp-pane active bp-draw bp-3d m3-off" data-bp-pane="3d" role="tabpanel">
-
-            <!-- Камера -->
-            <div class="dw-block">
-                <div class="dw-title">Камера</div>
-                <div class="dw-row"><label>Наклон</label><input type="range" id="m3Pitch" min="0" max="85" step="1" value="60"><span class="dw-val" id="m3PitchVal">60°</span></div>
-                <div class="dw-row"><label>Поворот</label><input type="range" id="m3Bearing" min="-180" max="180" step="1" value="0"><span class="dw-val" id="m3BearingVal">0°</span></div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" data-m3-view="top" title="Вид строго сверху"><i class="fas fa-arrow-down-long"></i><span>Сверху</span></button>
-                    <button class="dw-act" data-m3-view="tilt" title="Наклон 60°"><i class="fas fa-cube"></i><span>Наклон</span></button>
-                    <button class="dw-act" data-m3-view="side" title="Почти горизонтальный вид (80°)"><i class="fas fa-mountain-sun"></i><span>Сбоку</span></button>
-                    <button class="dw-act" id="m3Orbit" title="Автоматическое вращение камеры"><i class="fas fa-rotate"></i><span>Облёт</span></button>
-                </div>
-                <div class="m3-hint">ЛКМ — сдвиг · ПКМ или Ctrl+ЛКМ — поворот и наклон · колесо — масштаб</div>
-            </div>
-
-            <!-- Рельеф -->
-            <div class="dw-block">
-                <div class="dw-title">Рельеф</div>
-                <label class="dw-check"><input type="checkbox" id="m3Terrain"> 3D-рельеф (холмы и впадины)</label>
-                <div class="dw-row"><label>Высота ×</label><input type="range" id="m3Exag" min="0.5" max="5" step="0.1"><span class="dw-val" id="m3ExagVal"></span></div>
-                <label class="dw-check"><input type="checkbox" id="m3Hill"> Тени рельефа</label>
-                <div class="dw-row"><label>Тени</label><input type="range" id="m3HillInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3HillIntVal"></span></div>
-                <label class="dw-check"><input type="checkbox" id="m3Sky"> Небо и дымка</label>
-            </div>
-
-            <!-- Здания OSM -->
-            <div class="dw-block">
-                <div class="dw-title">Здания OSM</div>
-                <label class="dw-check"><input type="checkbox" id="m3Bld"> 3D-здания (с масштаба z13)</label>
-                <div class="dw-row"><label>Цвет</label><input type="color" id="m3BColor"></div>
-                <label class="dw-check"><input type="checkbox" id="m3BByH"> Цвет по высоте здания</label>
-                <div class="dw-row"><label>Непрозр.</label><input type="range" id="m3BOp" min="0.2" max="1" step="0.02"><span class="dw-val" id="m3BOpVal"></span></div>
-                <div class="dw-row"><label>Высота ×</label><input type="range" id="m3BH" min="0.5" max="3" step="0.1"><span class="dw-val" id="m3BHVal"></span></div>
-            </div>
-
-            <!-- Слои OSM -->
-            <div class="dw-block">
-                <div class="dw-title">Слои OSM</div>
-                <label class="dw-check"><input type="checkbox" id="m3Roads"> Дороги</label>
-                <label class="dw-check"><input type="checkbox" id="m3Water"> Водные объекты</label>
-                <label class="dw-check"><input type="checkbox" id="m3Land"> Леса, луга, поля</label>
-                <label class="dw-check"><input type="checkbox" id="m3Labels"> Названия населённых пунктов</label>
-                <div class="m3-hint">Клик по зданию — показать его высоту</div>
-            </div>
-
-            <!-- Деревья на лесных полигонах OSM -->
-            <div class="dw-block">
-                <div class="dw-title">Деревья</div>
-                <label class="dw-check"><input type="checkbox" id="m3Trees"> 3D-деревья на лесах OSM</label>
-                <div class="dw-row"><label>Густота</label><input type="range" id="m3TreeDens" min="10" max="300" step="10"><span class="dw-val" id="m3TreeDensVal"></span></div>
-                <div class="m3-hint" id="m3TreesInfo">Деревья случайно рассыпаются по лесным полигонам OSM (с масштаба z14)</div>
-            </div>
-
-            <!-- Освещение -->
-            <div class="dw-block">
-                <div class="dw-title">Освещение (солнце)</div>
-                <div class="dw-row"><label>Азимут</label><input type="range" id="m3SunAz" min="0" max="360" step="5"><span class="dw-val" id="m3SunAzVal"></span></div>
-                <div class="dw-row"><label>Высота</label><input type="range" id="m3SunAlt" min="5" max="90" step="1"><span class="dw-val" id="m3SunAltVal"></span></div>
-                <div class="dw-row"><label>Яркость</label><input type="range" id="m3SunInt" min="0" max="1" step="0.05"><span class="dw-val" id="m3SunIntVal"></span></div>
-            </div>
-
-            <!-- Мои объекты -->
-            <div class="dw-block">
-                <div class="dw-title">Мои объекты <span class="badge" id="m3UserCount">0</span></div>
-                <label class="dw-check"><input type="checkbox" id="m3User"> Показывать нарисованные и загруженные объекты</label>
-                <label class="dw-check"><input type="checkbox" id="m3Extrude"> Выдавить полигоны в 3D</label>
-                <div class="dw-row"><label>Высота</label><input type="range" id="m3ExtH" min="1" max="300" step="1"><span class="dw-val" id="m3ExtHVal"></span></div>
-                <button class="dw-act" id="m3RefreshUser" title="Перечитать объекты из 2D-карты"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
-            </div>
-
-            <!-- Импорт 3D-объектов -->
-            <div class="dw-block dw-listblock m3-import">
-                <div class="dw-title">3D-объекты (импорт)</div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="m3ImportModelBtn" title="Импорт 3D-модели GLB / GLTF (как в Google Earth)"><i class="fas fa-cube"></i><span>Модель</span></button>
-                    <button class="dw-act" id="m3ImportVecBtn" title="Импорт GeoJSON / KML: полигоны выдавливаются в 3D по высоте из атрибутов"><i class="fas fa-building"></i><span>GeoJSON/KML</span></button>
-                </div>
-                <input type="file" id="m3ModelFile" accept=".glb,.gltf" hidden />
-                <input type="file" id="m3VecFile" accept=".geojson,.json,.kml" hidden />
-                <div class="dw-row"><label>Высота, м</label><input type="number" id="m3ImpH" min="1" max="1000" step="1" value="20" title="Высота по умолчанию, если в файле нет height / building:levels"><input type="color" id="m3ImpColor" value="#f59e0b" title="Цвет выдавливаемых объектов"></div>
-                <div class="dw-list" id="m3List"></div>
-            </div>
-
-            <!-- Выбранный объект -->
-            <div class="dw-block dw-dim" id="m3SelBlock">
-                <div class="dw-title">Выбранный: <span id="m3SelName" class="m3-selname">не выбран</span></div>
-                <div class="dw-row"><label>Масштаб</label><input type="range" id="m3SelScale" min="-1" max="2.5" step="0.02" value="0" disabled><span class="dw-val" id="m3SelScaleVal"></span></div>
-                <div class="dw-row"><label>Поворот</label><input type="range" id="m3SelHeading" min="-180" max="180" step="1" value="0" disabled><span class="dw-val" id="m3SelHeadingVal"></span></div>
-                <div class="dw-row"><label>Над землёй</label><input type="range" id="m3SelAlt" min="-50" max="500" step="1" value="0" disabled><span class="dw-val" id="m3SelAltVal"></span></div>
-                <div class="dw-row"><label>Цвет</label><input type="color" id="m3SelColor" value="#f59e0b" disabled></div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="m3MoveBtn" title="Кликнуть по карте, чтобы переставить модель" disabled><i class="fas fa-up-down-left-right"></i><span>Переместить</span></button>
-                    <button class="dw-act dw-danger" id="m3DelBtn" title="Удалить выбранный объект" disabled><i class="fas fa-trash"></i><span>Удалить</span></button>
-                </div>
-            </div>
-
-            <!-- Сервис -->
-            <div class="dw-block dw-listblock">
-                <div class="dw-title">Сервис</div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="m3Shot" title="Сохранить текущий 3D-вид в PNG"><i class="fas fa-camera"></i><span>Снимок</span></button>
-                </div>
-                <div class="dw-act-grid m3-reset-row">
-                    <button class="dw-act" id="m3Reset" title="Вернуть настройки 3D по умолчанию"><i class="fas fa-rotate-left"></i><span>Сбросить</span></button>
-                </div>
-            </div>
-        </div><!-- /bp-pane 3d -->
-
-        <!-- ВКЛАДКА «ПРОФИЛЬ»: профиль рельефа по линии (высоты — Terrarium DEM) -->
-        <div class="bottom-panel-body bp-pane bp-draw bp-profile" data-bp-pane="profile" role="tabpanel">
-            <div class="dw-block pf-ctrl">
-                <div class="dw-title">Профиль рельефа</div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="pfDraw" title="Нарисовать линию на карте (повторный клик — завершить)"><i class="fas fa-pen"></i><span>Нарисовать</span></button>
-                    <button class="dw-act" id="pfFromSel" title="Взять линию или контур, выбранный на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>По выбранной</span></button>
-                    <button class="dw-act dw-danger" id="pfClear" title="Убрать профиль и линию с карты"><i class="fas fa-eraser"></i><span>Очистить</span></button>
-                </div>
-                <div class="dw-row"><label>Точек</label>
-                    <select id="pfN"><option value="100">100</option><option value="200" selected>200</option><option value="300">300</option><option value="500">500</option></select>
-                </div>
-                <div class="dw-row"><label>Сглаживание</label><input type="range" id="pfSmooth" min="0" max="6" step="1" value="2"><span class="dw-val" id="pfSmoothVal">2</span></div>
-                <label class="dw-check"><input type="checkbox" id="pfSlopeColor" checked> Цвет линии по уклону</label>
-                <div class="m3-hint">ЛКМ — точка, двойной клик или Enter — завершить, Esc — отмена</div>
-            </div>
-            <div class="dw-block pf-stats">
-                <div class="dw-title">Показатели</div>
-                <div class="pf-stat-grid" id="pfStats"></div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="pfCsv" title="Скачать таблицу профиля (CSV)" disabled><i class="fas fa-file-csv"></i><span>CSV</span></button>
-                    <button class="dw-act" id="pfPng" title="Скачать график (PNG)" disabled><i class="fas fa-image"></i><span>PNG</span></button>
-                </div>
-            </div>
-            <div class="dw-block pf-chartblock">
-                <div class="dw-title">График высот <span class="pf-legend" title="Уклон"><i style="background:#10b981"></i>&lt;3% <i style="background:#eab308"></i>3–8% <i style="background:#f97316"></i>8–15% <i style="background:#dc2626"></i>&gt;15%</span></div>
-                <div class="pf-chart-wrap" id="pfWrap">
-                    <canvas id="pfCanvas"></canvas>
-                    <div class="pf-empty" id="pfEmpty">Нажмите «Нарисовать» (или кнопку ⛰ на карте) и укажите линию, либо выберите линию на вкладке «Рисование» и нажмите «По выбранной»</div>
-                </div>
-            </div>
-        </div><!-- /bp-pane profile -->
-
-        <!-- ВКЛАДКА «ЭКСПОРТ»: выгрузка карты в изображение / PDF / GeoTIFF с привязкой -->
-        <div class="bottom-panel-body bp-pane bp-draw bp-export" data-bp-pane="export" role="tabpanel">
-            <div class="dw-block">
-                <div class="dw-title">Формат и качество</div>
-                <div class="dw-row"><label>Формат</label>
-                    <select id="exFmt">
-                        <option value="pdf">PDF</option>
-                        <option value="png">PNG</option>
-                        <option value="jpg">JPEG (JPG)</option>
-                        <option value="webp">WebP</option>
-                        <option value="tiff">TIFF / GeoTIFF</option>
-                    </select>
-                </div>
-                <div class="dw-row"><label>Разрешение</label>
-                    <select id="exDpi">
-                        <option value="72">72 dpi (экран)</option>
-                        <option value="96">96 dpi</option>
-                        <option value="150" selected>150 dpi</option>
-                        <option value="200">200 dpi</option>
-                        <option value="300">300 dpi (печать)</option>
-                        <option value="450">450 dpi</option>
-                        <option value="600">600 dpi</option>
-                    </select>
-                </div>
-                <div class="dw-row"><label>Качество</label><input type="range" id="exQuality" min="40" max="100" step="5" value="90"><span class="dw-val" id="exQualityVal">90%</span></div>
-            </div>
-
-            <div class="dw-block">
-                <div class="dw-title">Размер листа</div>
-                <div class="dw-row"><label>Лист</label>
-                    <select id="exPaper">
-                        <option value="a4" selected>A4</option>
-                        <option value="a3">A3</option>
-                        <option value="a2">A2</option>
-                        <option value="a1">A1</option>
-                        <option value="a0">A0</option>
-                        <option value="a5">A5</option>
-                        <option value="letter">Letter</option>
-                        <option value="legal">Legal</option>
-                        <option value="tabloid">Tabloid</option>
-                        <option value="screen">Как на экране</option>
-                        <option value="custom">Свой размер (мм)</option>
-                    </select>
-                </div>
-                <div class="dw-row"><label>Ориентация</label>
-                    <select id="exOrient">
-                        <option value="auto" selected>Как на экране</option>
-                        <option value="landscape">Альбомная</option>
-                        <option value="portrait">Книжная</option>
-                    </select>
-                </div>
-                <div class="dw-row" id="exCustomRow" hidden><label>Ш × В, мм</label><input type="number" id="exCW" min="20" max="3000" value="297"><input type="number" id="exCH" min="20" max="3000" value="210"></div>
-                <div class="dw-row"><label>Поля, мм</label><input type="number" id="exMargin" min="0" max="50" step="1" value="8"></div>
-                <div class="m3-hint" id="exSizeInfo"></div>
-            </div>
-
-            <div class="dw-block">
-                <div class="dw-title">Содержимое</div>
-                <label class="dw-check"><input type="checkbox" id="exBase" checked> Подложка (снимки / карта)</label>
-                <label class="dw-check"><input type="checkbox" id="exDrawn" checked> Участки (нарисованные и загруженные)</label>
-                <label class="dw-check"><input type="checkbox" id="exSketch" checked> Рисунки (фигуры, значки, текст)</label>
-                <div class="m3-hint">В 3D-режиме сохраняется текущий 3D-вид</div>
-            </div>
-
-            <div class="dw-block">
-                <div class="dw-title">Элементы карты</div>
-                <div class="dw-row"><label>Заголовок</label><input type="text" id="exTitle" placeholder="Название карты"></div>
-                <div class="dw-row"><label>Подпись</label><input type="text" id="exNote" placeholder="Примечание"></div>
-                <label class="dw-check"><input type="checkbox" id="exLegend" checked> Легенда слоя</label>
-                <label class="dw-check"><input type="checkbox" id="exScale" checked> Масштабная линейка</label>
-                <label class="dw-check"><input type="checkbox" id="exNorth" checked> Стрелка севера</label>
-                <label class="dw-check"><input type="checkbox" id="exGrid"> Сетка координат</label>
-                <label class="dw-check"><input type="checkbox" id="exFrame" checked> Рамка</label>
-                <label class="dw-check"><input type="checkbox" id="exDate" checked> Дата</label>
-                <label class="dw-check"><input type="checkbox" id="exCoords"> Координаты центра</label>
-                <label class="dw-check"><input type="checkbox" id="exAttr" checked> Источник подложки</label>
-            </div>
-
-            <div class="dw-block">
-                <div class="dw-title">Привязка</div>
-                <label class="dw-check"><input type="checkbox" id="exGeo" checked> Пространственная привязка</label>
-                <div class="m3-hint" id="exGeoHint"></div>
-                <div class="m3-hint">Карта выгружается севером вверх. GeoPDF / GeoTIFF открываются в Avenza Maps и QGIS — приложение покажет ваше положение на карте</div>
-            </div>
-
-            <div class="dw-block dw-listblock ex-preview">
-                <div class="dw-title">Предпросмотр</div>
-                <div class="ex-canvas-wrap"><canvas id="exPreview" width="10" height="10"></canvas></div>
-                <div class="ex-info" id="exInfo"></div>
-                <div class="ex-warn" id="exWarn" hidden></div>
-                <div class="dw-act-grid">
-                    <button class="dw-act" id="exRefresh" title="Обновить предпросмотр"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
-                    <button class="dw-act ex-go" id="exDownload" title="Собрать и скачать файл"><i class="fas fa-download"></i><span>Экспорт</span></button>
-                </div>
-                <div class="ex-info" id="exStatus"></div>
-            </div>
-        </div><!-- /bp-pane export -->
-
-        <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
-        <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Выбор даты спутникового снимка — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="ndvi" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-leaf"></i><div><p>NDVI</p><span>Индекс растительности — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="ndwi" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-droplet"></i><div><p>NDWI</p><span>Индекс водных объектов — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="ndmi" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-cloud-rain"></i><div><p>NDMI</p><span>Индекс влажности растительности — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="nbr" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-fire"></i><div><p>NBR</p><span>Гари и повреждение растительности — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="change" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Изменения</p><span>Сравнение снимков на две даты — в разработке</span></div></div>
-        </div>
-        <div class="bottom-panel-body bp-pane" data-bp-pane="catalog" role="tabpanel">
-            <div class="bp-empty"><i class="fas fa-folder-open"></i><div><p>Каталог</p><span>Каталог данных — в разработке</span></div></div>
-        </div>
-      </div>
     </div>
 </div>
 
+  <div class="s-mapbar"><a href="#top"><i class="fas fa-arrow-up"></i> Главная</a><span>Колесо над картой — масштаб. Листайте здесь или у панелей, чтобы перейти к другому блоку</span><a href="#about">О сервисе <i class="fas fa-arrow-down"></i></a></div>
+</section>
+
+<!-- ============ БЛОК: КАТАЛОГ ДАННЫХ (после карты; стиль как у первого блока, фон — catalog.jpg рядом с index.html) ============ -->
+<section class="s-hero s-catalog" id="data-catalog">
+  <div class="s-wrap">
+    <div class="s-cat-head s-glass">
+      <div>
+        <div class="s-hero-tag"><i class="fas fa-database"></i> Каталог данных</div>
+        <h1>Данные для вашей <em>территории</em></h1>
+        <p class="lead">Выберите наборы, которые нужны: векторы OSM, спутниковые снимки или накопленные аналитические данные. Цены и оформление — заготовка.</p>
+      </div>
+    </div>
+    <div class="s-cat-grid">
+      <div class="s-cat-card s-glass" data-cat="osm">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-vector-square"></i></span><div><h3>Векторные данные OSM</h3><p>Актуальные контуры и атрибуты объектов территории</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="osm-buildings"><i class="fas fa-check"></i><span><b>Здания</b><small>контуры, этажность, тип</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-roads"><i class="fas fa-check"></i><span><b>Дороги</b><small>классы и покрытие</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-water"><i class="fas fa-check"></i><span><b>Водные объекты</b><small>реки, озёра, пруды</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-landuse"><i class="fas fa-check"></i><span><b>Землепользование</b><small>поля, леса, луга</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-places"><i class="fas fa-check"></i><span><b>Населённые пункты</b><small>границы и названия</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoJSON · GPKG · SHP · KML</span><button type="button" class="s-cat-all" data-all="osm">Выбрать все</button></div>
+      </div>
+      <div class="s-cat-card s-glass" data-cat="sat">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-satellite"></i></span><div><h3>Спутниковые растровые данные</h3><p>Снимки на нужную дату, обрезанные по вашему участку</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="sat-s2"><i class="fas fa-check"></i><span><b>Sentinel-2</b><small>10 м, мультиспектр</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-l8"><i class="fas fa-check"></i><span><b>Landsat 8/9</b><small>30 м, архив с 2013 г.</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-mosaic"><i class="fas fa-check"></i><span><b>Безоблачная мозаика</b><small>годовой композит</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-hr"><i class="fas fa-check"></i><span><b>Высокое разрешение</b><small>под заказ, до 0.5 м</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoTIFF · COG · PNG</span><button type="button" class="s-cat-all" data-all="sat">Выбрать все</button></div>
+      </div>
+      <div class="s-cat-card s-glass" data-cat="ana">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-chart-line"></i></span><div><h3>Аналитические накопительные данные</h3><p>Показатели, накопленные за период, и готовые карты</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="ana-ndvi"><i class="fas fa-check"></i><span><b>NDVI · NDWI · NDMI</b><small>временные ряды за сезон</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-land"><i class="fas fa-check"></i><span><b>Классификация земель</b><small>пашня, луга, лес, вода</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-relief"><i class="fas fa-check"></i><span><b>Рельеф и уклоны</b><small>высоты, уклоны, экспозиция</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-soil"><i class="fas fa-check"></i><span><b>Почвенные карты</b><small>pH, органический углерод</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoTIFF · CSV · GeoJSON</span><button type="button" class="s-cat-all" data-all="ana">Выбрать все</button></div>
+      </div>
+    </div>
+    <div class="s-cat-order s-glass">
+      <div class="s-cat-sum"><i class="fas fa-cart-shopping"></i><span id="catSum">Ничего не выбрано</span></div>
+      <div class="s-cat-act">
+        <button type="button" class="s-btn s-btn-ghost" id="catClear" disabled>Сбросить</button>
+        <button type="button" class="s-btn s-btn-primary" id="catOrder" disabled>Оформить заказ <i class="fas fa-arrow-right"></i></button>
+      </div>
+      <div class="s-cat-ok" id="catOk" hidden>Оформление заказа пока не подключено (заготовка): выбор сохранён только на странице.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ БЛОК 3: О СЕРВИСЕ ============ -->
+<div class="s-after" id="about">
+<!-- ============ ВОЗМОЖНОСТИ ============ -->
+<section class="site-sec" id="features">
+  <div class="s-wrap">
+    <div class="s-head"><div class="s-eyebrow">Возможности</div><h2>Всё для первичной оценки участка</h2><p>Тексты-заготовки: позже заменим на финальные формулировки.</p></div>
+    <div class="s-grid c4">
+      <div class="s-card"><div class="s-ico"><i class="fas fa-layer-group"></i></div><h3>Подложки и спутник</h3><p>Схемы, топокарты, спутниковые снимки и гибриды — переключение в один клик.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-draw-polygon"></i></div><h3>Участок и измерения</h3><p>Нарисуйте или загрузите контур (KML, GeoJSON, Excel, XML Росреестра), измерьте длину и площадь.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-mountain"></i></div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия полигона, уклоны.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-cube"></i></div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-route"></i></div><h3>Логистика</h3><p>Буфер вокруг участка, дороги и водоёмы OSM, расстояния до ближайших.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-chart-area"></i></div><h3>Аналитические слои</h3><p>Land Cover, NDVI, NDWI, MNDWI и почвенные карты.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней по экстенту карты.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-file-export"></i></div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с пространственной привязкой.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ КАК ЭТО РАБОТАЕТ ============ -->
+<section class="site-sec alt" id="how">
+  <div class="s-wrap">
+    <div class="s-head"><div class="s-eyebrow">Как это работает</div><h2>От участка до готового отчёта</h2></div>
+    <div class="s-steps">
+      <div class="s-step"><i class="fas fa-magnifying-glass-location"></i><h3>Найдите участок</h3><p>Поиск по адресу или загрузка контура.</p></div>
+      <div class="s-step"><i class="fas fa-map"></i><h3>Изучите карту</h3><p>Слои, рельеф, OSM и спутник — бесплатно.</p></div>
+      <div class="s-step"><i class="fas fa-play"></i><h3>Запустите анализ</h3><p>Кнопка «Полный анализ участка».</p></div>
+      <div class="s-step"><i class="fas fa-gears"></i><h3>Обработка в фоне</h3><p>Статус заказа виден в личном кабинете.</p></div>
+      <div class="s-step"><i class="fas fa-file-pdf"></i><h3>Получите отчёт</h3><p>Страница отчёта и PDF для скачивания.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ОТЧЁТ ============ -->
+<section class="site-sec" id="report">
+  <div class="s-wrap s-report">
+    <div>
+      <div class="s-eyebrow">Полный аналитический отчёт</div>
+      <h2 style="font-size:30px;line-height:1.2;color:var(--dark);margin-bottom:10px">Что входит в отчёт</h2>
+      <p style="font-size:15px;line-height:1.6;color:var(--muted)">Отчёт собирается из независимых модулей, поэтому набор показателей легко расширять.</p>
+      <div class="s-chips">
+        <span class="s-chip"><i class="fas fa-id-card"></i> Паспорт</span>
+        <span class="s-chip"><i class="fas fa-mountain"></i> Рельеф</span>
+        <span class="s-chip"><i class="fas fa-droplet"></i> Вода</span>
+        <span class="s-chip"><i class="fas fa-road"></i> Инфраструктура</span>
+        <span class="s-chip"><i class="fas fa-building"></i> Застройка</span>
+        <span class="s-chip"><i class="fas fa-seedling"></i> Землепользование</span>
+        <span class="s-chip"><i class="fas fa-satellite"></i> Спутник</span>
+        <span class="s-chip"><i class="fas fa-clock-rotate-left"></i> Динамика</span>
+        <span class="s-chip"><i class="fas fa-triangle-exclamation"></i> Ограничения</span>
+        <span class="s-chip"><i class="fas fa-book"></i> Источники</span>
+      </div>
+      <div class="s-note"><b>Факты и интерпретации разделены.</b> «Средний уклон 8,4°» — измерение; «может ограничивать механизированные работы» — интерпретация, и в отчёте она помечена отдельно.</div>
+    </div>
+    <div class="s-paper">
+      <div class="s-paper-top"><span>Паспорт участка</span><span class="s-demo">Демо-данные</span></div>
+      <table>
+        <tr><td>Площадь</td><td>— га</td></tr>
+        <tr><td>Перепад высот</td><td>— м</td></tr>
+        <tr><td>Средний уклон</td><td>8,4°</td></tr>
+        <tr><td>Ближайшая дорога</td><td>— м</td></tr>
+        <tr><td>NDVI (среднее)</td><td>—</td></tr>
+        <tr><td>Дата анализа</td><td>—</td></tr>
+      </table>
+      <div class="interp"><b>Интерпретация:</b> текст-заготовка. Рельефные ограничения будут описаны здесь.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ТАРИФЫ ============ -->
+<section class="site-sec alt" id="pricing">
+  <div class="s-wrap">
+    <div class="s-head"><div class="s-eyebrow">Тарифы</div><h2>Начните бесплатно</h2><p>Цены — заготовки, финальные значения определим позже.</p></div>
+    <div class="s-grid c3">
+      <div class="s-card s-price"><h3>Бесплатно</h3><div class="amount">0 ₽</div>
+        <ul><li>Карта, подложки, спутник</li><li>Рисование и измерения</li><li>Профиль рельефа</li><li>Экспорт карты</li></ul>
+        <a class="s-btn s-btn-line s-btn-block" href="#map-section">Открыть карту</a></div>
+      <div class="s-card s-price hot"><h3>Полный отчёт</h3><div class="amount">— ₽ <small>за участок</small></div>
+        <ul><li>Все модули анализа</li><li>Классификация земель</li><li>Отчёт и PDF</li><li>История в личном кабинете</li></ul>
+        <a class="s-btn s-btn-primary s-btn-block" href="#contacts">Заказать</a></div>
+      <div class="s-card s-price"><h3>Для бизнеса</h3><div class="amount">По запросу</div>
+        <ul><li>Пакеты отчётов</li><li>Свои территории и модули</li><li>Приоритетная обработка</li><li>Доступ по API</li></ul>
+        <a class="s-btn s-btn-line s-btn-block" href="#contacts">Связаться</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ИСТОЧНИКИ ДАННЫХ ============ -->
+<section class="site-sec" id="sources">
+  <div class="s-wrap">
+    <div class="s-head"><div class="s-eyebrow">Данные</div><h2>На чём строится анализ</h2></div>
+    <div class="s-src">
+      <span class="s-chip"><i class="fas fa-map"></i> OpenStreetMap</span>
+      <span class="s-chip"><i class="fas fa-satellite"></i> Sentinel-1 / Sentinel-2</span>
+      <span class="s-chip"><i class="fas fa-mountain"></i> DEM (Terrarium)</span>
+      <span class="s-chip"><i class="fas fa-flask"></i> ISRIC SoilGrids</span>
+      <span class="s-chip"><i class="fas fa-cloud-sun"></i> Open-Meteo</span>
+      <span class="s-chip"><i class="fas fa-route"></i> OSRM</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="site-sec alt" id="faq">
+  <div class="s-wrap">
+    <div class="s-head"><div class="s-eyebrow">FAQ</div><h2>Частые вопросы</h2></div>
+    <div class="s-faq">
+      <details open><summary>Нужно ли платить, чтобы пользоваться картой?</summary><p>Нет. Карта и бесплатные инструменты доступны без заказа отчёта. Платным является только полный анализ.</p></details>
+      <details><summary>Сколько времени занимает анализ?</summary><p>Текст-заготовка: анализ выполняется в фоне, статус виден в личном кабинете.</p></details>
+      <details><summary>Какие форматы участков можно загрузить?</summary><p>KML, GeoJSON, Excel и XML Росреестра.</p></details>
+      <details><summary>Насколько точны результаты?</summary><p>Текст-заготовка: точность зависит от разрешения исходных данных; в отчёте указаны источники и версии алгоритмов.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ КОНТАКТЫ ============ -->
+<section class="site-sec" id="contacts">
+  <div class="s-wrap s-contact">
+    <div>
+      <div class="s-eyebrow">Контакты</div>
+      <h2 style="font-size:30px;line-height:1.2;color:var(--dark);margin-bottom:10px">Остались вопросы?</h2>
+      <p style="font-size:15px;line-height:1.6;color:var(--muted)">Напишите нам — расскажем про отчёт и подберём тариф.</p>
+      <ul>
+        <li><i class="fas fa-envelope"></i> info@example.ru</li>
+        <li><i class="fas fa-phone"></i> +7 (000) 000-00-00</li>
+        <li><i class="fas fa-location-dot"></i> Россия</li>
+      </ul>
+    </div>
+    <form class="s-form" id="contactForm">
+      <input type="text" placeholder="Ваше имя" required>
+      <input type="email" placeholder="Email" required>
+      <textarea placeholder="Сообщение"></textarea>
+      <button class="s-btn s-btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Отправить</button>
+      <div class="s-form-ok" id="contactOk" hidden>Спасибо! (форма-заготовка, отправка пока не подключена)</div>
+    </form>
+  </div>
+<footer class="s-footer">
+  <div class="s-wrap"><span>© <span id="siteYear"></span> GeoClass</span><span><a href="#top">Наверх ↑</a></span></div>
+</footer>
+</section>
+
+</div>
+
+<button class="s-prompt" id="sPrompt" type="button"><small>Прокрутите ещё раз или нажмите</small><b><span id="sPromptT">К карте</span> <i class="fas fa-arrow-down" id="sPromptI"></i></b></button>
+
 <script src="script.js"></script>
+<script src="site.js"></script>
 </body>
 </html>

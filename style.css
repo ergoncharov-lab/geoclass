@@ -1970,3 +1970,50 @@ body.resizing-x *, body.resizing-y * { user-select: none; }
 .pf-empty[hidden] { display: none; }
 .pf-legend { margin-left: 8px; font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #64748b; }
 .pf-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 2px 0 6px; vertical-align: baseline; }
+
+/* ===== ЛОГИСТИЧЕСКИЙ АНАЛИЗ ===== */
+.leaflet-container.lg-picking, .leaflet-container.lg-picking.leaflet-grab { cursor: crosshair; }
+.bp-logi .dw-block { flex: 0 0 auto; min-width: 0; max-width: none; }
+.bp-logi .lg-obj { width: 340px; }
+.bp-logi .lg-buf { width: 200px; }
+.bp-logi .lg-res { width: 250px; }
+.bp-logi .lg-near-blk { flex: 1 1 300px; min-width: 260px; border-right: none; padding-right: 4px; }
+.bp-logi .dw-act-grid { grid-template-columns: repeat(4, 1fr); }
+.bp-logi .dw-act-grid.lg-one { grid-template-columns: 1fr; }
+.bp-logi .dw-act span { display: inline !important; }
+.bp-logi input[type="number"], .bp-logi select { height: 22px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 5px; background: #ffffff; color: #1e293b; padding: 0 4px; }
+.bp-logi input[type="number"] { width: 72px; }
+.lg-obj-name { font-size: 11px; font-weight: 600; color: #1e293b; }
+.bp-logi .m3-hint.lg-err { color: #dc2626; }
+.lg-near { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; color: #475569; }
+.lg-near-row { flex: 1 1 200px; padding: 3px 8px; border-left: 3px solid #94a3b8; background: #f8fafc; border-radius: 0 5px 5px 0; line-height: 1.5; }
+.lg-near-row b { color: #1e293b; font-weight: 600; }
+.lg-near-row small { color: #94a3b8; }
+.leaflet-tooltip.lg-label { background: #ffffff; border: 1px solid #cbd5e1; color: #1e293b; font-size: 10px; font-weight: 600; padding: 1px 5px; box-shadow: none; }
+.bp-logi .lg-prog { width: 220px; }
+.lg-prog-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+.lg-prog-bar > i { display: block; height: 100%; width: 0; background: #7c3aed; transition: width .25s ease, background-color .2s; }
+.lg-prog.lg-run .lg-prog-bar > i { background-image: linear-gradient(45deg, rgba(255,255,255,.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.25) 50%, rgba(255,255,255,.25) 75%, transparent 75%); background-size: 14px 14px; animation: lgStripe .8s linear infinite; }
+.lg-prog.lg-ok .lg-prog-bar > i { background: #16a34a; }
+.lg-prog.lg-part .lg-prog-bar > i { background: #f59e0b; }
+.lg-prog.lg-fail .lg-prog-bar > i { background: #dc2626; }
+.lg-prog-row { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; color: #475569; line-height: 1.4; }
+.lg-prog-row b { color: #1e293b; font-weight: 600; }
+@keyframes lgStripe { to { background-position: 14px 0; } }
+.bp-profile .hy-mode { flex: 0 0 auto; width: 118px; min-width: 0; }
+.bp-profile .hy-mode .dw-act-grid { grid-template-columns: 1fr; }
+.bp-profile .hy-ctrl { flex: 0 0 auto; width: 200px; min-width: 0; }
+.bp-profile .hy-stats { flex: 0 0 auto; width: 270px; min-width: 0; }
+.bp-profile .hy-chartblock { flex: 1 1 420px; min-width: 300px; max-width: none; border-right: none; padding-right: 4px; }
+.bp-profile:not([data-pf-mode="area"]) .hy-blk { display: none; }
+.bp-profile[data-pf-mode="area"] .pf-ctrl, .bp-profile[data-pf-mode="area"] .pf-stats, .bp-profile[data-pf-mode="area"] .pf-chartblock { display: none; }
+
+
+/* ===== ПОГОДА ===== */
+.bp-wx .wx-ctrl { flex: 0 0 auto; width: 210px; min-width: 0; }
+.bp-wx .wx-now, .bp-wx .wx-week { flex: 0 0 auto; width: 250px; min-width: 0; }
+.bp-wx .wx-chartblock { flex: 1 1 420px; min-width: 300px; max-width: none; border-right: none; padding-right: 4px; }
+.bp-wx .dw-act-grid { grid-template-columns: 1fr; }
+.bp-wx .dw-act span { display: inline !important; }
+#wxCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#weatherBtn.tool-on { background: #10b981; color: #fff; }
