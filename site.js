@@ -178,7 +178,7 @@
     if (!panel) return;
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
-        tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции' },
+        tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
         bp: { main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
               weather: 'Погода', dates: 'Снимки', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', change: 'Изменения', catalog: 'Каталог данных' }
     };
@@ -223,11 +223,12 @@
     // «Что здесь?»: карточка открывается, когда точка выбрана (правый клик или результат поиска), и закрывается, когда точку убрали
     var row = document.getElementById('geoCoordsRow');
     if (row && window.MutationObserver) {
+        var geoSec = document.getElementById('geoSection');   // карточка под поиском: видна, пока выбрана точка
         new MutationObserver(function () {
-            if (!row.hidden) setView('here', 'Что здесь?');
-            else if (panel.getAttribute('data-view') === 'here') goHome();
+            if (geoSec) geoSec.classList.toggle('geo-on', !row.hidden);
         }).observe(row, { attributes: true, attributeFilter: ['hidden'] });
     }
+    window.gcGoHome = goHome;
     // панель свёрнута — поиск остаётся на карте (переезжает на карту, при разворачивании возвращается в панель)
     var sp = panel.querySelector('.sp-search'), head = panel.querySelector('.sp-head'), stage = document.getElementById('mapStage');
     if (sp && head && stage && window.MutationObserver) {
@@ -471,6 +472,9 @@
         });
 
         return {
+            setEnd: function (which, ll) {   // «Маршрут отсюда» (пункт A) / «Маршрут сюда» (последний пункт) из меню карты
+                setPoint(which === 'from' ? 0 : pts.length - 1, ll, ll[0].toFixed(5) + ', ' + ll[1].toFixed(5), true);
+            },
             open: function () {
                 if (!pts[0].ll && !pts[0].q && window.userLoc) { pts[0] = { q: 'Моё местоположение', ll: [window.userLoc.lat, window.userLoc.lng] }; renderMarkers(); }
                 renderPoints(); say(pts.filter(function (p) { return p.ll; }).length >= 2 ? '' : HELP);
@@ -487,6 +491,24 @@
     if (route) route.addEventListener('click', function () {
         if (!RT) { if (typeof updateStatus === 'function') updateStatus('ℹ️ Карта ещё не загружена', true); return; }
         setView('route', 'Маршрут'); RT.open();
+    });
+    // ---- правый клик по карте: «Маршрут сюда» / «Маршрут отсюда» / «Сохранить закладку» ----
+    function ctxPt() { return (typeof contextMenuLatLng !== 'undefined' && contextMenuLatLng) ? [contextMenuLatLng.lat, contextMenuLatLng.lng] : null; }
+    function ctxRoute(which) {
+        var ll = ctxPt();
+        if (typeof hideMapContextMenu === 'function') hideMapContextMenu();
+        if (!ll) return;
+        if (!RT) { if (typeof updateStatus === 'function') updateStatus('ℹ️ Карта ещё не загружена', true); return; }
+        if (panel.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        setView('route', 'Маршрут'); RT.open(); RT.setEnd(which, ll);
+    }
+    var cTo = document.getElementById('ctxRouteTo'), cFrom = document.getElementById('ctxRouteFrom'), cBm = document.getElementById('ctxBookmark');
+    if (cTo) cTo.addEventListener('click', function () { ctxRoute('to'); });
+    if (cFrom) cFrom.addEventListener('click', function () { ctxRoute('from'); });
+    if (cBm) cBm.addEventListener('click', function () {
+        var ll = ctxPt();
+        if (typeof hideMapContextMenu === 'function') hideMapContextMenu();
+        if (ll && window.gcBookmarkAdd) window.gcBookmarkAdd(L.latLng(ll[0], ll[1]));
     });
     // ---- кнопка «Очистить» вверху слева на карте: убирает всё нарисованное и загруженное, замеры, маршрут, точку «Что здесь?» и результаты анализов ----
     var clearBtn = document.getElementById('mapClearBtn');
@@ -614,4 +636,135 @@
             if (shown) { clearTimeout(hideT); hideT = setTimeout(hide, Math.max(0, MIN_SHOW - (Date.now() - shownAt))); }
         }
     };
+})();
+
+/* ===== Закладки: хранятся в localStorage браузера (скриншот карты, название, описание) ===== */
+(function () {
+    var KEY = 'geoclass.bookmarks.v1';
+    var listEl = document.getElementById('bmList'), emptyEl = document.getElementById('bmEmpty'), cntEl = document.getElementById('bmCount');
+    if (!listEl || typeof L === 'undefined' || typeof map === 'undefined') return;
+    var items = [], pin = null;
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function load() { try { var a = JSON.parse(localStorage.getItem(KEY) || '[]'); items = Array.isArray(a) ? a : []; } catch (e) { items = []; } }
+    function save() {
+        try { localStorage.setItem(KEY, JSON.stringify(items)); }
+        catch (e) {   // не хватило места — сохраняем без скриншотов
+            try { localStorage.setItem(KEY, JSON.stringify(items.map(function (b) { var c = {}; for (var k in b) c[k] = b[k]; c.img = ''; return c; }))); } catch (e2) { /* хранилище недоступно */ }
+        }
+    }
+    function imgHtml(b) { return b.img && b.img.indexOf('data:image/') === 0 ? '<img src="' + b.img + '" alt="">' : '<i class="fas fa-map-location-dot"></i>'; }
+    function render() {
+        cntEl.textContent = items.length; emptyEl.hidden = items.length > 0;
+        listEl.innerHTML = items.map(function (b) {
+            return '<div class="bm-card" data-id="' + esc(b.id) + '"><div class="bm-img">' + imgHtml(b) + '</div>' +
+                '<input class="bm-name" maxlength="80" placeholder="Название" value="' + esc(b.name) + '">' +
+                '<div class="bm-xy">' + b.lat.toFixed(5) + '°, ' + b.lng.toFixed(5) + '°</div>' +
+                '<textarea class="bm-desc" rows="2" maxlength="500" placeholder="Описание">' + esc(b.desc) + '</textarea>' +
+                '<div class="bm-act"><button type="button" class="bm-go"><i class="fas fa-location-crosshairs"></i> На карте</button>' +
+                '<button type="button" class="bm-del"><i class="fas fa-trash"></i> Удалить</button></div></div>';
+        }).join('');
+    }
+    function patch(b) {   // обновление карточки без перерисовки списка (чтобы не сбивать ввод)
+        var card = listEl.querySelector('[data-id="' + b.id + '"]'); if (!card) return;
+        card.querySelector('.bm-img').innerHTML = imgHtml(b);
+        var inp = card.querySelector('.bm-name'); if (inp !== document.activeElement) inp.value = b.name;
+    }
+    function byId(el) { var c = el.closest('.bm-card'); if (!c) return null; var id = c.getAttribute('data-id'); return items.filter(function (b) { return b.id === id; })[0] || null; }
+    // миниатюра: мозаика тайлов OSM вокруг точки + булавка
+    function shot(ll) {
+        var W = 320, H = 180, z = Math.max(3, Math.min(17, Math.round(map.getZoom())));
+        var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        var ctx = cv.getContext('2d'); ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, 0, W, H);
+        var c = map.project(ll, z), x0 = c.x - W / 2, y0 = c.y - H / 2, n = Math.pow(2, z), jobs = [];
+        function tile(tx, ty) {
+            return new Promise(function (res) {
+                var im = new Image(); im.crossOrigin = 'anonymous';
+                im.onload = function () { ctx.drawImage(im, tx * 256 - x0, ty * 256 - y0); res(); };
+                im.onerror = function () { res(); };
+                im.src = 'https://tile.openstreetmap.org/' + z + '/' + (((tx % n) + n) % n) + '/' + ty + '.png';
+            });
+        }
+        for (var tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++)
+            for (var ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++) if (ty >= 0 && ty < n) jobs.push(tile(tx, ty));
+        var limit = new Promise(function (res) { setTimeout(res, 7000); });
+        return Promise.race([Promise.all(jobs), limit]).then(function () {
+            ctx.fillStyle = '#ef4444'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(W / 2, H / 2, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            try { return cv.toDataURL('image/jpeg', 0.72); } catch (e) { return ''; }
+        });
+    }
+    function openPane() {
+        var p = document.getElementById('mainPanel');
+        if (p && p.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        var t = document.querySelector('.panel-tab[data-tab="bookmarks"]'); if (t) t.click();
+        if (window.gcRailMark) window.gcRailMark('bookmarks');
+    }
+    window.gcBookmarkAdd = function (ll) {
+        var b = { id: 'b' + Date.now().toString(36), name: ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5), desc: '', lat: ll.lat, lng: ll.lng, zoom: Math.round(map.getZoom()), img: '', auto: true, ts: Date.now() };
+        items.unshift(b); save(); render(); openPane();
+        fetch('https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&accept-language=ru&lat=' + ll.lat + '&lon=' + ll.lng)
+            .then(function (r) { return r.json(); }).then(function (d) {
+                if (d && d.display_name && b.auto && items.indexOf(b) >= 0) { b.name = d.display_name.split(', ').slice(0, 2).join(', '); save(); patch(b); }
+            }).catch(function () { /* название останется координатами */ });
+        shot(ll).then(function (img) { if (items.indexOf(b) < 0) return; b.img = img; save(); patch(b); });
+        if (typeof updateStatus === 'function') updateStatus('🔖 Закладка сохранена');
+    };
+    function dropPin() { if (pin) { map.removeLayer(pin); pin = null; } }
+    listEl.addEventListener('input', function (e) {
+        var b = byId(e.target); if (!b) return;
+        if (e.target.classList.contains('bm-name')) { b.name = e.target.value; b.auto = false; }
+        else if (e.target.classList.contains('bm-desc')) b.desc = e.target.value;
+        save();
+    });
+    listEl.addEventListener('click', function (e) {
+        var go = e.target.closest('.bm-go'), del = e.target.closest('.bm-del');
+        if (!go && !del) return;
+        var b = byId(e.target); if (!b) return;
+        if (go) {
+            var ll = L.latLng(b.lat, b.lng); dropPin();
+            pin = L.marker(ll, { icon: L.divIcon({ html: '<i class="fas fa-bookmark bm-pin"></i>', className: 'custom-marker', iconSize: [22, 26], iconAnchor: [11, 24] }) }).addTo(map);
+            pin.bindTooltip(b.name || 'Закладка'); pin.on('click', dropPin);
+            map.flyTo(ll, Math.max(b.zoom || 15, 12), { duration: .6 });
+        } else {
+            items = items.filter(function (x) { return x !== b; }); save(); render(); dropPin();
+        }
+    });
+    load(); render();
+})();
+
+/* ===== Левое вертикальное меню: кнопки разделов показывают свои плитки в боковой панели; «Справка» — окно на всю карту ===== */
+(function () {
+    var rail = document.getElementById('gcRail'), panel = document.getElementById('mainPanel');
+    if (!rail || !panel) return;
+    var app = document.querySelector('#map-section .app-container'), helpWin = document.getElementById('gcHelpWin');
+    var groups = panel.querySelectorAll('.sp-group'), cur = 'analysis';
+    function mark(k) {
+        rail.querySelectorAll('.gc-rail-btn').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-rail') === k); });
+    }
+    function setHelp(on) { if (helpWin) helpWin.hidden = !on; mark(on ? 'help' : cur); }
+    window.gcRailMark = mark;
+    rail.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.gc-rail-btn');
+        if (!b) return;
+        var k = b.getAttribute('data-rail');
+        if (k === 'help') { setHelp(true); return; }
+        setHelp(false);
+        if (app && app.classList.contains('passport-open')) { var pc = document.getElementById('ppClose'); if (pc) pc.click(); }
+        if (panel.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        var bb = document.getElementById('spBackBtn');
+        if (panel.getAttribute('data-view') !== 'home' && bb) bb.click();   // закрыть открытый раздел или маршрут
+        if (k === 'bookmarks') { var t = document.querySelector('.panel-tab[data-tab="bookmarks"]'); if (t) t.click(); mark(k); return; }
+        cur = k;
+        groups.forEach(function (g) { g.classList.toggle('on', g.getAttribute('data-group') === k); });
+        mark(k);
+    });
+    // стрелка «назад» возвращает к плиткам последнего раздела
+    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#spBackBtn')) mark(cur); });
+    var hc = document.getElementById('gcHelpClose');
+    if (hc) hc.addEventListener('click', function () { setHelp(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && helpWin && !helpWin.hidden) setHelp(false); });
+    // плитки-заглушки
+    panel.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('.sp-stub') && typeof updateStatus === 'function') updateStatus('ℹ️ Раздел в разработке');
+    });
 })();

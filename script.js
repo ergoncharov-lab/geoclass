@@ -1119,12 +1119,38 @@ function snPvPump() {
 function snIdbPutBlob(k, blob) {
     snIdb().then(db => { if (db) try { db.transaction('tiles', 'readwrite').objectStore('tiles').put({ b: blob, t: Date.now() }, k); } catch (e) { } });
 }
+// превью в естественных цветах рисуется из готового 8-битного RGB-канала сцены (запасной вариант, если картинка-превью каталога не загрузилась)
+async function snPreviewRgb(sig, id) {
+    const item = await snItem(id), a = item.assets && item.assets.visual;
+    if (!a) throw new Error('в снимке нет канала visual');
+    const f = await snOpen(snHref(a.href));
+    let l = 0;
+    for (let i = 0; i < f.imgs.length; i++) if (f.imgs[i].w >= 300) l = i;
+    const Lv = f.imgs[l];
+    const d = await snRace(Lv.im.readRasters({ samples: [0, 1, 2], pool: snPool() }), 30000, 'превью: нет ответа от S3');
+    const w = Lv.w, h = Lv.h, cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h), out = img.data;
+    for (let i = 0, n = w * h; i < n; i++) {
+        const r = d[0][i], g = d[1][i], b = d[2][i];
+        if (!r && !g && !b) continue;
+        out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/webp', 0.9));
+    if (!blob) throw new Error('превью: не удалось сохранить изображение');
+    snIdbPutBlob(sig, blob);
+    const u = URL.createObjectURL(blob);
+    SN_PV.cache.set(sig, u);
+    return u;
+}
 async function snPreview(key, id) {
     const sig = 'pv|' + key + (key === 'ndvi_c' ? ':' + SENTINEL.contrast.min + '_' + SENTINEL.contrast.max : '') + '|' + id;
     const mem = SN_PV.cache.get(sig);
     if (mem) return mem;
     const stored = await snIdbGet(sig);
     if (stored) { const u = URL.createObjectURL(stored); SN_PV.cache.set(sig, u); return u; }
+    if (key === 'sentinel2') return snPreviewRgb(sig, id);
     const names = SN_ASSETS[key], idx = SN_INDEX[key], fc = key === 'falsecolor';
     const item = await snItem(id);
     const files = await Promise.all(names.map(nm => {
@@ -2219,10 +2245,17 @@ function snShpZip(feats, base) {
         cancelTool();
         setShape(layer);
         layer.on('edit', () => shapeChanged());
-        layer.on('click', () => { if (!tool && !editing && shape === layer) setEditing(true); });
-        setEditing(true);   // как в «Анализе участка»: сразу видны вершины, их можно тянуть, добавлять и удалять
+        bindShapeClick(layer);   // после рисования вершин нет — они появляются при повторном выборе фигуры (клик по ней)
         return true;
     };
+    let shapeClickT = 0;
+    function bindShapeClick(layer) {
+        layer.on('click', () => {
+            shapeClickT = Date.now();
+            if (!tool && !editing && shape === layer) { setEditing(true); updateStatus('✏️ Вершины включены: тяните их, серые точки на рёбрах добавляют вершину; клик по пустому месту карты — скрыть'); }
+        });
+    }
+    map.on('click', () => { if (Date.now() - shapeClickT < 120) return; if (editing && !tool) setEditing(false); });   // клик мимо фигуры — вершины скрываются
     function setShape(layer) {
         setEditing(false);
         if (layer !== shape) {
@@ -2392,23 +2425,43 @@ function snShpZip(feats, base) {
     // превью: для естественных цветов — готовый снимок-превью каталога; для индексов и ложных цветов — рисуется в нужном спектре
     function thumbHtml(scene, lay) {
         if (lay === 'sentinel2') {
-            return '<span class="sn-th">' + (scene.thumb ? `<img loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="${esc(thumbUrl(scene.thumb))}">` : '') + '<i class="fa-solid fa-image"></i></span>';
+            if (!scene.thumb) return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="sentinel2"><i class="fa-solid fa-image"></i></span>`;
+        return `<span class="sn-th" data-tid="${esc(scene.id)}"><img decoding="async" referrerpolicy="no-referrer" alt="" data-href="${esc(scene.thumb)}" src="${esc(thumbUrl(scene.thumb))}"><i class="fa-solid fa-image"></i></span>`;
         }
         return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="${lay}"><i class="fa-solid fa-image"></i></span>`;
     }
-    function hydratePv(el) {
+    function hydratePv(el, retry) {
         const id = el.dataset.pv, lay = el.dataset.lay;
         snPvLimit(() => el.isConnected ? snPreview(lay, id) : Promise.resolve(null)).then(url => {
             if (!url || !el.isConnected) return;
             const im = document.createElement('img');
             im.alt = ''; im.src = url;
             el.appendChild(im); el.classList.add('ok');
-        }).catch(e => { el.classList.add('err'); console.warn('Sentinel: превью', e); });
+        }).catch(e => {
+            console.warn('Sentinel: превью', e);
+            if (!retry && el.isConnected) { setTimeout(() => { if (el.isConnected) hydratePv(el, true); }, 2000); return; }   // одна повторная попытка
+            el.classList.add('err');
+        });
+    }
+    // картинка-превью каталога не загрузилась: пробуем прямой адрес и другие хосты S3, затем рисуем превью из снимка
+    function thumbFail(im) {
+        const sp = im.closest('.sn-th'), step = +(im.dataset.fs || 0), alts = snHosts(im.dataset.href || '');
+        im.dataset.fs = step + 1;
+        if (step < alts.length && sp) { if (im.src !== alts[step]) { im.src = alts[step]; return; } }
+        if (step + 1 < alts.length) { im.src = alts[step + 1]; im.dataset.fs = step + 2; return; }
+        if (!sp || sp.dataset.pv) return;
+        im.remove();
+        sp.dataset.pv = sp.dataset.tid; sp.dataset.lay = 'sentinel2';
+        hydratePv(sp);
     }
     const pvObs = window.IntersectionObserver
         ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { pvObs.unobserve(e.target); hydratePv(e.target); } }), { rootMargin: '150px' }) : null;
     function watchPv(root) {
         root.querySelectorAll('[data-pv]').forEach(el => pvObs ? pvObs.observe(el) : hydratePv(el));
+        root.querySelectorAll('img[data-href]').forEach(im => {
+            im.addEventListener('error', () => thumbFail(im));
+            if (im.complete && im.naturalWidth === 0 && im.getAttribute('src')) thumbFail(im);
+        });
     }
     function renderCards() {
         const el = q(sec, 'cards'), lay = layerOf(sec), st = SENTINEL.state[lay] || {}, max = +q(sec, 'cc').value;
@@ -2558,7 +2611,7 @@ function snShpZip(feats, base) {
             const name = SEC[sec].vars.find(v => v.l === base) ? SEC[sec].vars.find(v => v.l === base).t : SEC[sec].name;
             lastCalc = { res: res, date: st.date, name: name };
             renderCalc(res, st.date, name);
-            if (base === 'ndvi') { lastRaster = { r: r, date: st.date }; showProg(1, 'Зоны и аномалии…'); await buildZones(); buildAnoms(); }
+            if (base === 'ndvi') { lastRaster = { r: r, date: st.date }; showProg(1, 'Зоны и аномалии…'); await buildZones(); buildAnoms(); if (zoneRes) showTrueColor(); }
             updateStatus(`✅ ${name}: среднее ${f3(res.mean)}, площадь ${fHa(res.ha)} га`);
         } catch (e) {
             console.warn('Sentinel: калькулятор', e);
@@ -2653,6 +2706,19 @@ function snShpZip(feats, base) {
         applyRates();
         drawZones();
         renderZones();
+    }
+    // после расчёта зон подложка меняется на обычный (естественные цвета) снимок Sentinel той же даты — цвета зон не сливаются с цветами NDVI
+    function showTrueColor() {
+        const src = SENTINEL.state[layerOf('ndvi')];
+        if (!src || !src.date || !src.scenes) return;
+        const st = SENTINEL.state.sentinel2 || (SENTINEL.state.sentinel2 = {});
+        const same = st.date === src.date && st.scenes && st.scenes.map(s => s.id).join() === src.scenes.map(s => s.id).join();
+        st.date = src.date; st.scenes = src.scenes; st.scene = src.scene; st.cc = src.cc;
+        entering = true;
+        try { if (currentLayer !== 'sentinel2') switchLayer('sentinel2'); } finally { entering = false; }
+        if (!same) sentinelApply('sentinel2');
+        raiseOverlays();
+        updateStatus('🛰️ Подложка переключена на обычный снимок Sentinel-2 — зоны и точки хорошо видны. Выбор даты вернёт NDVI');
     }
     function buildAnoms() {
         const out = q('ndvi', 'anomOut');
@@ -2801,9 +2867,8 @@ function snShpZip(feats, base) {
             const g = gj.geometry;
             const poly = L.polygon(L.GeoJSON.coordsToLatLngs(g.coordinates, g.type === 'Polygon' ? 1 : 2), { color: '#ec4899', weight: 2, fillColor: '#ec4899', fillOpacity: 0.12 });
             poly.on('edit', () => shapeChanged());
-            poly.on('click', () => { if (!tool && !editing && shape === poly) setEditing(true); });
+            bindShapeClick(poly);
             setShape(poly);
-            setEditing(true);
         } else if (a === 'find') {
             delete stacCache[searchBBox() + '|' + month.getUTCFullYear() + '-' + month.getUTCMonth()];
             load(0);
@@ -7312,7 +7377,7 @@ function m3DefaultOpts() {
         roads: false, water: false, landcover: false, labels: false,
         sunAz: 210, sunAlt: 45, sunInt: 0.55,
         userObjects: true, extrude: false, extrudeH: 20,
-        trees: false, treeDens: 100
+        trees: false, treeDens: 100, power: false
     };
 }
 
@@ -7321,7 +7386,9 @@ const m3d = {
     items: [], nextId: 1, selected: null, placing: false, orbit: 0, marker: null,
     map2: null, ready2: false, baseIds2: [], unlink: null,   // второе 3D-окно (шторка / дублирование)
     lights: [], bingReg: false, opts: m3DefaultOpts(),
-    trees: { n: 0, timer: 0, retry: 0, origin: null, cosO: 1, trunk: null, crown: null, sun: null }
+    trees: { n: 0, timer: 0, retry: 0, origin: null, cosO: 1, trunk: null, crown: null, sun: null },
+    lab: { timer: 0, list: [], cache: null, scene: null, origin: null, gT: 0 },   // вертикальные 3D-подписи населённых пунктов
+    power: { timer: 0, rt: 0, seq: 0, lines: [], center: null, origin: null, n: 0, spans: 0, retry: 0, busy: false, failAt: 0, scene: null }   // ЛЭП из OSM
 };
 
 // [id элемента, ключ настройки, тип значения]
@@ -7333,7 +7400,7 @@ const M3_CONTROLS = [
     ['m3Roads', 'roads', 'bool'], ['m3Water', 'water', 'bool'], ['m3Land', 'landcover', 'bool'], ['m3Labels', 'labels', 'bool'],
     ['m3SunAz', 'sunAz', 'num'], ['m3SunAlt', 'sunAlt', 'num'], ['m3SunInt', 'sunInt', 'num'],
     ['m3User', 'userObjects', 'bool'], ['m3Extrude', 'extrude', 'bool'], ['m3ExtH', 'extrudeH', 'num'],
-    ['m3Trees', 'trees', 'bool'], ['m3TreeDens', 'treeDens', 'num']
+    ['m3Trees', 'trees', 'bool'], ['m3TreeDens', 'treeDens', 'num'], ['m3Power', 'power', 'bool']
 ];
 const M3_FMT = {
     m3Exag: v => '×' + (+v).toFixed(1), m3HillInt: v => Math.round(v * 100) + '%',
@@ -7596,7 +7663,7 @@ function m3ApplyTo(m, main) {
     m.setLayoutProperty('gc-roads', 'visibility', vis(o.roads));
     m.setLayoutProperty('gc-water', 'visibility', vis(o.water));
     m.setLayoutProperty('gc-landcover', 'visibility', vis(o.landcover));
-    m.setLayoutProperty('gc-labels', 'visibility', vis(o.labels));
+    m.setLayoutProperty('gc-labels', 'visibility', vis(o.labels && !(main && typeof THREE !== 'undefined')));   // в основном 3D-окне подписи — вертикальные, на three.js
     m.setLayoutProperty('gc-forest', 'visibility', vis(o.trees));
 
     if (main) {   // объекты пользователя, модели и деревья — только в основном (левом) 3D-окне
@@ -7607,6 +7674,8 @@ function m3ApplyTo(m, main) {
 
         m3UpdateLights();
         if (o.trees || m3d.trees.n) m3TreesSchedule();
+        m3LabSchedule();
+        if (o.power || m3d.power.n) m3PowerSchedule(true);
     }
     m.triggerRepaint();
 }
@@ -7780,6 +7849,290 @@ function m3AddTreesLayer(m) {
     });
 }
 
+// ---------- Подписи населённых пунктов: стоят на карте вертикально, как надпись Hollywood (three.js) ----------
+// Подпись — вертикальная плоскость в мире: поворачивается и наклоняется вместе с картой, читается со стороны камеры
+// (когда карту разворачивают «на юг», подпись переворачивается на 180°, чтобы не читалась зеркально).
+const M3_PLACE_Z = { city: 0, town: 6, village: 10, suburb: 11, hamlet: 12, isolated_dwelling: 14 };   // с какого масштаба показывать
+const M3_PLACE_PX = { city: 34, town: 26, village: 20, suburb: 16, hamlet: 15, isolated_dwelling: 12 };  // высота буквы при взгляде сверху, px
+
+function m3LabMake(name) {
+    const px = 64, pad = 14, f = '700 ' + px + 'px "Segoe UI", Arial, sans-serif';
+    const cv = document.createElement('canvas'), g = cv.getContext('2d');
+    g.font = f;
+    cv.width = Math.min(1024, Math.ceil(g.measureText(name).width) + pad * 2); cv.height = px + pad * 2;
+    g.font = f; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+    g.lineWidth = 12; g.strokeStyle = 'rgba(255,255,255,.95)'; g.strokeText(name, cv.width / 2, cv.height / 2 + 2, cv.width - pad);
+    g.fillStyle = '#0f172a'; g.fillText(name, cv.width / 2, cv.height / 2 + 2, cv.width - pad);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.encoding = THREE.sRGBEncoding; tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+    const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(Math.PI / 2); geo.translate(0, 0, 0.5);   // плоскость стоит вертикально, низ в z=0
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+    mesh.frustumCulled = false;
+    return { mesh: mesh, aspect: cv.width / cv.height };
+}
+
+function m3AddLabels3D(m) {
+    if (typeof THREE === 'undefined') return;
+    const S = m3d.lab;
+    S.cache = new Map(); S.list = []; S.origin = null; S.gT = 0;
+    m.addLayer({
+        id: 'gc-labels3d', type: 'custom', renderingMode: '3d',
+        onAdd: function (map, gl) {
+            this.map = map;
+            this.camera = new THREE.Camera();
+            this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            S.scene = new THREE.Scene();
+        },
+        render: function (gl, matrix) {
+            if (!m3d.opts.labels || !S.list.length || !S.origin) return;
+            const mp = this.map;
+            const mpp = 78271.517 * Math.cos(mp.getCenter().lat * m3Rad) / Math.pow(2, mp.getZoom());   // метров в пикселе
+            const flip = Math.cos(mp.getBearing() * m3Rad) < 0;
+            const now = performance.now(), upd = now - S.gT > 700;
+            if (upd) S.gT = now;
+            const useT = m3d.opts.terrain && typeof mp.queryTerrainElevation === 'function';
+            S.list.forEach(it => {
+                if (upd) { const e = useT ? mp.queryTerrainElevation([it.lng, it.lat]) : 0; it.g = e == null ? it.g : e; }
+                const h = it.px * mpp;
+                it.mesh.scale.set(h * it.aspect, 1, h);
+                it.mesh.position.z = it.g + h * 0.06;
+                it.mesh.rotation.z = flip ? Math.PI : 0;
+            });
+            const o = S.origin, s = o.meterInMercatorCoordinateUnits();
+            const l = new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).scale(new THREE.Vector3(s, -s, s));   // x — восток, y — север, z — вверх (м)
+            this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(S.scene, this.camera);
+        }
+    });
+}
+
+function m3LabSchedule() {
+    const S = m3d.lab;
+    clearTimeout(S.timer);
+    S.timer = setTimeout(m3LabBuild, 250);
+}
+
+function m3LabBuild() {
+    const S = m3d.lab, m = m3d.map;
+    if (!m || !S.scene) return;
+    S.list.forEach(it => S.scene.remove(it.mesh));
+    S.list = [];
+    if (!m3d.opts.labels) { m.triggerRepaint(); return; }
+    const z = m.getZoom(), c = m.getCenter();
+    let fs = [];
+    try { fs = m.querySourceFeatures('gc-osm', { sourceLayer: 'place' }); } catch (e) { /* тайлы ещё не загружены */ }
+    const seen = new Set(), found = [];
+    fs.forEach(f => {
+        const p = f.properties || {}, cls = p.class;
+        if (M3_PLACE_Z[cls] == null || z < M3_PLACE_Z[cls]) return;
+        const name = p['name:ru'] || p['name:latin'] || p.name;
+        if (!name || !f.geometry || f.geometry.type !== 'Point') return;
+        const lng = f.geometry.coordinates[0], lat = f.geometry.coordinates[1];
+        const key = name + '|' + cls + '|' + Math.round(lng * 200) + '|' + Math.round(lat * 200);
+        if (seen.has(key)) return;
+        seen.add(key);
+        found.push({ name: name, cls: cls, lng: lng, lat: lat, d: (lng - c.lng) * (lng - c.lng) + (lat - c.lat) * (lat - c.lat) });
+    });
+    found.sort((a, b) => a.d - b.d);
+    const o = S.origin = maplibregl.MercatorCoordinate.fromLngLat([c.lng, c.lat], 0), s = o.meterInMercatorCoordinateUnits();
+    found.slice(0, 140).forEach(f => {
+        let e = S.cache.get(f.name);
+        if (!e) { e = m3LabMake(f.name); S.cache.set(f.name, e); }
+        const mc = maplibregl.MercatorCoordinate.fromLngLat([f.lng, f.lat]);
+        e.mesh.position.set((mc.x - o.x) / s, (o.y - mc.y) / s, 0);
+        S.scene.add(e.mesh);
+        S.list.push({ mesh: e.mesh, aspect: e.aspect, px: M3_PLACE_PX[f.cls], lng: f.lng, lat: f.lat, g: 0 });
+    });
+    if (S.cache.size > 500) {   // чистим кэш текстур
+        const keep = new Set(S.list.map(it => it.mesh));
+        S.cache.forEach((e, k) => { if (!keep.has(e.mesh)) { e.mesh.material.map.dispose(); e.mesh.material.dispose(); e.mesh.geometry.dispose(); S.cache.delete(k); } });
+    }
+    S.gT = 0;
+    m.triggerRepaint();
+}
+
+// ---------- ЛЭП с проводами (данные OSM через Overpass, three.js): опоры, траверсы и провода с провисанием ----------
+const M3_OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+const M3_POWER_HINT = 'Опоры и провода ЛЭП из OSM (с масштаба z11.5; загружается область ≈ 11×11 км вокруг центра карты)';
+const M3_POWER_MINZ = 11.5, M3_POWER_MAXSPANS = 5000, M3_POWER_MAXT = 6000;
+
+function m3PowerInfo(t, warn) {
+    const el = m3El('m3PowerInfo');
+    if (!el) return;
+    el.textContent = t; el.style.color = warn ? '#dc2626' : '';
+}
+
+// Параметры линии по тегам OSM: высота опоры, расстояние между проводами, их расположение
+function m3PowerCfg(tags) {
+    const minor = tags.power === 'minor_line';
+    let kv = 0;
+    String(tags.voltage || '').split(';').forEach(v => { const x = parseFloat(v) / 1000; if (x > kv) kv = x; });
+    if (!kv) kv = minor ? 10 : 110;
+    let h, d;
+    if (minor || kv < 35) { h = minor ? 9 : 12; d = minor ? 1.1 : 1.6; }
+    else if (kv < 110) { h = 20; d = 3; }
+    else if (kv < 220) { h = 28; d = 4.5; }
+    else if (kv < 330) { h = 40; d = 6.5; }
+    else { h = 48; d = 8; }
+    const ht = parseFloat(tags.height);
+    if (ht > 3 && ht < 120) h = ht;
+    let circ = parseInt(tags.circuits, 10);
+    if (!(circ > 0)) circ = parseInt(tags.cables, 10) >= 6 ? 2 : 1;
+    circ = Math.min(circ, 2);
+    const wires = [], levels = [];
+    if (circ === 1) { levels.push(0.94); [-1, 0, 1].forEach(k => wires.push({ off: k * d, zf: 0.94 })); }
+    else [0.78, 0.87, 0.96].forEach(zf => { levels.push(zf); [-1, 1].forEach(sg => wires.push({ off: sg * d, zf: zf })); });
+    const ground = !minor && kv >= 110;   // грозозащитный трос поверх опоры
+    if (ground) wires.push({ off: 0, zf: 1.04 });
+    return { h: h, d: d, wires: wires, levels: levels, minor: minor, topF: ground ? 1.04 : 1 };
+}
+
+function m3AddPowerLayer(m) {
+    if (typeof THREE === 'undefined') return;
+    const P = m3d.power;
+    P.lines = []; P.center = null; P.origin = null; P.n = 0; P.spans = 0; P.retry = 0; P.busy = false; P.failAt = 0; P.seq++;
+    m.addLayer({
+        id: 'gc-power', type: 'custom', renderingMode: '3d',
+        onAdd: function (map, gl) {
+            this.camera = new THREE.Camera();
+            this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            const scene = new THREE.Scene();
+            const tg = new THREE.CylinderGeometry(0.32, 1, 1, 4);   // сужающаяся к верху опора: ось Z, основание в z=0
+            tg.rotateX(Math.PI / 2); tg.rotateZ(Math.PI / 4); tg.translate(0, 0, 0.5);
+            P.towers = new THREE.InstancedMesh(tg, new THREE.MeshBasicMaterial({ color: 0x8d99a6 }), M3_POWER_MAXT);
+            P.arms = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x5d6978 }), M3_POWER_MAXT * 3);
+            [P.towers, P.arms].forEach(x => { x.count = 0; x.frustumCulled = false; scene.add(x); });
+            P.wires = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x1f2937 }));
+            P.wires.frustumCulled = false; P.wires.visible = false; scene.add(P.wires);
+            P.scene = scene;
+        },
+        render: function (gl, matrix) {
+            if (!P.n || !P.origin || !m3d.opts.power) return;
+            const o = P.origin, s = o.meterInMercatorCoordinateUnits();
+            const l = new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).scale(new THREE.Vector3(s, -s, s));   // x — восток, y — север, z — вверх (м)
+            this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(P.scene, this.camera);
+        }
+    });
+}
+
+// Построение геометрии: высоты берутся из рельефа (если тайлы рельефа ещё не загружены — пересобираем позже)
+function m3PowerBuild() {
+    const P = m3d.power, m = m3d.map;
+    if (!m || !P.scene) return;
+    clearTimeout(P.rt);
+    const lines = m3d.opts.power ? P.lines : [];
+    if (!lines.length) { P.towers.count = 0; P.arms.count = 0; P.wires.visible = false; P.n = 0; m.triggerRepaint(); return; }
+    const c = P.center || m.getCenter();
+    const o = P.origin = maplibregl.MercatorCoordinate.fromLngLat([c.lng, c.lat], 0), s = o.meterInMercatorCoordinateUnits();
+    const useT = m3d.opts.terrain && typeof m.queryTerrainElevation === 'function';
+    const wp = [], M4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3(), zAx = new THREE.Vector3(0, 0, 1);
+    const put = (mesh, k, x, y, z, rot, sx, sy, sz) => { q.setFromAxisAngle(zAx, rot); M4.compose(pv.set(x, y, z), q, sv.set(sx, sy, sz)); mesh.setMatrixAt(k, M4); };
+    let miss = 0, nT = 0, nA = 0, spans = 0, over = false;
+    for (const ln of lines) {
+        if (over) break;
+        const cf = ln.cf, sup = [];
+        ln.pts.forEach((p, i) => {   // опоры — вершины линии, но не чаще чем раз в 30 м
+            const mc = maplibregl.MercatorCoordinate.fromLngLat([p[0], p[1]]);
+            const x = (mc.x - o.x) / s, y = (o.y - mc.y) / s, last = sup[sup.length - 1];
+            if (last && Math.hypot(x - last.x, y - last.y) < 30) { if (i < ln.pts.length - 1) return; sup.pop(); }
+            let g = 0;
+            if (useT) { const e = m.queryTerrainElevation([p[0], p[1]]); if (e == null) miss++; else g = e; }
+            sup.push({ x: x, y: y, g: g, tx: 1, ty: 0 });
+        });
+        if (sup.length < 2) continue;
+        sup.forEach((a, i) => {   // направление линии в опоре
+            const pr = sup[Math.max(i - 1, 0)], nx = sup[Math.min(i + 1, sup.length - 1)];
+            const dx = nx.x - pr.x, dy = nx.y - pr.y, len = Math.hypot(dx, dy) || 1;
+            a.tx = dx / len; a.ty = dy / len;
+            if (nT < M3_POWER_MAXT) { const w = cf.minor ? 0.22 : cf.h * 0.1; put(P.towers, nT++, a.x, a.y, a.g, 0, w, w, cf.h * cf.topF); }
+            cf.levels.forEach(zf => { if (nA < M3_POWER_MAXT * 3) put(P.arms, nA++, a.x, a.y, a.g + cf.h * zf, Math.atan2(a.ty, a.tx), 0.5, cf.d * 2.4, 0.4); });
+        });
+        for (let i = 0; i + 1 < sup.length; i++) {
+            if (spans >= M3_POWER_MAXSPANS) { over = true; break; }
+            spans++;
+            const a = sup[i], b = sup[i + 1], L = Math.hypot(b.x - a.x, b.y - a.y);
+            const sag = Math.min(L * 0.017, 25), N = Math.min(12, Math.max(3, Math.ceil(L / 20)));   // провисание ≈ 1.7% пролёта
+            cf.wires.forEach(w => {
+                const ax = a.x - a.ty * w.off, ay = a.y + a.tx * w.off, az = a.g + cf.h * w.zf;
+                const bx = b.x - b.ty * w.off, by = b.y + b.tx * w.off, bz = b.g + cf.h * w.zf;
+                let px = ax, py = ay, pz = az;
+                for (let k = 1; k <= N; k++) {
+                    const t = k / N, x = ax + (bx - ax) * t, y = ay + (by - ay) * t, z = az + (bz - az) * t - 4 * sag * t * (1 - t);
+                    wp.push(px, py, pz, x, y, z); px = x; py = y; pz = z;
+                }
+            });
+        }
+    }
+    P.towers.count = nT; P.towers.instanceMatrix.needsUpdate = true;
+    P.arms.count = nA; P.arms.instanceMatrix.needsUpdate = true;
+    P.wires.geometry.dispose();
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+    P.wires.geometry = g; P.wires.visible = wp.length > 0;
+    P.n = nT; P.spans = spans;
+    m3PowerInfo('ЛЭП: ' + lines.length + ' линий, ' + nT + ' опор, ' + spans + ' пролётов' + (over ? ' (показаны первые ' + M3_POWER_MAXSPANS + ')' : ''));
+    if (miss && P.retry < 4) { P.retry++; P.rt = setTimeout(m3PowerBuild, 900); }   // рельеф ещё грузится — ставим опоры на землю
+    m.triggerRepaint();
+}
+
+async function m3PowerFetch(c) {
+    const dLat = 0.05, dLng = 0.05 / Math.max(Math.cos(c.lat * m3Rad), 0.2);
+    const bb = [c.lat - dLat, c.lng - dLng, c.lat + dLat, c.lng + dLng].map(v => v.toFixed(5)).join(',');
+    const q = '[out:json][timeout:25][bbox:' + bb + '];(way["power"~"^(line|minor_line)$"];);out geom qt;';
+    let last = 'нет ответа';
+    for (const url of M3_OVERPASS) {
+        const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 30000);
+        try {
+            const r = await fetch(url + '?data=' + encodeURIComponent(q), { signal: ctl.signal });
+            if (!r.ok) { last = 'HTTP ' + r.status; continue; }
+            const j = await r.json(), els = j.elements || [];
+            if (j.remark && !els.length && /error|timed out|out of memory/i.test(j.remark)) { last = 'сервер перегружен'; continue; }
+            return els;
+        } catch (e) { last = e.name === 'AbortError' ? 'таймаут' : (e.message || 'ошибка сети'); }
+        finally { clearTimeout(tm); }
+    }
+    throw new Error(last);
+}
+
+function m3PowerSchedule(rebuild) {
+    const P = m3d.power;
+    clearTimeout(P.timer);
+    P.timer = setTimeout(() => m3PowerRun(rebuild), 400);
+}
+
+async function m3PowerRun(rebuild) {
+    const P = m3d.power, m = m3d.map;
+    if (!m || !P.scene) return;
+    if (!m3d.opts.power) { if (P.n) m3PowerBuild(); m3PowerInfo(M3_POWER_HINT); return; }
+    const c = m.getCenter(), k = Math.max(Math.cos(c.lat * m3Rad), 0.2);
+    const far = !P.center || Math.abs(c.lat - P.center.lat) > 0.028 || Math.abs(c.lng - P.center.lng) > 0.028 / k;
+    if (far && m.getZoom() < M3_POWER_MINZ) { if (!P.n) m3PowerInfo('Приблизьтесь: ЛЭП загружаются с масштаба z' + M3_POWER_MINZ); return; }
+    if (far && !P.busy && Date.now() > P.failAt) {
+        P.busy = true;
+        const seq = ++P.seq;
+        m3PowerInfo('Загрузка ЛЭП из OSM…');
+        try {
+            const els = await m3PowerFetch({ lat: c.lat, lng: c.lng });
+            if (seq !== P.seq || !m3d.opts.power || m3d.map !== m) return;
+            P.center = { lat: c.lat, lng: c.lng }; P.retry = 0;
+            P.lines = els.filter(e => e.type === 'way' && e.geometry && e.geometry.length > 1 && e.tags)
+                .map(e => ({ pts: e.geometry.map(g => [g.lon, g.lat]), cf: m3PowerCfg(e.tags) }));
+            m3PowerBuild();
+            if (!P.lines.length) m3PowerInfo('В этой области ЛЭП в OSM не найдены');
+        } catch (e) {
+            P.failAt = Date.now() + 20000;   // повторная попытка не раньше чем через 20 с
+            m3PowerInfo('Не удалось загрузить ЛЭП: ' + e.message + ' (повтор при следующем сдвиге карты)', true);
+        } finally { P.busy = false; }
+    } else if (rebuild && P.lines.length) { P.retry = 0; m3PowerBuild(); }
+}
+
 function m3TreesInfo(t) { const el = m3El('m3TreesInfo'); if (el) el.textContent = t; }
 
 function m3TreesSchedule(retry) {
@@ -7911,15 +8264,17 @@ function m3AddModel(obj, name) {
     const size = box.getSize(new THREE.Vector3());
     const ctr = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    obj.position.set(-ctr.x, -box.min.y, -ctr.z);   // центр по горизонтали, основание на «земле»
-    const pivot = new THREE.Group();
-    pivot.add(obj);
+    obj.position.set(-ctr.x, -box.min.y - size.y / 2, -ctr.z);   // центр по горизонтали; вращение (наклон / крен) идёт вокруг центра модели
+    const pivot = new THREE.Group(), tilt = new THREE.Group();
+    tilt.position.y = size.y / 2;   // основание модели лежит на «земле» (y = 0 группы pivot)
+    tilt.add(obj);
+    pivot.add(tilt);
     const scene = m3MakeScene();
     scene.add(pivot);
     const c = m3d.map.getCenter();
     const it = {
         id: m3d.nextId++, kind: 'model', name: name || 'Модель', lng: c.lng, lat: c.lat,
-        alt: 0, scale: (maxDim < 0.5 || maxDim > 500) ? 30 / maxDim : 1, heading: 0, visible: true, scene: scene, pivot: pivot
+        alt: 0, scale: (maxDim < 0.5 || maxDim > 500) ? 30 / maxDim : 1, heading: 0, pitch: 0, roll: 0, spin: 0, visible: true, scene: scene, pivot: pivot, tilt: tilt
     };
     m3d.items.push(it);
     m3Select(it.id);
@@ -8353,6 +8708,24 @@ function m3UpdateExtPaint(it) {
 }
 
 // ---------- Список импортированных объектов и «Выбранный объект» ----------
+// плавное вращение выбранных моделей вокруг вертикальной оси (ползунок «Вращение», °/с)
+let m3SpinRaf = 0, m3SpinT = 0;
+function m3SpinTick(t) {
+    m3SpinRaf = 0;
+    const list = m3d.items.filter(i => i.kind === 'model' && i.spin);
+    if (!list.length || !m3d.map) { m3SpinT = 0; return; }
+    const dt = m3SpinT ? Math.min(0.1, (t - m3SpinT) / 1000) : 0;
+    m3SpinT = t;
+    list.forEach(it => {
+        it.heading = ((it.heading + it.spin * dt + 180) % 360 + 360) % 360 - 180;
+        it.pivot.rotation.y = -it.heading * m3Rad;
+    });
+    const sel = m3Selected();
+    if (sel && sel.spin) { const h = document.getElementById('m3SelHeading'), hv = document.getElementById('m3SelHeadingVal'); if (h) h.value = sel.heading; if (hv) hv.textContent = Math.round(sel.heading) + '°'; }
+    m3d.map.triggerRepaint();
+    m3SpinRaf = requestAnimationFrame(m3SpinTick);
+}
+function m3SpinKick() { if (!m3SpinRaf) { m3SpinT = 0; m3SpinRaf = requestAnimationFrame(m3SpinTick); } }
 function m3Selected() { return m3d.items.find(i => i.id === m3d.selected) || null; }
 
 function m3RenderList() {
@@ -8375,7 +8748,7 @@ function m3SyncSelectedUI() {
     const it = m3Selected();
     const set = (id, fn) => { const el = m3El(id); if (el) fn(el); };
     set('m3SelBlock', el => el.classList.toggle('dw-dim', !it));
-    ['m3SelScale', 'm3SelHeading', 'm3SelAlt', 'm3SelColor', 'm3MoveBtn', 'm3DelBtn'].forEach(id => set(id, el => { el.disabled = !it; }));
+    ['m3SelScale', 'm3SelHeading', 'm3SelPitch', 'm3SelRoll', 'm3SelSpin', 'm3SelAlt', 'm3SelColor', 'm3MoveBtn', 'm3DelBtn'].forEach(id => set(id, el => { el.disabled = !it; }));
     set('m3SelName', el => { el.textContent = it ? it.name : 'не выбран'; });
     if (!it) return;
     const scale = it.kind === 'model' ? it.scale : it.hmul;
@@ -8383,6 +8756,12 @@ function m3SyncSelectedUI() {
     set('m3SelScaleVal', el => { el.textContent = '×' + (scale < 10 ? scale.toFixed(2) : scale.toFixed(1)); });
     set('m3SelHeading', el => { el.value = it.heading || 0; el.disabled = it.kind !== 'model'; });
     set('m3SelHeadingVal', el => { el.textContent = Math.round(it.heading || 0) + '°'; });
+    set('m3SelPitch', el => { el.value = it.pitch || 0; el.disabled = it.kind !== 'model'; });
+    set('m3SelPitchVal', el => { el.textContent = Math.round(it.pitch || 0) + '°'; });
+    set('m3SelRoll', el => { el.value = it.roll || 0; el.disabled = it.kind !== 'model'; });
+    set('m3SelRollVal', el => { el.textContent = Math.round(it.roll || 0) + '°'; });
+    set('m3SelSpin', el => { el.value = it.spin || 0; el.disabled = it.kind !== 'model'; });
+    set('m3SelSpinVal', el => { el.textContent = it.spin ? (it.spin > 0 ? '↻ ' : '↺ ') + Math.abs(Math.round(it.spin)) + '°/с' : 'выкл'; });
     set('m3SelAlt', el => { el.value = it.kind === 'model' ? it.alt : it.base; });
     set('m3SelAltVal', el => { el.textContent = Math.round(it.kind === 'model' ? it.alt : it.base) + ' м'; });
     set('m3SelColor', el => { el.value = it.color || '#f59e0b'; el.disabled = it.kind !== 'ext'; });
@@ -8640,6 +9019,8 @@ function m3Init() {
         m3AddUserLayers(m);
         m3AddModelLayer(m);
         m3AddTreesLayer(m);
+    m3AddLabels3D(m);
+    m3AddPowerLayer(m);
         m3Apply();
         m3RefreshUser();
         m3UpdateViewControls();
@@ -8648,6 +9029,8 @@ function m3Init() {
     m.on('moveend', () => { if (m3d.opts.trees) m3TreesSchedule(); });
     m.on('sourcedata', e => { if (e.sourceId === 'gc-osm' && m3d.opts.trees) m3TreesSchedule(); });   // подгрузились тайлы OSM
     m.on('move', m3UpdateViewControls);
+    m.on('moveend', () => { m3LabSchedule(); if (m3d.opts.power) m3PowerSchedule(); });
+    m.on('sourcedata', e => { if (e.sourceId === 'gc-osm' && m3d.opts.labels) m3LabSchedule(); });
     m.on('click', m3OnClick);
     m.on('mousedown', m3OnDown);
     m.on('touchstart', m3OnDown);
@@ -8828,6 +9211,33 @@ function m3BindUI() {
         it.heading = +this.value;
         it.pivot.rotation.y = -it.heading * m3Rad;
         m3El('m3SelHeadingVal').textContent = Math.round(it.heading) + '°';
+        m3d.map.triggerRepaint();
+    });
+    m3El('m3SelPitch').addEventListener('input', function () {
+        const it = m3Selected(); if (!it || it.kind !== 'model') return;
+        it.pitch = +this.value;
+        it.tilt.rotation.x = it.pitch * m3Rad;
+        m3El('m3SelPitchVal').textContent = Math.round(it.pitch) + '°';
+        m3d.map.triggerRepaint();
+    });
+    m3El('m3SelRoll').addEventListener('input', function () {
+        const it = m3Selected(); if (!it || it.kind !== 'model') return;
+        it.roll = +this.value;
+        it.tilt.rotation.z = it.roll * m3Rad;
+        m3El('m3SelRollVal').textContent = Math.round(it.roll) + '°';
+        m3d.map.triggerRepaint();
+    });
+    m3El('m3SelSpin').addEventListener('input', function () {
+        const it = m3Selected(); if (!it || it.kind !== 'model') return;
+        it.spin = +this.value;
+        m3El('m3SelSpinVal').textContent = it.spin ? (it.spin > 0 ? '↻ ' : '↺ ') + Math.abs(Math.round(it.spin)) + '°/с' : 'выкл';
+        m3SpinKick();
+    });
+    m3El('m3SelRotReset').addEventListener('click', () => {
+        const it = m3Selected(); if (!it || it.kind !== 'model') return;
+        it.heading = 0; it.pitch = 0; it.roll = 0; it.spin = 0;
+        it.pivot.rotation.y = 0; it.tilt.rotation.set(0, 0, 0);
+        m3SyncSelectedUI();
         m3d.map.triggerRepaint();
     });
     m3El('m3SelAlt').addEventListener('input', function () {
@@ -10836,7 +11246,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     map.createPane('weatherPane');
     map.getPane('weatherPane').style.zIndex = 250;
     map.getPane('weatherPane').style.pointerEvents = 'none';
-    let wxLayer = null, wxOpacity = 0.7, wxCur = 'off';
+    let wxLayer = null, wxOpacity = 0.7, wxCur = 'off', windOn = false;
     const keyGet = () => { try { return localStorage.getItem('owmKey') || ''; } catch (e) { return ''; } };
     const keySet = v => { try { localStorage.setItem('owmKey', v); } catch (e) {} };
     function askKey() {
@@ -10865,12 +11275,143 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             if (wxLayer) { wxLayer.addTo(map); wxCur = key; }
         }
         document.querySelectorAll('#weatherPanel [data-wx]').forEach(el => el.classList.toggle('active', el.dataset.wx === wxCur));
-        $('weatherBtn').classList.toggle('tool-on', wxCur !== 'off');
+        $('weatherBtn').classList.toggle('tool-on', wxCur !== 'off' || windOn);
     }
     $('weatherBtn').addEventListener('click', e => { e.stopPropagation(); togglePanel('weatherPanel', 'weatherBtn'); });
     document.querySelectorAll('#weatherPanel [data-wx]').forEach(el => el.addEventListener('click', e => { e.stopPropagation(); setWx(el.dataset.wx); }));
     $('wxKeyBtn').addEventListener('click', e => { e.stopPropagation(); if (askKey() && wxCur !== 'off' && wxCur !== 'rain') setWx(wxCur); });
     $('wxOpacity').addEventListener('input', function () { wxOpacity = this.value / 100; if (wxLayer) wxLayer.setOpacity(wxOpacity); });
+
+    // ---------- Анимированный ветер (частицы на карте) ----------
+    // Данные ветра — Open-Meteo (без ключа): сетка точек по видимой области, между ними — билинейная интерполяция.
+    // Частицы рисуются на canvas внутри панели карты, поэтому двигаются и вращаются вместе с картой.
+    const WIND = { cv: null, ctx: null, raf: 0, parts: [], grid: null, fz: 0, org: null, W: 0, H: 0, cell: 24, fu: null, fv: null, fw: 0, fh: 0, t: 0, ft: 0, timer: 0, tok: 0 };
+    const WIND_COLS = [[3, '#bfe3ff'], [6, '#7dd3fc'], [10, '#fde68a'], [15, '#fb923c'], [99, '#f87171']];
+    const windSample = (lat, lng) => {
+        const g = WIND.grid;
+        if (!g) return null;
+        const fx = Math.min(g.cols - 1, Math.max(0, (lng - g.w) / (g.e - g.w) * (g.cols - 1)));
+        const fy = Math.min(g.rows - 1, Math.max(0, (lat - g.s) / (g.n - g.s) * (g.rows - 1)));
+        const x0 = Math.min(g.cols - 2, Math.floor(fx)), y0 = Math.min(g.rows - 2, Math.floor(fy)), tx = fx - x0, ty = fy - y0;
+        const at = (a, x, y) => a[y * g.cols + x];
+        const b = a => (at(a, x0, y0) * (1 - tx) + at(a, x0 + 1, y0) * tx) * (1 - ty) + (at(a, x0, y0 + 1) * (1 - tx) + at(a, x0 + 1, y0 + 1) * tx) * ty;
+        return [b(g.u), b(g.v)];
+    };
+    function windLattice() {   // поле ветра в пикселях холста — чтобы частицы не пересчитывали координаты каждый кадр
+        if (!WIND.cv || !WIND.org || !WIND.grid) return;
+        const c = WIND.cell, fw = Math.ceil(WIND.W / c) + 1, fh = Math.ceil(WIND.H / c) + 1;
+        WIND.fw = fw; WIND.fh = fh; WIND.fu = new Float32Array(fw * fh); WIND.fv = new Float32Array(fw * fh);
+        for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) {
+            const ll = map.layerPointToLatLng(L.point(WIND.org.x + i * c, WIND.org.y + j * c)), s = windSample(ll.lat, ll.lng) || [0, 0];
+            WIND.fu[j * fw + i] = s[0]; WIND.fv[j * fw + i] = s[1];
+        }
+    }
+    function windAt(x, y) {
+        const c = WIND.cell, fx = Math.min(WIND.fw - 1.001, Math.max(0, x / c)), fy = Math.min(WIND.fh - 1.001, Math.max(0, y / c));
+        const i = Math.floor(fx), j = Math.floor(fy), tx = fx - i, ty = fy - j, w = WIND.fw;
+        const q = a => (a[j * w + i] * (1 - tx) + a[j * w + i + 1] * tx) * (1 - ty) + (a[(j + 1) * w + i] * (1 - tx) + a[(j + 1) * w + i + 1] * tx) * ty;
+        return [q(WIND.fu), q(WIND.fv)];
+    }
+    function windSeed(p) { p.x = Math.random() * WIND.W; p.y = Math.random() * WIND.H; p.age = Math.floor(Math.random() * 90); p.px = p.x; p.py = p.y; }
+    function windPlace() {   // холст покрывает всю видимую область (с запасом на поворот карты)
+        if (!WIND.cv) return;
+        const sz = map.getSize(), d = Math.ceil(Math.hypot(sz.x, sz.y)) + 40, ctr = map.latLngToLayerPoint(map.getCenter());
+        WIND.org = L.point(Math.round(ctr.x - d / 2), Math.round(ctr.y - d / 2));
+        if (WIND.W !== d || WIND.H !== d) { WIND.cv.width = d; WIND.cv.height = d; WIND.W = d; WIND.H = d; }
+        L.DomUtil.setPosition(WIND.cv, WIND.org);
+        WIND.ctx.clearRect(0, 0, d, d);
+        const n = Math.max(350, Math.min(1800, Math.round(sz.x * sz.y / 1000)));
+        while (WIND.parts.length < n) WIND.parts.push({});
+        WIND.parts.length = n;
+        WIND.parts.forEach(windSeed);
+        windLattice();
+    }
+    async function windLoad(force) {
+        const z = map.getZoom(), b = map.getBounds(), g = WIND.grid;
+        if (!force && g && b.getSouth() >= g.s && b.getNorth() <= g.n && b.getWest() >= g.w && b.getEast() <= g.e && Math.abs(z - WIND.fz) < 2 && Date.now() - WIND.ft < 30 * 60 * 1000) return;
+        const tok = ++WIND.tok, pb = b.pad(0.3), cols = 7, rows = 5;
+        const s = Math.max(-85, pb.getSouth()), n = Math.min(85, pb.getNorth()), w = pb.getWest(), e = pb.getEast(), lats = [], lngs = [];
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+            lats.push((s + (n - s) * r / (rows - 1)).toFixed(3));
+            lngs.push((w + (e - w) * c / (cols - 1)).toFixed(3));
+        }
+        try {
+            const resp = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lats.join(',') + '&longitude=' + lngs.join(',') + '&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=UTC');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const j = await resp.json(), arr = Array.isArray(j) ? j : [j];
+            if (tok !== WIND.tok || !windOn) return;
+            const u = new Float32Array(cols * rows), v = new Float32Array(cols * rows);
+            arr.forEach((o, i) => {
+                const c = o && o.current, sp = c ? +c.wind_speed_10m : 0, dr = c ? +c.wind_direction_10m * Math.PI / 180 : 0;   // направление — откуда дует ветер
+                u[i] = -sp * Math.sin(dr) || 0; v[i] = -sp * Math.cos(dr) || 0;
+            });
+            WIND.grid = { s: s, n: n, w: w, e: e, cols: cols, rows: rows, u: u, v: v };
+            WIND.fz = z; WIND.ft = Date.now();
+            windLattice();
+        } catch (err) {
+            console.warn('Ветер:', err);
+            if (typeof updateStatus === 'function') updateStatus('⚠️ Не удалось загрузить данные ветра (Open-Meteo): ' + (err.message || err), true);
+        }
+    }
+    function windFrame(now) {
+        WIND.raf = 0;
+        if (!windOn || !WIND.cv) return;
+        WIND.raf = requestAnimationFrame(windFrame);
+        if (!WIND.fu || WIND.cv.style.display === 'none') { WIND.t = now; return; }
+        const dt = Math.min(3, Math.max(0.2, (now - (WIND.t || now)) / 16.7)); WIND.t = now;
+        const ctx = WIND.ctx, W = WIND.W, H = WIND.H;
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.5, 0.075 * dt).toFixed(3) + ')';
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+        const bk = WIND_COLS.map(() => []);
+        WIND.parts.forEach(p => {
+            const w = windAt(p.x, p.y), sp = Math.hypot(w[0], w[1]);
+            p.px = p.x; p.py = p.y;
+            p.x += w[0] * 0.42 * dt; p.y -= w[1] * 0.42 * dt;   // север — вверх по экрану
+            p.age += dt;
+            if (p.age > 110 || p.x < 0 || p.y < 0 || p.x > W || p.y > H || sp < 0.05) { if (p.age > 110 || p.x < 0 || p.y < 0 || p.x > W || p.y > H) windSeed(p), p.age = 0; return; }
+            let k = 0; while (WIND_COLS[k][0] < sp) k++;
+            bk[k].push(p);
+        });
+        bk.forEach((l, k) => {
+            if (!l.length) return;
+            ctx.strokeStyle = WIND_COLS[k][1]; ctx.globalAlpha = 0.9; ctx.beginPath();
+            l.forEach(p => { ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); });
+            ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+    }
+    const windOnMove = () => { if (!windOn) return; windPlace(); windLoad(false); };
+    const windHide = () => { if (WIND.cv) WIND.cv.style.display = 'none'; };
+    const windShow = () => { if (WIND.cv) { WIND.cv.style.display = ''; windOnMove(); } };
+    function windStart() {
+        if (WIND.cv) return;
+        const cv = document.createElement('canvas');
+        cv.className = 'wx-wind'; cv.style.pointerEvents = 'none';
+        map.getPane('weatherPane').appendChild(cv);
+        WIND.cv = cv; WIND.ctx = cv.getContext('2d'); WIND.W = WIND.H = 0; WIND.t = 0;
+        map.on('moveend', windOnMove).on('resize', windOnMove).on('zoomstart', windHide).on('zoomend', windShow);
+        WIND.timer = setInterval(() => windLoad(true), 30 * 60 * 1000);
+        windPlace();
+        windLoad(true);
+        WIND.raf = requestAnimationFrame(windFrame);
+    }
+    function windStop() {
+        windOn = false;
+        if (WIND.raf) cancelAnimationFrame(WIND.raf);
+        WIND.raf = 0; clearInterval(WIND.timer); WIND.tok++;
+        map.off('moveend', windOnMove).off('resize', windOnMove).off('zoomstart', windHide).off('zoomend', windShow);
+        if (WIND.cv && WIND.cv.parentNode) WIND.cv.parentNode.removeChild(WIND.cv);
+        WIND.cv = WIND.ctx = null; WIND.grid = null; WIND.fu = WIND.fv = null; WIND.parts = [];
+    }
+    $('wxWindAnim').addEventListener('change', function () {
+        windOn = this.checked;
+        if (windOn) windStart(); else windStop();
+        $('weatherBtn').classList.toggle('tool-on', wxCur !== 'off' || windOn);
+        if (typeof updateStatus === 'function') updateStatus(windOn ? '🌬️ Анимированный ветер включён (Open-Meteo, 10 м над землёй)' : '🌬️ Анимированный ветер выключен');
+    });
 
     // ---------- Анализ в экстенте ----------
     const st = { days: null, busy: false, timer: null };
