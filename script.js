@@ -1717,6 +1717,191 @@ function gcVx(layer, opts) {
 }
 
 // ============================================================
+//  ОБЩИЙ НАБОР ДЛЯ ВСЕХ ФИГУР НА КАРТЕ (рисование · анализ NDVI · профиль/гипсометрия · логистика)
+//  gcShape(layer, opts)  — выбор кликом → вершины (gcVx), перемещение перетаскиванием выбранной фигуры, меню правой кнопки
+//  gcShapeIO[имя]        — {get, put, name}: кнопки [data-gc-io="import|export" data-gc-for="имя"] работают у всех одинаково
+//  gcImport / gcExport   — импорт KML · GeoJSON · Excel · XML Росреестра, экспорт KML · GeoJSON
+// ============================================================
+const GC_SHAPES = new Set(), gcShapeIO = {};
+let gcSel = null, gcCtxEl = null, gcDrawing = false;
+const gcFC = fs => ({ type: 'FeatureCollection', features: fs });
+function gcLayerGJ(l) {
+    try {
+        if (l instanceof L.Circle) { const c = l.getLatLng(); return turf.circle([c.lng, c.lat], l.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
+        const g = l.toGeoJSON();
+        return g.type === 'FeatureCollection' ? g.features[0] : g;
+    } catch (e) { return null; }
+}
+function gcSave(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+function gcExport(fc, base, fmt) {
+    const fs = fc.features.filter(f => f && f.geometry);
+    if (!fs.length) { updateStatus('⚠️ Нет фигур для экспорта', true); return; }
+    if (fmt === 'kml') gcSave(new Blob([geojsonToKml(gcFC(fs))], { type: 'application/vnd.google-earth.kml+xml' }), base + '.kml');
+    else gcSave(new Blob([JSON.stringify(gcFC(fs), null, 2)], { type: 'application/geo+json' }), base + '.geojson');
+    updateStatus('💾 Экспортировано: ' + base + '.' + fmt);
+}
+function gcImport(cb) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.kml,.geojson,.json,.xlsx,.xls,.xml';
+    inp.addEventListener('change', () => {
+        const file = inp.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase(), rd = new FileReader();
+        rd.onload = () => {
+            try {
+                let gj;
+                if (ext === 'kml') gj = toGeoJSON.kml(new DOMParser().parseFromString(rd.result, 'text/xml'));
+                else if (ext === 'geojson' || ext === 'json') gj = JSON.parse(rd.result);
+                else if (ext === 'xml') gj = rrXmlToGeoJSON(rrDecodeXml(rd.result)).geojson;
+                else if (ext === 'xlsx' || ext === 'xls') {
+                    const wb = XLSX.read(rd.result, { type: 'array' }), rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]), pts = [];
+                    rows.forEach(r => {
+                        const x = parseFloat(r['X'] || r['Долгота'] || Object.values(r)[0]), y = parseFloat(r['Y'] || r['Широта'] || Object.values(r)[1]);
+                        if (!isNaN(x) && !isNaN(y)) pts.push([x, y]);
+                    });
+                    if (!pts.length) throw new Error('не найдены координаты в Excel');
+                    gj = { type: 'Feature', properties: { name: 'Из Excel' }, geometry: { type: 'Polygon', coordinates: [pts] } };
+                } else throw new Error('неподдерживаемый формат');
+                const fs = (gj.type === 'FeatureCollection' ? gj.features : gj.type === 'Feature' ? [gj] : [{ type: 'Feature', properties: {}, geometry: gj }])
+                    .filter(f => f && f.geometry && /Polygon|LineString|Point/.test(f.geometry.type));
+                if (!fs.length) throw new Error('в файле нет фигур');
+                cb(gcFC(fs), file);
+            } catch (e) { updateStatus('⚠️ Импорт: ' + e.message, true); }
+        };
+        if (/^(xlsx|xls|xml)$/.test(ext)) rd.readAsArrayBuffer(file); else rd.readAsText(file);
+    });
+    inp.click();
+}
+// маленькое меню (правая кнопка по фигуре, выбор формата экспорта)
+function gcMenuHide() { if (gcCtxEl) { gcCtxEl.remove(); gcCtxEl = null; } }
+function gcMenu(x, y, items) {
+    gcMenuHide();
+    const el = gcCtxEl = document.createElement('div');
+    el.className = 'sk-ctx sk-menu';
+    el.style.cssText = 'position:fixed;display:flex;z-index:5000';
+    items.forEach(a => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'sk-act' + (a.danger ? ' danger' : '');
+        b.innerHTML = '<i class="fas fa-' + a.icon + '"></i><span>' + a.label + '</span>';
+        b.addEventListener('click', ev => { ev.stopPropagation(); gcMenuHide(); a.fn(); });
+        el.appendChild(b);
+    });
+    ['mousedown', 'wheel', 'contextmenu'].forEach(t => el.addEventListener(t, ev => { ev.stopPropagation(); if (t === 'contextmenu') ev.preventDefault(); }));
+    document.body.appendChild(el);
+    el.style.left = Math.max(6, Math.min(x, innerWidth - el.offsetWidth - 6)) + 'px';
+    el.style.top = Math.max(6, Math.min(y, innerHeight - el.offsetHeight - 6)) + 'px';
+}
+document.addEventListener('mousedown', e => { if (gcCtxEl && !gcCtxEl.contains(e.target)) gcMenuHide(); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') gcMenuHide(); });
+map.on('movestart zoomstart', gcMenuHide);
+map.on('draw:drawstart', () => { gcDrawing = true; gcDeselect(); });
+map.on('draw:drawstop', () => { gcDrawing = false; });
+map.on('click', () => gcDeselect());
+document.addEventListener('click', ev => {
+    const b = ev.target.closest && ev.target.closest('[data-gc-io]');
+    if (!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    const io = gcShapeIO[b.dataset.gcFor];
+    if (!io) return;
+    if (b.dataset.gcIo === 'import') { gcImport((fc, f) => io.put(fc, f)); return; }
+    const fc = io.get();
+    if (!fc || !fc.features.length) { updateStatus('⚠️ Нет фигур для экспорта', true); return; }
+    const r = b.getBoundingClientRect(), nm = io.name || 'geoclass';
+    gcMenu(r.left, r.bottom + 4, [
+        { icon: 'earth-europe', label: 'KML (Google Earth)', fn: () => gcExport(fc, nm, 'kml') },
+        { icon: 'file-code', label: 'GeoJSON', fn: () => gcExport(fc, nm, 'geojson') }
+    ]);
+}, true);
+
+// копия фигуры в виджет «Рисование»
+function gcCopyToSketch(l) {
+    if (typeof skBuildLayer !== 'function') return;
+    const o = { id: ++sketchState.seq, style: sketchStyle };
+    if (l instanceof L.Circle) { const c = l.getLatLng(); o.kind = 'circle'; o.ll = [c.lat, c.lng]; o.r = l.getRadius(); }
+    else if (l instanceof L.Rectangle) { const b = l.getBounds(); o.kind = 'rectangle'; o.b = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]]; }
+    else if (l instanceof L.Polygon) { o.kind = 'polygon'; o.pts = skLatLngsToArr(l.getLatLngs()); }
+    else if (l instanceof L.Polyline) { o.kind = 'line'; o.pts = skLatLngsToArr(l.getLatLngs()); }
+    else return;
+    o.name = skNextName(o.kind);
+    const c = skBuildLayer(o);
+    if (!c) return;
+    skRegister(c); skCommit(); skRenderList();
+    updateStatus('📑 Копия добавлена в «Рисование»');
+}
+
+// выбор / вершины / перемещение / меню
+const gcLL = a => Array.isArray(a) ? a.map(gcLL) : L.latLng(a.lat, a.lng);
+const gcSh = (a, d, z) => Array.isArray(a) ? a.map(x => gcSh(x, d, z)) : map.unproject(map.project(a, z).add(d), z);
+function gcSnap(l) { return l instanceof L.Circle ? { c: l.getLatLng() } : l instanceof L.Rectangle ? { b: l.getBounds() } : { p: gcLL(l.getLatLngs()) }; }
+function gcApplyShift(l, o, d, z) {
+    if (o.c) l.setLatLng(gcSh(o.c, d, z));
+    else if (o.b) l.setBounds(L.latLngBounds(gcSh(o.b.getSouthWest(), d, z), gcSh(o.b.getNorthEast(), d, z)));
+    else l.setLatLngs(gcSh(o.p, d, z));
+}
+function gcVxOn(l) {
+    const st = l._gc;
+    st.vx = gcVx(l, { onChange: (x, fin) => { if (st.o.onChange) st.o.onChange(x, fin); } });
+}
+function gcDeselect() {
+    if (gcSel && gcSel._gc && gcSel._gc.vx) { gcSel._gc.vx.destroy(); gcSel._gc.vx = null; }
+    gcSel = null;
+}
+function gcSelect(l) {
+    if (gcSel === l || !l || !l._gc) return;
+    gcDeselect();
+    gcSel = l;
+    gcVxOn(l);
+}
+function gcShapeFromTarget(t) {
+    if (!t || !t.nodeType) return null;
+    for (const l of GC_SHAPES) if (l._path && map.hasLayer(l) && l._path.contains(t)) return l;
+    return null;
+}
+function gcShapeMenu(ev, l) {
+    const o = l._gc.o, nm = o.name || 'geoclass', gj = () => gcFC([gcLayerGJ(l)].filter(Boolean));
+    const items = [
+        { icon: 'clone', label: 'Копировать', fn: () => gcCopyToSketch(l) },
+        { icon: 'earth-europe', label: 'Экспорт KML', fn: () => gcExport(gj(), nm, 'kml') },
+        { icon: 'file-code', label: 'Экспорт GeoJSON', fn: () => gcExport(gj(), nm, 'geojson') }
+    ].concat(o.actions || []);
+    if (o.onDelete) items.push({ icon: 'trash', label: 'Удалить', danger: true, fn: () => o.onDelete(l) });
+    gcMenu(ev.clientX + 2, ev.clientY + 2, items);
+}
+function gcShape(layer, o) {
+    if (!layer || !(layer instanceof L.Path) || (layer instanceof L.CircleMarker && !(layer instanceof L.Circle))) return layer;
+    if (layer._gc) { if (o) layer._gc.o = o; return layer; }
+    const st = layer._gc = { o: o || {}, vx: null };
+    GC_SHAPES.add(layer);
+    layer.options.bubblingMouseEvents = false;   // клик по фигуре не доходит до карты
+    layer.on('click', () => { if (!gcDrawing) gcSelect(layer); });
+    layer.on('remove', () => { if (gcSel === layer) gcDeselect(); });
+    layer.on('mousedown', ev => {
+        if (gcSel !== layer || gcDrawing || (ev.originalEvent && ev.originalEvent.button !== 0)) return;
+        const z = map.getZoom(), snap = gcSnap(layer), start = ev.latlng;
+        let moved = false;
+        if (st.vx) { st.vx.destroy(); st.vx = null; }
+        map.dragging.disable();
+        const mv = e => {
+            gcApplyShift(layer, snap, map.project(e.latlng, z).subtract(map.project(start, z)), z);
+            moved = true;
+            if (st.o.onChange) st.o.onChange(layer, false);
+        };
+        map.on('mousemove', mv);
+        document.addEventListener('mouseup', () => {
+            map.off('mousemove', mv); map.dragging.enable();
+            if (gcSel === layer && map.hasLayer(layer)) gcVxOn(layer);
+            if (moved && st.o.onChange) st.o.onChange(layer, true);
+        }, { once: true });
+    });
+    return layer;
+}
+
+// ============================================================
 //  ЗОНЫ ДЛЯ ДИФФЕРЕНЦИРОВАННОГО ВНЕСЕНИЯ УДОБРЕНИЙ И АНОМАЛЬНЫЕ ТОЧКИ NDVI
 //  Исходные данные — растр NDVI внутри фигуры (10 м), см. snExportGeoTiff({ raw: true }).
 // ============================================================
@@ -2170,12 +2355,14 @@ function snShpZip(feats, base) {
             '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div><div class="sn-leg" data-sn="leg"></div></div>' +
             '<div class="dw-block sn-tools"><div class="dw-title">Область на карте</div>' +
             '<div class="an-draw">' +
-            '<button type="button" class="map-btn" data-sn-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-tool="polygon" title="Полигон"><i class="gc-pent"></i></button>' +
             '<button type="button" class="map-btn" data-sn-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i></button>' +
             '<button type="button" class="map-btn" data-sn-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i></button>' +
             '<button type="button" class="map-btn" data-sn-act="edit" title="Редактировать фигуру"><i class="fas fa-edit"></i></button>' +
             '<button type="button" class="map-btn" data-sn-act="sel" title="Взять фигуру, выбранную на карте (из «Анализа участка» или «Рисования»)"><i class="fas fa-hand-pointer"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button></div>' +
+            '<button type="button" class="map-btn" data-sn-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="sn" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="sn" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
             '<div class="an-hint" data-sn="shapeInfo"></div></div>' +
             '<div class="dw-block sn-calblock"><div class="dw-title">Дата съёмки</div>' + vars +
             '<div class="sn-month"><button type="button" class="sn-nav" data-sn-nav="-1" title="Предыдущий месяц"><i class="fa-solid fa-chevron-left"></i></button>' +
@@ -2220,9 +2407,8 @@ function snShpZip(feats, base) {
     }
     window.snCancelTool = cancelTool;
     function setEditing(on) {
-        if (vx) { vx.destroy(); vx = null; }
         editing = !!(on && shape);
-        if (editing) vx = gcVx(shape, { onChange: (l, fin) => { if (fin) shapeChanged(); else { shapeGJ = layerToGJ(l); renderShapeInfo(); } } });
+        if (editing) gcSelect(shape); else if (shape && shape === gcSel) gcDeselect();
         markTool();
     }
     function startTool(t) {
@@ -2248,19 +2434,16 @@ function snShpZip(feats, base) {
         bindShapeClick(layer);   // после рисования вершин нет — они появляются при повторном выборе фигуры (клик по ней)
         return true;
     };
-    let shapeClickT = 0;
-    function bindShapeClick(layer) {
-        layer.on('click', () => {
-            shapeClickT = Date.now();
-            if (!tool && !editing && shape === layer) { setEditing(true); updateStatus('✏️ Вершины включены: тяните их, серые точки на рёбрах добавляют вершину; клик по пустому месту карты — скрыть'); }
-        });
-    }
-    map.on('click', () => { if (Date.now() - shapeClickT < 120) return; if (editing && !tool) setEditing(false); });   // клик мимо фигуры — вершины скрываются
+    function bindShapeClick() { }   // выбор, вершины, перемещение и меню — общий gcShape (см. setShape)
+    map.on('click', () => { if (editing && !tool) { editing = false; markTool(); } });
     function setShape(layer) {
         setEditing(false);
         if (layer !== shape) {
             grp.clearLayers(); shape = null;
-            if (layer) { grp.addLayer(layer); shape = layer; }
+            if (layer) {
+                grp.addLayer(layer); shape = layer;
+                gcShape(layer, { name: 'oblast', onChange: (l, fin) => { if (fin) shapeChanged(); else { shapeGJ = layerToGJ(l); renderShapeInfo(); } }, onDelete: () => act('del') });
+            }
         }
         shapeChanged();
     }
@@ -2271,6 +2454,17 @@ function snShpZip(feats, base) {
         clearTimeout(shapeTimer);
         shapeTimer = setTimeout(() => { if (sec) load(0); }, 500);   // список дат — для новой области
     }
+    gcShapeIO.sn = {
+        name: 'oblast',
+        get: () => gcFC(shapeGJ ? [shapeGJ] : []),
+        put: fc => {
+            const f = fc.features.find(x => /Polygon/.test(x.geometry.type));
+            if (!f) { updateStatus('⚠️ В файле нет полигона', true); return; }
+            cancelTool();
+            const l = L.geoJSON(f, { style: { color: '#ec4899', weight: 2, fillColor: '#ec4899', fillOpacity: 0.12 } }).getLayers()[0];
+            setShape(l); map.fitBounds(l.getBounds());
+        }
+    };
     // оценка размера выгрузки при 10 м (в UTM будет чуть иначе)
     function estimate() {
         if (!shapeGJ) return null;
@@ -4685,6 +4879,15 @@ document.getElementById('vectorFileInput').addEventListener('change', function(e
     this.value = '';
 });
 
+gcShapeIO.an = {
+    name: 'uchastok',
+    get: () => {
+        const fs = [];
+        drawnItems.eachLayer(l => (l.getLayers ? l.getLayers() : [l]).forEach(s => { const f = gcLayerGJ(s); if (f) fs.push(f); }));
+        return gcFC(fs);
+    }
+};
+
 function geojsonToKml(geojson) {
     let kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -5005,6 +5208,11 @@ window.addEventListener('mouseup', function(e) {
     rotateGesture = null;
     if (gesture.moved) {
         updateStatus(`🧭 Азимут карты: ${Math.round(getBearing())}°`);
+        return;
+    }
+    const gcHit = typeof gcShapeFromTarget === 'function' ? gcShapeFromTarget(e.target) : null;
+    if (gcHit && !(typeof m3d !== 'undefined' && m3d.active)) {   // правая кнопка на фигуре «Профиля», «Логистики», NDVI — то же меню действий
+        hideMapContextMenu(); gcSelect(gcHit); gcShapeMenu(e, gcHit);
         return;
     }
     const skHit = typeof skLayerFromTarget === 'function' ? skLayerFromTarget(e.target) : null;
@@ -6323,7 +6531,7 @@ const SK_KIND_NAMES = {
 };
 const SK_KIND_ICONS = {
     point: 'fas fa-circle-dot', icon: 'fas fa-location-dot', text: 'fas fa-font', line: 'fas fa-route',
-    polygon: 'fas fa-draw-polygon', rectangle: 'fas fa-vector-square', circle: 'far fa-circle'
+    polygon: 'gc-pent', rectangle: 'fas fa-vector-square', circle: 'far fa-circle'
 };
 const SK_TOOL_HINTS = {
     icon: 'Значок: кликните на карте, чтобы поставить',
@@ -6779,12 +6987,12 @@ function skLayerFromTarget(t) {
 function skActions(l) {
     const k = l._sk.kind, mode = sketchState.mode, acts = [];
     const isLine = k === 'line', isArea = k === 'polygon' || k === 'rectangle' || k === 'circle';
-    acts.push({ id: 'move', icon: 'up-down-left-right', label: 'Двигать', on: mode === 'move', keep: true, fn: () => skSetMode(mode === 'move' ? 'select' : 'move') });
     if (!skIsMarker(k) && k !== 'point') acts.push({ id: 'edit', icon: 'pen-to-square', label: 'Править вершины', on: mode === 'edit', keep: true, fn: () => skSetMode(mode === 'edit' ? 'select' : 'edit') });
-    acts.push({ id: 'dup', icon: 'clone', label: 'Копия', fn: skDuplicate });
+    acts.push({ id: 'dup', icon: 'clone', label: 'Копировать', fn: skDuplicate });
+    if (!skIsMarker(k) && k !== 'point') acts.push({ id: 'kml', icon: 'earth-europe', label: 'Экспорт KML', fn: () => gcExport(gcFC([gcLayerGJ(l)].filter(Boolean)), l._sk.name, 'kml') });
     acts.push({ id: 'front', icon: 'arrow-up', label: 'На передний план', fn: () => skReorder(true) });
     acts.push({ id: 'back', icon: 'arrow-down', label: 'На задний план', fn: () => skReorder(false) });
-    if (isLine || isArea) acts.push({ id: 'prof', icon: 'mountain', label: 'Профиль рельефа', fn: () => { if (window.gcPfFromSelected) window.gcPfFromSelected(); } });
+    if (isLine) acts.push({ id: 'prof', icon: 'mountain', label: 'Профиль рельефа', fn: () => { if (window.gcPfFromSelected) window.gcPfFromSelected(); } });
     if (isArea) acts.push({ id: 'hyp', icon: 'chart-area', label: 'Гипсометрия', fn: () => { if (window.gcHyFromSelected) window.gcHyFromSelected(); } });
     acts.push({ id: 'del', icon: 'trash', label: 'Удалить', danger: true, fn: () => skDeleteLayer(sketchState.selected) });
     return acts;
@@ -6848,11 +7056,12 @@ function skShiftArr(a, delta, z) {
 }
 
 function skOnLayerDown(e) {
-    if (sketchState.mode !== 'move' || sketchState.tool) return;
+    if (sketchState.tool) return;
     if (e.originalEvent && e.originalEvent.button !== 0) return;
     const l = e.target;
-    skSelect(l);
+    if (sketchState.selected !== l) return;   // перетаскивать можно только выделенный объект
     skHideCtx();
+    skStopEdit();   // на время перемещения вершины скрыты
     map.dragging.disable();
     sketchState.move = { layer: l, start: e.latlng, orig: skSerializeLayer(l), moved: false };
     map.on('mousemove', skMoveDrag);
@@ -6878,6 +7087,7 @@ function skMoveEnd() {
     map.off('mousemove', skMoveDrag);
     map.dragging.enable();
     sketchState.move = null;
+    if (m && sketchState.selected === m.layer && sketchState.mode === 'edit') skStartEdit(m.layer);
     if (m && m.moved) {
         skApplyMeasure(m.layer);
         skCommit();
@@ -7100,6 +7310,37 @@ function skExport() {
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
     updateStatus('💾 Рисунки экспортированы в GeoJSON');
 }
+
+// ---------- ИМПОРТ / ЭКСПОРТ ФАЙЛОМ (общие gcImport / gcExport) ----------
+function gcImportToSketch(fc) {
+    let n = 0;
+    const bb = L.latLngBounds([]);
+    L.geoJSON(fc).getLayers().forEach(l => {
+        const o = { id: ++sketchState.seq, style: sketchStyle };
+        if (l instanceof L.Polygon) { o.kind = 'polygon'; o.pts = skLatLngsToArr(l.getLatLngs()); }
+        else if (l instanceof L.Polyline) { o.kind = 'line'; o.pts = skLatLngsToArr(l.getLatLngs()); }
+        else if (l.getLatLng) { const c = l.getLatLng(); o.kind = 'point'; o.ll = [c.lat, c.lng]; }
+        else return;
+        o.name = skNextName(o.kind);
+        const c = skBuildLayer(o);
+        if (!c) return;
+        skRegister(c); n++;
+        if (c.getBounds) bb.extend(c.getBounds()); else bb.extend(c.getLatLng());
+    });
+    if (!n) { updateStatus('⚠️ В файле нет фигур', true); return; }
+    skCommit(); skRenderList();
+    if (bb.isValid()) map.fitBounds(bb, { maxZoom: 18, padding: [40, 40] });
+    updateStatus('📂 Импортировано объектов: ' + n);
+}
+gcShapeIO.draw = {
+    name: 'geoclass-drawing',
+    get: () => gcFC(sketchItems.getLayers().map(l => {
+        const f = gcLayerGJ(l);
+        if (f) f.properties = Object.assign({}, f.properties, { name: l._sk.name, kind: l._sk.kind });
+        return f;
+    }).filter(Boolean)),
+    put: fc => gcImportToSketch(fc)
+};
 
 // ---------- ПОДКЛЮЧЕНИЕ ИНТЕРФЕЙСА ----------
 function skInitUI() {
@@ -10691,6 +10932,18 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (pf.drawing) pfClear();
         hyStopDraw(); hyRun(gj);
     }
+    const hyShapeOpts = { name: 'gipsometriya', onChange: (l, fin) => { if (!fin) return; const g = hyGJ(l); if (g) { hy._resel = true; hyRun(g); } }, onDelete: () => { hyClear(); drawSync(); } };
+    gcShapeIO.hy = {
+        name: 'gipsometriya',
+        get: () => gcFC(hy.gj ? [hy.gj] : []),
+        put: fc => {
+            const f = fc.features.find(x => /Polygon/.test(x.geometry.type));
+            if (!f) { updateStatus('⚠️ В файле нет полигона', true); return; }
+            if (pf.drawing) pfClear();
+            hyStopDraw(); hyRun(f);
+            map.fitBounds(L.geoJSON(f).getBounds());
+        }
+    };
     window.gcPfFromSelected = pfFromSelected;   // действия из меню на карте (правый клик по нарисованному объекту)
     window.gcHyFromSelected = hyFromSel;
     window.gcProfileBusy = () => !!(pf.drawing || hy.drawing);
@@ -10706,7 +10959,8 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         hyClear();
         const my = hy.seq;
         hy.gj = gj; hy.area = turf.area(gj);
-        hy.layer = L.geoJSON(gj, { style: { color: '#7c3aed', weight: 3, fillColor: '#7c3aed', fillOpacity: 0.08 }, interactive: false }).addTo(map);
+        hy.layer = L.geoJSON(gj, { style: { color: '#7c3aed', weight: 3, fillColor: '#7c3aed', fillOpacity: 0.08 }, interactive: true }).addTo(map);
+        hy.layer.eachLayer(l => { gcShape(l, hyShapeOpts); if (hy._resel) { hy._resel = false; gcSelect(l); } });
         hySetMode('area'); pfOpenTab();
         if (hy.area < 400) return hyFail('полигон слишком мал (менее 400 м²)');
         if (hy.area > 1e10) return hyFail('полигон слишком большой (более 10 000 км²)');
@@ -11022,15 +11276,18 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     function setObj(gj, label, layer) {
         setEditing(false);
         if (layer !== objLayer) { grpObj.clearLayers(); objLayer = null; if (layer) { grpObj.addLayer(layer); objLayer = layer; } }
+        if (objLayer) gcShape(objLayer, lgShapeOpts);
         applyObj(gj, label);
     }
-    function setEditing(on) {
-        if (objLayer && objLayer.editing) on ? objLayer.editing.enable() : objLayer.editing.disable();
-        editing = !!(on && objLayer && objLayer.editing);
-        $('lgEdit').classList.toggle('pf-on', editing);
-    }
+    function setEditing(on) { if (!on) gcDeselect(); }
+    // редактирование объекта — общий gcShape: клик → вершины, перетаскивание, правая кнопка → меню
+    const lgShapeOpts = {
+        name: 'logistika',
+        onChange: (l, fin) => { if (!fin) return; const g = layerGJ(l); if (g) applyObj(g, labelOf(g, l instanceof L.Circle ? 'Круг' : l instanceof L.Rectangle ? 'Прямоугольник' : undefined)); },
+        onDelete: () => $('lgClear').click()
+    };
     // ---- Инструменты рисования (как в верхней панели) ----
-    function markTool() { document.querySelectorAll('[data-lg-tool]').forEach(b => b.classList.toggle('pf-on', b.dataset.lgTool === tool)); }
+    function markTool() { document.querySelectorAll('[data-lg-tool]').forEach(b => { b.classList.toggle('pf-on', b.dataset.lgTool === tool); b.classList.toggle('active', b.dataset.lgTool === tool); }); }
     function cancelTool() {
         if (handler) { try { handler.disable(); } catch (e) { } handler = null; }
         tool = null; map.getContainer().classList.remove('lg-picking'); markTool();
@@ -11055,7 +11312,6 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         const layer = e.layer, gj = layerGJ(layer), kind = { rectangle: 'Прямоугольник', circle: 'Круг' }[e.layerType];
         cancelTool();
         if (!gj) return true;
-        layer.on('edit', () => { const g = layerGJ(layer); if (g) applyObj(g, labelOf(g, kind)); });
         setObj(gj, labelOf(gj, kind), layer);
         return true;
     };
@@ -11067,12 +11323,20 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         setObj(turf.point([e.latlng.lng, e.latlng.lat]), 'Точка: ' + e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5), m);
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && tool === 'point') { cancelTool(); setStatus(''); } });
-    $('lgEdit').addEventListener('click', () => {
-        if (!objLayer) return setStatus('Сначала нарисуйте объект', true);
-        if (!objLayer.editing) return setStatus('Точку не редактируют — поставьте новую', true);
-        cancelTool(); setEditing(!editing);
-        setStatus(editing ? 'Тяните вершины объекта; повторное нажатие «Правка» — завершить' : '');
-    });
+    gcShapeIO.lg = {
+        name: 'logistika',
+        get: () => gcFC(obj && obj.gj ? [obj.gj] : []),
+        put: fc => {
+            const f = fc.features.find(x => /Polygon/.test(x.geometry.type)) || fc.features[0];
+            let layer;
+            if (f.geometry.type === 'Point') { const c = f.geometry.coordinates; layer = L.circleMarker([c[1], c[0]], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#0f172a', fillOpacity: 1 }); }
+            else layer = L.geoJSON(f, { style: { color: '#0f172a', weight: 2, fillColor: '#0f172a', fillOpacity: 0.1 } }).getLayers()[0];
+            cancelTool();
+            const g = layerGJ(layer) || f;
+            setObj(g, labelOf(g), layer);
+            map.fitBounds(layer.getBounds ? layer.getBounds() : L.latLngBounds([layer.getLatLng()]), { maxZoom: 17 });
+        }
+    };
     $('lgFromSel').addEventListener('click', () => {
         cancelTool();
         const gj = selectedLayer && layerGJ(selectedLayer);

@@ -177,7 +177,7 @@
                 <!-- ВКЛАДКИ БОКОВОЙ ПАНЕЛИ -->
         <div class="panel-tabs" role="tablist">
             <button class="panel-tab active" role="tab" aria-selected="true" data-tab="main" title="Главная"><i class="fas fa-house"></i><span>Главная</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ участка"><i class="fas fa-draw-polygon"></i><span>Анализ</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ участка"><i class="gc-pent"></i><span>Анализ</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="reports" title="Мои отчёты"><i class="fas fa-file-lines"></i><span>Отчёты</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="catalog" title="Каталог геоданных"><i class="fas fa-store"></i><span>Каталог</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="help" title="Инструкции"><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
@@ -206,7 +206,6 @@
                         <button type="button" class="sp-tile" data-bp="ndwi" style="--c:#06b6d4" title="NDWI — индекс воды&#10;Выделяет водные объекты и переувлажнённые участки: высокие значения соответствуют открытой воде. Есть вариант MNDWI. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-droplet"></i><span>NDWI</span></button>
                         <button type="button" class="sp-tile" data-bp="ndmi" style="--c:#0284c7" title="NDMI — влажность растительности&#10;Оценивает содержание влаги в растениях: помогает заметить засуху и водный стресс посевов. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
                         <button type="button" class="sp-tile" data-bp="nbr" style="--c:#f59e0b" title="NBR — индекс гарей&#10;Показывает гари и повреждение растительности; сравнение «до и после» помогает оценить площадь и тяжесть пожара. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-fire"></i><span>NBR</span></button>
-                        <button type="button" class="sp-tile" data-bp="change" style="--c:#a855f7" title="Изменения&#10;Сравнение снимков на две даты, чтобы увидеть, что изменилось на территории: вырубки, застройка, паводок, состояние посевов. Раздел в разработке."><i class="fas fa-code-compare"></i><span>Изменения</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="tools">
@@ -215,17 +214,28 @@
                         <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
                         <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
                         <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Доступны при включённом 3D (кнопка «3D» справа на карте). Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#0ea5e9" title="Измерения&#10;Раздел в разработке."><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#f59e0b" title="Заметки&#10;Раздел в разработке."><i class="fas fa-note-sticky"></i><span>Заметки</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="layers">
                     <div class="sp-group-title" style="margin-top:4px">Слои</div>
-                    <div class="an-hint">Раздел пока пуст.</div>
+                    <div class="sp-grid">
+                        <button type="button" class="sp-tile sp-stub" style="--c:#84cc16" title="Почвы&#10;Раздел в разработке."><i class="fas fa-seedling"></i><span>Почвы</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#78716c" title="Рельеф&#10;Раздел в разработке."><i class="fas fa-mountain"></i><span>Рельеф</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#ef4444" title="Границы&#10;Раздел в разработке."><i class="fas fa-border-all"></i><span>Границы</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#6366f1" title="Кадастр&#10;Раздел в разработке."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#16a34a" title="Лес&#10;Раздел в разработке."><i class="fas fa-tree"></i><span>Лес</span></button>
+                    </div>
                 </div>
                 <div class="sp-group" data-group="catalog">
                     <div class="sp-group-title" style="margin-top:4px">Каталог данных</div>
                     <div class="sp-grid">
-                        <button type="button" class="sp-tile" data-goto="catalog" style="--c:#d97706" title="Каталог геоданных&#10;Готовые наборы данных для приобретения: векторные данные OSM (здания, дороги, вода), спутниковые снимки и аналитические данные. Выберите нужные позиции — оформление заказа пока заготовка."><i class="fas fa-store"></i><span>Каталог геоданных</span></button>
-                        <button type="button" class="sp-tile" data-bp="catalog" style="--c:#84cc16" title="Каталог данных&#10;Быстрый доступ к каталогу данных из панели инструментов. Раздел в разработке — полный каталог откройте в соседней плитке «Каталог геоданных»."><i class="fas fa-folder-open"></i><span>Каталог данных</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#d97706" title="Данные OSM&#10;Раздел в разработке."><i class="fas fa-vector-square"></i><span>Данные OSM</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#ec4899" title="Снимки&#10;Раздел в разработке."><i class="fas fa-satellite"></i><span>Снимки</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#0284c7" title="Статистика&#10;Раздел в разработке."><i class="fas fa-chart-column"></i><span>Статистика</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Рельеф и высоты&#10;Раздел в разработке."><i class="fas fa-mountain-sun"></i><span>Рельеф и высоты</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#10b981" title="Геоданные&#10;Раздел в разработке."><i class="fas fa-layer-group"></i><span>Геоданные</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="weather">
@@ -235,6 +245,7 @@
                         <button type="button" class="sp-tile sp-stub" style="--c:#3b82f6" title="Анализ осадков&#10;Раздел в разработке."><i class="fas fa-cloud-showers-heavy"></i><span>Осадки</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#f97316" title="Анализ температур&#10;Раздел в разработке."><i class="fas fa-temperature-half"></i><span>Температура</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#06b6d4" title="Риски заморозков&#10;Раздел в разработке."><i class="fas fa-snowflake"></i><span>Заморозки</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#64748b" title="Ветер&#10;Раздел в разработке."><i class="fas fa-wind"></i><span>Ветер</span></button>
                     </div>
                 </div>
             </div>
@@ -265,7 +276,7 @@
             <div class="section-title"><i class="fas fa-pen-ruler"></i> Нарисовать участок</div>
             <div class="an-draw">
                 <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
-                            <i class="fas fa-draw-polygon"></i>
+                            <i class="gc-pent"></i>
                         </button>
                         <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
                             <i class="fas fa-vector-square"></i>
@@ -282,6 +293,7 @@
                         <button class="map-btn" id="clearMapBtn" title="Очистить всё">
                             <i class="fas fa-eraser"></i>
                         </button>
+                        <button class="map-btn" data-gc-io="export" data-gc-for="an" title="Экспорт контуров (KML, GeoJSON)"><i class="fas fa-file-export"></i></button>
             </div>
             <div class="an-hint">Выберите фигуру и кликните по карте. Полигон — клики по вершинам, двойной клик завершает. <i class="fas fa-edit"></i> правка, <i class="fas fa-trash"></i> удаление выбранного, <i class="fas fa-eraser"></i> очистка всего.</div>
         </div>
@@ -375,7 +387,7 @@
             <div class="section ct">
                 <div class="section-title"><i class="fas fa-circle-question"></i> Инструкции</div>
                 <details class="ct-grp" open><summary><i class="fas fa-location-crosshairs"></i> Поиск и координаты</summary><ul class="hp"><li>Поле поиска — в левом верхнем углу карты: введите город или улицу и выберите результат.</li><li>Правый клик по карте → «Что здесь?» покажет координаты и адрес точки (блок «Координаты и адрес» на вкладке «Главная»).</li><li>Кнопки копирования рядом с полями сохранят значения в буфер.</li></ul></details>
-                <details class="ct-grp"><summary><i class="fas fa-draw-polygon"></i> Анализ участка</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
+                <details class="ct-grp"><summary><i class="gc-pent"></i> Анализ участка</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-file-lines"></i> Отчёты и паспорт участка</summary><ul class="hp"><li>Нажмите на отчёт в списке — паспорт раскроется на всю область карты.</li><li>«К карте» или Esc возвращают обычный вид.</li><li>Из паспорта можно скачать PDF.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-store"></i> Каталог геоданных</summary><ul class="hp"><li>Данные разбиты на группы: векторы OSM, спутниковые снимки, готовые карты.</li><li>Раскройте группу, выберите набор и оформите заказ (в разработке).</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-layer-group"></i> Подложки и слои (кнопки справа)</summary><ul class="hp"><li>«Базовые карты», «Спутник» и «Аналитические подложки» меняют основу карты.</li><li>Легенда аналитического слоя — на вкладке «Главная» нижней панели.</li><li>«Шторка» делит карту на две подложки для сравнения.</li></ul></details>
@@ -450,9 +462,11 @@
                       <button class="dw-tool" data-sk-tool="text" title="Текст"><i class="fas fa-font"></i><span>Текст</span></button>
                       <button class="dw-tool" data-sk-tool="line" title="Линия (ломаная)"><i class="fas fa-route"></i><span>Линия</span></button>
                       <button class="dw-tool" data-sk-tool="freeline" title="Свободная линия"><i class="fas fa-pencil"></i><span>Свободная</span></button>
-                      <button class="dw-tool" data-sk-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
+                      <button class="dw-tool" data-sk-tool="polygon" title="Полигон"><i class="gc-pent"></i><span>Полигон</span></button>
                       <button class="dw-tool" data-sk-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
                       <button class="dw-tool" data-sk-tool="circle" title="Круг"><i class="far fa-circle"></i><span>Круг</span></button>
+                      <button class="dw-tool" data-gc-io="import" data-gc-for="draw" title="Импорт из файла (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i><span>Импорт</span></button>
+                      <button class="dw-tool" data-gc-io="export" data-gc-for="draw" title="Экспорт рисунков (KML, GeoJSON)"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
                   </div>
                   <label class="dw-check"><input type="checkbox" id="skRepeat"> Не отключать инструмент после рисования</label>
                   <label class="dw-check"><input type="checkbox" id="skMeasure"> Показывать размеры (длина, площадь)</label>
@@ -680,6 +694,10 @@
                       <button class="dw-act pf-on" data-pf-mode="line" title="Профиль рельефа по линии"><i class="fas fa-chart-line"></i><span>По линии</span></button>
                       <button class="dw-act" data-pf-mode="area" title="Гипсометрическая кривая: распределение высот по площади полигона"><i class="fas fa-chart-area"></i><span>По площади</span></button>
                   </div>
+                  <div class="dw-tool-grid" style="margin-top:8px">
+                      <button class="dw-tool" data-gc-io="import" data-gc-for="hy" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i><span>Импорт</span></button>
+                      <button class="dw-tool" data-gc-io="export" data-gc-for="hy" title="Экспорт полигона (KML, GeoJSON)"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
+                  </div>
               </div>
               <div class="dw-block pf-ctrl">
                   <div class="dw-title">Профиль рельефа</div>
@@ -836,14 +854,15 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-logi" data-bp-pane="logistics" role="tabpanel">
               <div class="dw-block lg-obj">
                   <div class="dw-title">Объект (один)</div>
-                  <div class="dw-act-grid lg-tools">
-                      <button class="dw-act" data-lg-tool="point" title="Точка: кликните по карте"><i class="fas fa-location-dot"></i><span>Точка</span></button>
-                      <button class="dw-act" data-lg-tool="polygon" title="Полигон"><i class="fas fa-draw-polygon"></i><span>Полигон</span></button>
-                      <button class="dw-act" data-lg-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
-                      <button class="dw-act" data-lg-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i><span>Круг</span></button>
-                      <button class="dw-act" id="lgEdit" title="Редактировать объект"><i class="fas fa-edit"></i><span>Правка</span></button>
-                      <button class="dw-act" id="lgFromSel" title="Взять фигуру, выбранную на карте или на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>Выбранная</span></button>
-                      <button class="dw-act dw-danger" id="lgClear" title="Удалить объект, буфер и результаты"><i class="fas fa-trash"></i><span>Удалить</span></button>
+                  <div class="dw-tool-grid lg-tools">
+                      <button class="dw-tool" data-lg-tool="point" title="Точка: кликните по карте"><i class="fas fa-location-dot"></i><span>Точка</span></button>
+                      <button class="dw-tool" data-lg-tool="polygon" title="Полигон"><i class="gc-pent"></i><span>Полигон</span></button>
+                      <button class="dw-tool" data-lg-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
+                      <button class="dw-tool" data-lg-tool="circle" title="Круг / Овал"><i class="far fa-circle"></i><span>Круг</span></button>
+                      <button class="dw-tool" id="lgFromSel" title="Взять фигуру, выбранную на карте или на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>Выбранная</span></button>
+                      <button class="dw-tool" data-gc-io="import" data-gc-for="lg" title="Импорт из файла (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i><span>Импорт</span></button>
+                      <button class="dw-tool" data-gc-io="export" data-gc-for="lg" title="Экспорт объекта (KML, GeoJSON)"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
+                      <button class="dw-tool dw-danger" id="lgClear" title="Удалить объект, буфер и результаты"><i class="fas fa-trash"></i><span>Удалить</span></button>
                   </div>
                   <div class="lg-obj-name" id="lgObj">Объект не задан</div>
                   <div class="m3-hint" id="lgStatus">Нарисуйте точку или фигуру. Для полигона расстояния считаются от внутренней точки</div>
@@ -1409,7 +1428,7 @@
     <div class="s-head"><div class="s-eyebrow">Возможности</div><h2>Всё для первичной оценки участка</h2><p>Тексты-заготовки: позже заменим на финальные формулировки.</p></div>
     <div class="s-grid c4">
       <div class="s-card"><div class="s-ico"><i class="fas fa-layer-group"></i></div><h3>Подложки и спутник</h3><p>Схемы, топокарты, спутниковые снимки и гибриды — переключение в один клик.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-draw-polygon"></i></div><h3>Участок и измерения</h3><p>Нарисуйте или загрузите контур (KML, GeoJSON, Excel, XML Росреестра), измерьте длину и площадь.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="gc-pent"></i></div><h3>Участок и измерения</h3><p>Нарисуйте или загрузите контур (KML, GeoJSON, Excel, XML Росреестра), измерьте длину и площадь.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-mountain"></i></div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия полигона, уклоны.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-cube"></i></div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-route"></i></div><h3>Логистика</h3><p>Буфер вокруг участка, дороги и водоёмы OSM, расстояния до ближайших.</p></div>
