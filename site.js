@@ -101,6 +101,7 @@
     var app = document.querySelector('#map-section .app-container');
     function setPassport(on) {
         app.classList.toggle('passport-open', on);
+        if (on) document.dispatchEvent(new Event('passport-open'));
     }
     // паспорт раскрывается по клику на отчёт во вкладке «Отчёты»
     Array.prototype.forEach.call(document.querySelectorAll('[data-open-passport]'), function (el) {
@@ -142,11 +143,56 @@
     if (cadO) cadO.addEventListener('input', function () { if (cadLayer) cadLayer.setOpacity(cadO.value / 100); });
     // кнопка «Запустить анализ участка» (заготовка)
     var run = document.getElementById('runAnalysisBtn');
+    // ---- «Мои отчёты»: хранятся в localStorage, по клику открывается паспорт участка ----
+    var RKEY = 'geoclass.reports.v1', rpList = document.getElementById('rpList'), rpCount = document.getElementById('rpCount');
+    var reports = [];
+    try { reports = JSON.parse(localStorage.getItem(RKEY) || '[]'); if (!Array.isArray(reports)) reports = []; } catch (e) { reports = []; }
+    function rpSave() { try { localStorage.setItem(RKEY, JSON.stringify(reports)); } catch (e) { if (typeof updateStatus === 'function') updateStatus('⚠️ Не удалось сохранить отчёт (хранилище браузера переполнено)', true); } }
+    function rpEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function rpRender() {
+        if (!rpList) return;
+        rpCount.textContent = reports.length + 1;
+        rpList.innerHTML = reports.map(function (r) {
+            return '<button type="button" class="rp-item" data-rp="' + r.id + '"><i class="fas fa-file-pdf"></i><span><b>' + rpEsc(r.name) + '</b><small>' + r.areaHa.toFixed(2).replace('.', ',') + ' га · анализ от ' + rpEsc(r.date) + '</small></span><span class="rp-del" data-rp-del="' + r.id + '" title="Удалить отчёт" style="padding:6px;color:#94a3b8"><i class="fas fa-trash" style="width:auto;height:auto;background:none;color:inherit"></i></span></button>';
+        }).join('');
+    }
+    if (rpList) rpList.addEventListener('click', function (e) {
+        var d = e.target.closest('[data-rp-del]');
+        if (d) { e.stopPropagation(); reports = reports.filter(function (r) { return r.id !== d.getAttribute('data-rp-del'); }); rpSave(); rpRender(); return; }
+        var b = e.target.closest('[data-rp]'); if (!b) return;
+        var r = reports.filter(function (x) { return x.id === b.getAttribute('data-rp'); })[0];
+        if (r && window.ppShow) window.ppShow(r.gj, { cad: r.cad });
+    });
+    rpRender();
+    // плоский список слоёв участков (группы GeoJSON раскрываются) → GeoJSON-полигоны
+    function rpShapes() {
+        var out = [];
+        (function walk(l) {
+            if (l.getLayers && !(l instanceof L.Path)) { l.getLayers().forEach(walk); return; }
+            try {
+                var f;
+                if (l instanceof L.Circle) { var c = l.getLatLng(); f = turf.circle([c.lng, c.lat], l.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
+                else { var g = l.toGeoJSON(); f = g.type === 'FeatureCollection' ? g.features[0] : g; }
+                if (f && f.geometry && /Polygon/.test(f.geometry.type)) out.push({ gj: f, cad: (l.feature && l.feature.properties && l.feature.properties.cad_number) || '', layer: l });
+            } catch (e) { /* не полигон */ }
+        })(drawnItems);
+        return out;
+    }
     if (run) run.addEventListener('click', function () {
-        var n = parseInt(document.getElementById('objectsCountBadge').textContent, 10) || 0;
         if (typeof updateStatus !== 'function') return;
-        if (!n) updateStatus('⚠️ Сначала загрузите или нарисуйте участок', true);
-        else updateStatus('ℹ️ Запуск анализа пока не подключён (заготовка)');
+        var list = rpShapes();
+        if (!list.length) { updateStatus('⚠️ Сначала загрузите или нарисуйте участок', true); return; }
+        var sel = list.filter(function (s) { return s.layer === selectedLayer; });
+        if (sel.length) list = sel;
+        var now = new Date(), date = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        list.forEach(function (s, i) {
+            var ha = turf.area(s.gj) / 1e4;
+            reports.unshift({ id: 'r' + now.getTime().toString(36) + i, name: s.cad ? 'Участок № ' + s.cad : 'Участок ' + ha.toFixed(2).replace('.', ',') + ' га', cad: s.cad, areaHa: ha, date: date, gj: s.gj });
+        });
+        rpSave(); rpRender();
+        var tab = document.querySelector('.panel-tab[data-tab="reports"]'); if (tab) tab.click();
+        updateStatus('✅ Анализ выполнен, отчётов сохранено: ' + list.length + ' (вкладка «Отчёты»)');
+        if (list.length === 1 && window.ppShow) window.ppShow(reports[0].gj, { cad: reports[0].cad });
     });
     // в 3D рисование недоступно (инструменты теперь в панели, а не на карте)
     var anDraw = document.querySelector('.an-draw');
@@ -179,7 +225,7 @@
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
-        bp: { main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
+        bp: { main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
               weather: 'Погода', dates: 'Снимки', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', change: 'Изменения', catalog: 'Каталог данных' }
     };
     function setView(v, title) {
@@ -533,6 +579,8 @@
         safe(function () { clearGeoPoint(); });   // точка «Что здесь?»
         safe(function () { if (RT) RT.close(); });   // маршрут
         press('pfClear'); press('hyClearBtn'); press('lgClear');
+        safe(function () { if (window.chClearAll) window.chClearAll(); });   // почвенный анализ: фигура, статистика, графики и зоны
+        safe(function () { if (window.mxClearAll) window.mxClearAll(); });   // вкладка «Измерения»
         safe(function () { if (window.snClearAll) window.snClearAll(); });   // фигура, зоны и аномальные точки разделов NDVI / NDWI…
         safe(function () { if (window.gcProfileClear) window.gcProfileClear(); });   // профиль и гипсометрия: линия, полигон, тепловая карта   // профиль рельефа, гипсометрия, логистика (объект, буфер, дороги, водоёмы)
         safe(function () { map.closePopup(); });
@@ -737,7 +785,7 @@
     var rail = document.getElementById('gcRail'), panel = document.getElementById('mainPanel');
     if (!rail || !panel) return;
     var app = document.querySelector('#map-section .app-container'), helpWin = document.getElementById('gcHelpWin');
-    var groups = panel.querySelectorAll('.sp-group'), cur = 'analysis';
+    var groups = panel.querySelectorAll('.sp-group'), cur = 'main';
     function mark(k) {
         rail.querySelectorAll('.gc-rail-btn').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-rail') === k); });
     }

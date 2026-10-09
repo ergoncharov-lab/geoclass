@@ -83,7 +83,8 @@
 <div class="app-container">
     <!-- ЛЕВОЕ ВЕРТИКАЛЬНОЕ МЕНЮ (как в 2ГИС): не сворачивается, пункты пока заготовки — потом распределим по категориям -->
     <nav class="gc-rail" id="gcRail" aria-label="Главное меню">
-        <button type="button" class="gc-rail-btn on" data-rail="analysis" title="Анализ"><i class="fas fa-chart-line"></i><span>Анализ</span></button>
+        <button type="button" class="gc-rail-btn on" data-rail="main" title="Главное"><i class="fas fa-house"></i><span>Главное</span></button>
+        <button type="button" class="gc-rail-btn" data-rail="analysis" title="Анализ"><i class="fas fa-chart-line"></i><span>Анализ</span></button>
         <button type="button" class="gc-rail-btn" data-rail="images" title="Снимки"><i class="fas fa-satellite"></i><span>Снимки</span></button>
         <button type="button" class="gc-rail-btn" data-rail="tools" title="Инструменты"><i class="fas fa-toolbox"></i><span>Инструм.</span></button>
         <button type="button" class="gc-rail-btn" data-rail="layers" title="Слои"><i class="fas fa-layer-group"></i><span>Слои</span></button>
@@ -184,18 +185,27 @@
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="bookmarks" title="Закладки"><i class="fas fa-bookmark"></i><span>Закладки</span></button>
         </div>
 
-        <!-- ВКЛАДКА 1 «ГЛАВНАЯ»: меню разделов + место под рекламный блок -->
+        <!-- ВКЛАДКА 1 «ГЛАВНАЯ»: меню разделов -->
         <div class="tab-pane active" data-pane="main" role="tabpanel">
             <!-- МЕНЮ РАЗДЕЛОВ: цветные кнопки, как в Яндекс Картах. По нажатию кнопки скрываются, остаётся стрелка «назад» -->
             <div class="section sp-home">
-                <div class="sp-group on" data-group="analysis">
+                <div class="sp-group on" data-group="main">
+                    <div class="sp-group-title" style="margin-top:4px">Главное</div>
+                    <div class="sp-grid">
+                        <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
+                        <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#10b981" title="Источники анализа&#10;Раздел в разработке."><i class="fas fa-database"></i><span>Источники анализа</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Новости&#10;Раздел в разработке."><i class="fas fa-newspaper"></i><span>Новости</span></button>
+                        <button type="button" class="sp-tile sp-stub" style="--c:#64748b" title="Поддержка&#10;Раздел в разработке."><i class="fas fa-headset"></i><span>Поддержка</span></button>
+                    </div>
+                </div>
+                <div class="sp-group" data-group="analysis">
                     <div class="sp-group-title" style="margin-top:4px">Анализ</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="analysis" style="--c:#10b981" title="Анализ участка&#10;Загрузите контур участка (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его на карте и запустите анализ. В этом разделе — список объектов участка и запуск расчёта."><i class="fas fa-draw-polygon"></i><span>Анализ участка</span></button>
                         <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
                         <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#a855f7" title="Химический анализ&#10;Раздел в разработке."><i class="fas fa-flask"></i><span>Хим. анализ</span></button>
-                        <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты: показатели, таблицы и карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
+                        <button type="button" class="sp-tile" data-bp="chem" style="--c:#a855f7" title="Почвенный анализ&#10;Почвенные показатели (pH, углерод, азот, глина, песок и др.) по нарисованной фигуре: статистика и зоны на карте. Данные SoilGrids 250 м."><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="images">
@@ -213,8 +223,8 @@
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
                         <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
-                        <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Доступны при включённом 3D (кнопка «3D» справа на карте). Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#0ea5e9" title="Измерения&#10;Раздел в разработке."><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
+                        <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Включение и настройки 3D-режима. Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
+                        <button type="button" class="sp-tile" data-bp="measure" style="--c:#0ea5e9" title="Измерения&#10;Расстояние, площадь и периметр, радиус, азимут, координаты (ГМС, UTM), поиск по адресу и координатам, высота, экспорт GeoJSON / KML."><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#f59e0b" title="Заметки&#10;Раздел в разработке."><i class="fas fa-note-sticky"></i><span>Заметки</span></button>
                     </div>
                 </div>
@@ -249,9 +259,6 @@
                     </div>
                 </div>
             </div>
-            <div class="section">
-                <div class="hm-ad" id="adSlot"><div class="hm-ad-anim"></div><span><i class="fas fa-bullhorn"></i> Место под рекламный анимационный блок</span></div>
-            </div>
         </div><!-- /tab-pane main -->
 
         <!-- ВКЛАДКА 2 «АНАЛИЗ УЧАСТКА» -->
@@ -275,23 +282,23 @@
         <div class="section">
             <div class="section-title"><i class="fas fa-pen-ruler"></i> Нарисовать участок</div>
             <div class="an-draw">
-                <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
-                            <i class="gc-pent"></i>
-                        </button>
-                        <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
-                            <i class="fas fa-vector-square"></i>
-                        </button>
-                        <button class="map-btn draw-tool-btn" data-tool="circle" title="Круг / Овал">
-                            <i class="fas fa-circle"></i>
-                        </button>
-                        <button class="map-btn" id="editMapBtn" title="Редактировать">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="map-btn" id="deleteMapBtn" title="Удалить выбранное">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                        <button class="map-btn" id="clearMapBtn" title="Очистить всё">
-                            <i class="fas fa-eraser"></i>
+                <button class="map-btn draw-tool-btn" data-tool="polygon" title="Полигон">
+                            <i class="gc-pent"></i>
+                        </button>
+                        <button class="map-btn draw-tool-btn" data-tool="rectangle" title="Прямоугольник">
+                            <i class="fas fa-vector-square"></i>
+                        </button>
+                        <button class="map-btn draw-tool-btn" data-tool="circle" title="Круг / Овал">
+                            <i class="fas fa-circle"></i>
+                        </button>
+                        <button class="map-btn" id="editMapBtn" title="Редактировать">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="map-btn" id="deleteMapBtn" title="Удалить выбранное">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="map-btn" id="clearMapBtn" title="Очистить всё">
+                            <i class="fas fa-eraser"></i>
                         </button>
                         <button class="map-btn" data-gc-io="export" data-gc-for="an" title="Экспорт контуров (KML, GeoJSON)"><i class="fas fa-file-export"></i></button>
             </div>
@@ -336,8 +343,9 @@
         <!-- ВКЛАДКА 3 «ОТЧЁТЫ»: список анализов пользователя; клик по отчёту раскрывает паспорт участка -->
         <div class="tab-pane" data-pane="reports" role="tabpanel">
             <div class="section">
-                <div class="section-title"><i class="fas fa-file-lines"></i> Мои отчёты <span class="badge">1</span></div>
+                <div class="section-title"><i class="fas fa-file-lines"></i> Мои отчёты <span class="badge" id="rpCount">1</span></div>
                 <div class="an-hint" style="margin:0 0 10px">Демо-отчёт доступен без регистрации. Ваши отчёты появятся здесь после анализа.</div>
+                <div id="rpList" class="hm-menu" style="margin-bottom:8px"></div>
                 <button type="button" class="rp-item" data-open-passport>
                     <i class="fas fa-file-pdf"></i>
                     <span><b>Участок № 50:21:0000000:1234</b><small>14.7 га · пашня 57% · анализ от — (шаблон)</small></span>
@@ -433,6 +441,8 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="draw" title="Рисование: фигуры, линии, значки, текст и их стили"><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой «3D» на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="measure" title="Измерения: расстояние, площадь, координаты, геокодирование"><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="chem" title="Почвенный анализ почвы: статистика и зоны"><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="logistics" title="Логистический анализ: буфер, дороги и водоёмы OSM, расстояния до ближайших"><i class="fas fa-route"></i><span>Логистика</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="weather" title="Погода: анализ и прогноз в текущем экстенте карты"><i class="fas fa-cloud-sun-rain"></i><span>Погода</span></button>
@@ -549,6 +559,8 @@
 
           <!-- ВКЛАДКА «3D»: настройки 3D режима (активна после включения кнопки «3D» на карте) -->
           <div class="bottom-panel-body bp-pane bp-draw bp-3d m3-off" data-bp-pane="3d" role="tabpanel">
+
+              <div class="dw-block m3-switch"><button type="button" class="m3-toggle" id="m3ToggleBtn" title="Включить / выключить 3D-режим"><i class="m3-dot"></i><span>Включить 3D</span></button></div>
 
               <!-- Облёт и снимок (наклон и поворот сцены — прямо на кнопке «3D / 2D» на карте) -->
               <div class="dw-block m3-topbar">
@@ -685,6 +697,12 @@
                   </div>
               </div>
           </div><!-- /bp-pane 3d -->
+
+          <!-- ВКЛАДКА «Измерения» (содержимое строит script.js) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-measure" data-bp-pane="measure" role="tabpanel"></div>
+
+          <!-- ВКЛАДКА «Почвенный анализ» (содержимое строит script.js) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-chem" data-bp-pane="chem" role="tabpanel"></div>
 
           <!-- ВКЛАДКА «ПРОФИЛЬ»: профиль рельефа по линии (высоты — Terrarium DEM) -->
           <div class="bottom-panel-body bp-pane bp-draw bp-profile" data-bp-pane="profile" role="tabpanel">
@@ -954,47 +972,13 @@
         <div class="pp" id="passportPane">
             <div class="pp-top">
                 <button class="pp-btn" id="ppClose" type="button"><i class="fas fa-arrow-left"></i> К карте</button>
-                <h2>Паспорт участка № 50:21:0000000:1234</h2>
-                <span class="s-demo">Демо-данные</span>
+                <h2 id="ppTitle">Паспорт участка</h2>
                 <span class="sp"></span>
-                <button class="pp-btn" type="button"><i class="fas fa-file-pdf"></i> Скачать PDF</button>
+                <button class="pp-btn" type="button" id="ppRefresh"><i class="fas fa-rotate"></i> Обновить по фигуре</button>
+                <button class="pp-btn" type="button" id="ppPrint"><i class="fas fa-file-pdf"></i> Весь паспорт в PDF</button>
                 <button class="pp-btn main" type="button"><i class="fas fa-play"></i> Заказать полный анализ</button>
             </div>
-            <div class="pp-kpis">
-                <div class="pp-kpi"><small>Площадь</small><b>14.7 га</b></div>
-                <div class="pp-kpi"><small>Периметр</small><b>2.1 км</b></div>
-                <div class="pp-kpi"><small>Высота (мин–макс)</small><b>132–167 м</b></div>
-                <div class="pp-kpi"><small>Средний уклон</small><b>4.8°</b></div>
-                <div class="pp-kpi"><small>NDVI (среднее)</small><b>0.63</b></div>
-                <div class="pp-kpi"><small>До дороги</small><b>83 м</b></div>
-            </div>
-            <div class="pp-grid">
-                <div class="pp-blk"><h4><i class="fas fa-seedling"></i> Землепользование</h4>
-                    <div class="pp-row">
-                        <svg viewBox="0 0 120 120"><g fill="none" stroke-width="22" transform="rotate(-90 60 60)"><circle cx="60" cy="60" r="40" stroke="#f59e0b" stroke-dasharray="143.5 251.3"/><circle cx="60" cy="60" r="40" stroke="#10b981" stroke-dasharray="52.8 251.3" stroke-dashoffset="-143.5"/><circle cx="60" cy="60" r="40" stroke="#166534" stroke-dasharray="30.9 251.3" stroke-dashoffset="-196.3"/><circle cx="60" cy="60" r="40" stroke="#3b82f6" stroke-dasharray="1.8 251.3" stroke-dashoffset="-227.2"/><circle cx="60" cy="60" r="40" stroke="#94a3b8" stroke-dasharray="6.8 251.3" stroke-dashoffset="-229"/><circle cx="60" cy="60" r="40" stroke="#cbd5e1" stroke-dasharray="15.6 251.3" stroke-dashoffset="-235.8"/></g><text x="60" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">14.7 га</text></svg>
-                        <div class="pp-leg"><div><i style="background:#f59e0b"></i>Пашня<b>57.1%</b></div><div><i style="background:#10b981"></i>Луга<b>21.0%</b></div><div><i style="background:#166534"></i>Лес<b>12.3%</b></div><div><i style="background:#3b82f6"></i>Вода<b>0.7%</b></div><div><i style="background:#94a3b8"></i>Антропогенные<b>2.7%</b></div><div><i style="background:#cbd5e1"></i>Прочее<b>6.2%</b></div></div>
-                    </div></div>
-                <div class="pp-blk"><h4><i class="fas fa-leaf"></i> Растительность (NDVI), 2020–2025</h4>
-                    <svg viewBox="0 0 300 120"><g stroke="#eef2f6"><line x1="10" y1="20" x2="295" y2="20"/><line x1="10" y1="60" x2="295" y2="60"/><line x1="10" y1="100" x2="295" y2="100"/></g><polyline fill="none" stroke="#10b981" stroke-width="2.5" points="20,89 72,73 124,79 176,57 228,47 280,31"/><g fill="#10b981"><circle cx="20" cy="89" r="3"/><circle cx="72" cy="73" r="3"/><circle cx="124" cy="79" r="3"/><circle cx="176" cy="57" r="3"/><circle cx="228" cy="47" r="3"/><circle cx="280" cy="31" r="3"/></g><g font-size="10" fill="#94a3b8" text-anchor="middle"><text x="20" y="115">2020</text><text x="124" y="115">2022</text><text x="228" y="115">2024</text><text x="280" y="115">2025</text></g></svg></div>
-                <div class="pp-blk"><h4><i class="fas fa-mountain"></i> Профиль рельефа</h4>
-                    <svg viewBox="0 0 300 120"><path d="M0,80 L40,70 L80,74 L120,55 L160,48 L200,52 L240,35 L280,30 L300,34 L300,110 L0,110 Z" fill="#d1fae5" stroke="#10b981" stroke-width="2"/><g font-size="10" fill="#94a3b8"><text x="4" y="104">0</text><text x="262" y="104">2.1 км</text></g></svg>
-                    <table class="pp-tbl"><tr><td>Перепад высот</td><td>35 м</td></tr><tr><td>Экспозиция</td><td>Ю-В</td></tr></table></div>
-                <div class="pp-blk"><h4><i class="fas fa-flask"></i> Почвы</h4>
-                    <div class="pp-bar"><span>pH</span><span class="t"><i style="width:68%"></i></span><b>6.8</b></div>
-                    <div class="pp-bar"><span>Орг. C</span><span class="t"><i style="width:24%"></i></span><b>2.4%</b></div>
-                    <div class="pp-bar"><span>Глина</span><span class="t"><i style="width:31%"></i></span><b>—</b></div>
-                    <div class="pp-ph">карта почв (заготовка)</div></div>
-                <div class="pp-blk"><h4><i class="fas fa-road"></i> Вода и инфраструктура</h4>
-                    <table class="pp-tbl"><tr><td>Ближайшая дорога</td><td>83 м</td></tr><tr><td>Ближайший водоём</td><td>412 м</td></tr><tr><td>Населённый пункт</td><td>— км</td></tr><tr><td>Здания в буфере 1 км</td><td>—</td></tr><tr><td>NDMI / NDWI</td><td>0.31 / —</td></tr></table></div>
-                <div class="pp-blk"><h4><i class="fas fa-triangle-exclamation"></i> Ограничения</h4>
-                    <ul class="pp-list"><li><span class="pp-tag f">Факт</span>Средний уклон 4.8°</li><li><span class="pp-tag i">Интерпретация</span>Текст-заготовка: рельеф не ограничивает механизированные работы</li><li><span class="pp-tag f">Факт</span>Водоём в 412 м</li></ul></div>
-                <div class="pp-blk"><h4><i class="fas fa-clock-rotate-left"></i> История изменений</h4>
-                    <div class="pp-ph">карта изменений 2020–2025</div>
-                    <ul class="pp-list" style="margin-top:8px"><li>Выявлено 3 изменения за период 2020–2025</li></ul></div>
-                <div class="pp-blk"><h4><i class="fas fa-chart-column"></i> Графики (заготовка)</h4><div class="pp-ph">место под дополнительные графики</div></div>
-                <div class="pp-blk"><h4><i class="fas fa-book"></i> Источники и версии</h4>
-                    <table class="pp-tbl"><tr><td>OSM</td><td>—</td></tr><tr><td>DEM</td><td>—</td></tr><tr><td>Sentinel-2</td><td>—</td></tr><tr><td>Классификатор</td><td>v—</td></tr><tr><td>Дата анализа</td><td>—</td></tr></table></div>
-            </div>
+            <div id="ppBody"></div>
         </div><!-- /passport -->
 
         <div class="status-bar">
@@ -1366,60 +1350,60 @@
   <div class="s-mapbar"><a href="#top"><i class="fas fa-arrow-up"></i> Главная</a><span>Колесо над картой — масштаб. Листайте здесь или у панелей, чтобы перейти к другому блоку</span><a href="#about">О сервисе <i class="fas fa-arrow-down"></i></a></div>
 </section>
 
-<!-- ============ БЛОК: КАТАЛОГ ДАННЫХ (после карты; стиль как у первого блока, фон — catalog.jpg рядом с index.html) ============ -->
-<section class="s-hero s-catalog" id="data-catalog">
-  <div class="s-wrap">
-    <div class="s-cat-head s-glass">
-      <div>
-        <div class="s-hero-tag"><i class="fas fa-database"></i> Каталог данных</div>
-        <h1>Данные для вашей <em>территории</em></h1>
-        <p class="lead">Выберите наборы, которые нужны: векторы OSM, спутниковые снимки или накопленные аналитические данные. Цены и оформление — заготовка.</p>
-      </div>
-    </div>
-    <div class="s-cat-grid">
-      <div class="s-cat-card s-glass" data-cat="osm">
-        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-vector-square"></i></span><div><h3>Векторные данные OSM</h3><p>Актуальные контуры и атрибуты объектов территории</p></div></div>
-        <div class="s-cat-opts">
-          <button type="button" class="s-opt" data-opt="osm-buildings"><i class="fas fa-check"></i><span><b>Здания</b><small>контуры, этажность, тип</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="osm-roads"><i class="fas fa-check"></i><span><b>Дороги</b><small>классы и покрытие</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="osm-water"><i class="fas fa-check"></i><span><b>Водные объекты</b><small>реки, озёра, пруды</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="osm-landuse"><i class="fas fa-check"></i><span><b>Землепользование</b><small>поля, леса, луга</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="osm-places"><i class="fas fa-check"></i><span><b>Населённые пункты</b><small>границы и названия</small></span><em>— ₽</em></button>
-        </div>
-        <div class="s-cat-foot"><span>GeoJSON · GPKG · SHP · KML</span><button type="button" class="s-cat-all" data-all="osm">Выбрать все</button></div>
-      </div>
-      <div class="s-cat-card s-glass" data-cat="sat">
-        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-satellite"></i></span><div><h3>Спутниковые растровые данные</h3><p>Снимки на нужную дату, обрезанные по вашему участку</p></div></div>
-        <div class="s-cat-opts">
-          <button type="button" class="s-opt" data-opt="sat-s2"><i class="fas fa-check"></i><span><b>Sentinel-2</b><small>10 м, мультиспектр</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="sat-l8"><i class="fas fa-check"></i><span><b>Landsat 8/9</b><small>30 м, архив с 2013 г.</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="sat-mosaic"><i class="fas fa-check"></i><span><b>Безоблачная мозаика</b><small>годовой композит</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="sat-hr"><i class="fas fa-check"></i><span><b>Высокое разрешение</b><small>под заказ, до 0.5 м</small></span><em>— ₽</em></button>
-        </div>
-        <div class="s-cat-foot"><span>GeoTIFF · COG · PNG</span><button type="button" class="s-cat-all" data-all="sat">Выбрать все</button></div>
-      </div>
-      <div class="s-cat-card s-glass" data-cat="ana">
-        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-chart-line"></i></span><div><h3>Аналитические накопительные данные</h3><p>Показатели, накопленные за период, и готовые карты</p></div></div>
-        <div class="s-cat-opts">
-          <button type="button" class="s-opt" data-opt="ana-ndvi"><i class="fas fa-check"></i><span><b>NDVI · NDWI · NDMI</b><small>временные ряды за сезон</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="ana-land"><i class="fas fa-check"></i><span><b>Классификация земель</b><small>пашня, луга, лес, вода</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="ana-relief"><i class="fas fa-check"></i><span><b>Рельеф и уклоны</b><small>высоты, уклоны, экспозиция</small></span><em>— ₽</em></button>
-          <button type="button" class="s-opt" data-opt="ana-soil"><i class="fas fa-check"></i><span><b>Почвенные карты</b><small>pH, органический углерод</small></span><em>— ₽</em></button>
-        </div>
-        <div class="s-cat-foot"><span>GeoTIFF · CSV · GeoJSON</span><button type="button" class="s-cat-all" data-all="ana">Выбрать все</button></div>
-      </div>
-    </div>
-    <div class="s-cat-order s-glass">
-      <div class="s-cat-sum"><i class="fas fa-cart-shopping"></i><span id="catSum">Ничего не выбрано</span></div>
-      <div class="s-cat-act">
-        <button type="button" class="s-btn s-btn-ghost" id="catClear" disabled>Сбросить</button>
-        <button type="button" class="s-btn s-btn-primary" id="catOrder" disabled>Оформить заказ <i class="fas fa-arrow-right"></i></button>
-      </div>
-      <div class="s-cat-ok" id="catOk" hidden>Оформление заказа пока не подключено (заготовка): выбор сохранён только на странице.</div>
-    </div>
-  </div>
-</section>
-
+<!-- ============ БЛОК: КАТАЛОГ ДАННЫХ (после карты; стиль как у первого блока, фон — catalog.jpg рядом с index.html) ============ -->
+<section class="s-hero s-catalog" id="data-catalog">
+  <div class="s-wrap">
+    <div class="s-cat-head s-glass">
+      <div>
+        <div class="s-hero-tag"><i class="fas fa-database"></i> Каталог данных</div>
+        <h1>Данные для вашей <em>территории</em></h1>
+        <p class="lead">Выберите наборы, которые нужны: векторы OSM, спутниковые снимки или накопленные аналитические данные. Цены и оформление — заготовка.</p>
+      </div>
+    </div>
+    <div class="s-cat-grid">
+      <div class="s-cat-card s-glass" data-cat="osm">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-vector-square"></i></span><div><h3>Векторные данные OSM</h3><p>Актуальные контуры и атрибуты объектов территории</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="osm-buildings"><i class="fas fa-check"></i><span><b>Здания</b><small>контуры, этажность, тип</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-roads"><i class="fas fa-check"></i><span><b>Дороги</b><small>классы и покрытие</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-water"><i class="fas fa-check"></i><span><b>Водные объекты</b><small>реки, озёра, пруды</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-landuse"><i class="fas fa-check"></i><span><b>Землепользование</b><small>поля, леса, луга</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="osm-places"><i class="fas fa-check"></i><span><b>Населённые пункты</b><small>границы и названия</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoJSON · GPKG · SHP · KML</span><button type="button" class="s-cat-all" data-all="osm">Выбрать все</button></div>
+      </div>
+      <div class="s-cat-card s-glass" data-cat="sat">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-satellite"></i></span><div><h3>Спутниковые растровые данные</h3><p>Снимки на нужную дату, обрезанные по вашему участку</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="sat-s2"><i class="fas fa-check"></i><span><b>Sentinel-2</b><small>10 м, мультиспектр</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-l8"><i class="fas fa-check"></i><span><b>Landsat 8/9</b><small>30 м, архив с 2013 г.</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-mosaic"><i class="fas fa-check"></i><span><b>Безоблачная мозаика</b><small>годовой композит</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="sat-hr"><i class="fas fa-check"></i><span><b>Высокое разрешение</b><small>под заказ, до 0.5 м</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoTIFF · COG · PNG</span><button type="button" class="s-cat-all" data-all="sat">Выбрать все</button></div>
+      </div>
+      <div class="s-cat-card s-glass" data-cat="ana">
+        <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-chart-line"></i></span><div><h3>Аналитические накопительные данные</h3><p>Показатели, накопленные за период, и готовые карты</p></div></div>
+        <div class="s-cat-opts">
+          <button type="button" class="s-opt" data-opt="ana-ndvi"><i class="fas fa-check"></i><span><b>NDVI · NDWI · NDMI</b><small>временные ряды за сезон</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-land"><i class="fas fa-check"></i><span><b>Классификация земель</b><small>пашня, луга, лес, вода</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-relief"><i class="fas fa-check"></i><span><b>Рельеф и уклоны</b><small>высоты, уклоны, экспозиция</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-soil"><i class="fas fa-check"></i><span><b>Почвенные карты</b><small>pH, органический углерод</small></span><em>— ₽</em></button>
+        </div>
+        <div class="s-cat-foot"><span>GeoTIFF · CSV · GeoJSON</span><button type="button" class="s-cat-all" data-all="ana">Выбрать все</button></div>
+      </div>
+    </div>
+    <div class="s-cat-order s-glass">
+      <div class="s-cat-sum"><i class="fas fa-cart-shopping"></i><span id="catSum">Ничего не выбрано</span></div>
+      <div class="s-cat-act">
+        <button type="button" class="s-btn s-btn-ghost" id="catClear" disabled>Сбросить</button>
+        <button type="button" class="s-btn s-btn-primary" id="catOrder" disabled>Оформить заказ <i class="fas fa-arrow-right"></i></button>
+      </div>
+      <div class="s-cat-ok" id="catOk" hidden>Оформление заказа пока не подключено (заготовка): выбор сохранён только на странице.</div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ БЛОК 3: О СЕРВИСЕ ============ -->
 <div class="s-after" id="about">
 <!-- ============ ВОЗМОЖНОСТИ ============ -->
@@ -1566,6 +1550,7 @@
 <button class="s-prompt" id="sPrompt" type="button"><small>Прокрутите ещё раз или нажмите</small><b><span id="sPromptT">К карте</span> <i class="fas fa-arrow-down" id="sPromptI"></i></b></button>
 
 <script src="script.js"></script>
+<script src="passport.js"></script>
 <script src="site.js"></script>
 </body>
-</html>
+</html>

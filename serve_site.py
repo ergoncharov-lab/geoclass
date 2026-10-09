@@ -96,7 +96,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/s3/'):
             return self.proxy()
+        if self.path.startswith('/isric?'):
+            return self.isric()
         return super().do_GET()
+
+    def isric(self):
+        """Прокси к WCS ISRIC SoilGrids (раздел «Хим. анализ»): обходит CORS, GeoTIFF кэшируются на диске."""
+        query = self.path[7:]
+        if not query.startswith('map=/map/') or '..' in query:
+            self.send_error(403, 'forbidden')
+            return
+        key = 'isric|' + query
+        hit = cache_get(key, None)
+        if hit:
+            status, headers, data = hit
+        else:
+            conn = http.client.HTTPSConnection('maps.isric.org', timeout=120)
+            try:
+                conn.request('GET', '/mapserv?' + query, headers={'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'})
+                r = conn.getresponse()
+                data = r.read()
+                status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
+            except Exception as e:
+                print('ISRIC error:', e)
+                self.send_error(502, 'ISRIC unreachable: %s' % e)
+                return
+            finally:
+                conn.close()
+            if status == 200 and data[:2] in (b'II', b'MM'):
+                cache_put(key, None, status, headers, data)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', headers.get('content-type', 'application/octet-stream'))
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def proxy(self):
         key = urllib.parse.unquote(self.path[4:].split('?')[0])

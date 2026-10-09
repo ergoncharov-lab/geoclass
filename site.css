@@ -237,10 +237,6 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .hm-item b, .rp-item b, .ct-item b { display: block; font-size: 13px; font-weight: 600; }
 .hm-item small, .rp-item small, .ct-item small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
 .hm-item em { color: #94a3b8; font-size: 11px; }
-.hm-ad { position: relative; overflow: hidden; min-height: 130px; border: 2px dashed #cbd5e1; border-radius: 12px; display: grid; place-items: center; text-align: center; padding: 14px; color: var(--muted); font-size: 12px; }
-.hm-ad-anim { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(52,211,153,.22) 50%, transparent 70%); background-size: 200% 100%; animation: hmAd 3.2s linear infinite; }
-.hm-ad span { position: relative; }
-@keyframes hmAd { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .an-howto ol { margin: 0; padding-left: 18px; font-size: 12.5px; color: #475569; line-height: 1.6; }
 .an-hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
 .an-draw { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -384,7 +380,6 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 #geoSection { display: none; }
 #geoSection.geo-on { display: block; }
 #mainPanel:not([data-view="bp"]) #bottomPanel { display: none; }
-#mainPanel .hm-ad { margin-top: 4px; }
 .geo-section { background: #fff; border-bottom: 0; }
 .geo-empty { display: none !important; }
 .passport-open .sp-head, .passport-open #geoSection, .passport-open #bottomPanel { display: none !important; }
@@ -459,7 +454,6 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .sp-tile i { width: 46px; height: 46px; font-size: 18px; }
 .sp-tile span { font-size: 11px; }
 .section-title { font-size: 15px; }
-.hm-ad { min-height: 150px; }
 
 /* ===== ПАНЕЛИ ИНСТРУМЕНТОВ (рисование, профиль, логистика, 3D, экспорт, погода, снимки, индексы) ===== */
 #bottomPanel { --tp-ink: #0f172a; --tp-acc: #2563eb; --tp-bg: #f1f5f9; --tp-bg2: #e8edf3; --tp-mut: #64748b; }
@@ -690,8 +684,6 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .leaflet-container.rt-picking, .leaflet-container.rt-picking .leaflet-interactive { cursor: crosshair !important; }
 
 /* ===== ПРАВКИ: плитка «Настройки 3D» (видна только при включённом 3D), кнопка «3D» на карте, выделение «Карта» в меню ===== */
-.sp-3d-tile { display: none; }
-#map-section:has(.map-stage.mode-3d) .sp-3d-tile { display: flex; }
 
 .mc-group #mode3dBtn .m3-txt { font-size: 14px; font-weight: 800; letter-spacing: .02em; line-height: 1; font-family: inherit; }
 .mc-group #mode3dBtn.active .m3-txt { color: #fff; }
@@ -991,3 +983,93 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .an-draw { justify-content: center; }
 #bottomPanel .dw-tool.dw-danger { color: #b91c1c; }
 #bottomPanel .dw-tool.dw-danger:hover { background: #fee2e2; color: #b91c1c; }
+
+/* ---------- переключатель 3D в панели «3D» ---------- */
+.bp-3d .m3-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px 14px; border: none; border-radius: 10px; background: #0f172a; color: #fff; font: 700 13px/1 inherit; cursor: pointer; }
+.bp-3d .m3-toggle:hover { background: #000; }
+.bp-3d .m3-toggle .m3-dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+.bp-3d .m3-toggle.on .m3-dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+
+/* ---------- 3D / плоская карта на половинах шторки ---------- */
+.map3d.flat-side { opacity: 0; }
+.map-stage.mode-3d .swipe-map.flat-show { display: block; z-index: 4; }
+.swipe-3d-btn { border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; font: 800 12px/1 inherit; min-width: 32px; min-height: 32px; margin-left: 2px; }
+.swipe-3d-btn:hover { background: #f1f5f9; }
+.swipe-3d-btn.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+
+/* ---------- Измерения (компактная панель) ---------- */
+#bottomPanel .bp-measure .dw-block { padding: 8px 10px; margin-bottom: 6px; }
+#bottomPanel .bp-measure .mx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#bottomPanel .bp-measure .mx-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 0; border-radius: 8px; background: var(--tp-bg); color: var(--tp-ink); font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer; }
+#bottomPanel .bp-measure .mx-chip i { font-size: 12px; width: auto; color: var(--tp-mut); }
+#bottomPanel .bp-measure .mx-chip:hover { background: var(--tp-bg2); }
+#bottomPanel .bp-measure .mx-chip.on { background: var(--tp-ink); color: #fff; }
+#bottomPanel .bp-measure .mx-chip.on i { color: #fff; }
+#bottomPanel .bp-measure .mx-hint { margin-top: 6px; font-size: 11.5px; line-height: 1.35; color: var(--tp-mut); }
+#bottomPanel .bp-measure .mx-units { display: flex; gap: 6px; margin-top: 6px; }
+#bottomPanel .bp-measure .mx-units select { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid #dbe3ea; border-radius: 8px; background: #fff; font-size: 12px; }
+#bottomPanel .bp-measure .mx-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #eef2f6; font-size: 12px; }
+#bottomPanel .bp-measure .mx-row span { color: var(--tp-mut); flex: none; }
+#bottomPanel .bp-measure .mx-row b { text-align: right; font-weight: 600; word-break: break-word; }
+#bottomPanel .bp-measure .mx-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#bottomPanel .bp-measure .mx-ib { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 28px; min-width: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--tp-bg); color: var(--tp-ink); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+#bottomPanel .bp-measure .mx-ib i { font-size: 12px; width: auto; }
+#bottomPanel .bp-measure .mx-ib:hover { background: var(--tp-bg2); }
+#bottomPanel .bp-measure .mx-ib.danger { color: #b91c1c; }
+#bottomPanel .bp-measure .dw-title { margin: 0 0 4px; }
+#bottomPanel .bp-measure .mx-hist { max-height: 96px; overflow: auto; }
+#bottomPanel .bp-measure .mx-h { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid #eef2f6; }
+#bottomPanel .bp-measure .mx-h span { color: var(--tp-mut); text-align: right; }
+.leaflet-tooltip.mx-tip { background: #fff; border: 1px solid #0f172a; color: #0f172a; font: 600 11px/1.2 system-ui, sans-serif; padding: 2px 6px; box-shadow: none; }
+.leaflet-tooltip.mx-tip:before { display: none; }
+
+/* ---------- Хим. анализ ---------- */
+.bp-chem .ch-go { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 10px; padding: 10px 14px; border: none; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.bp-chem .ch-go:hover { background: #000; }
+.bp-chem .ch-svg { display: block; width: 100%; height: auto; margin: 4px 0 8px; }
+.bp-chem .ch-svg text { fill: #475569; font: 10px system-ui, sans-serif; }
+.ch-px { image-rendering: pixelated; image-rendering: crisp-edges; }
+.ch-legend { min-width: 160px; padding: 6px 9px; border-radius: 8px; background: rgba(255,255,255,.94); box-shadow: 0 1px 5px rgba(0,0,0,.3); font: 11px system-ui, sans-serif; color: #0f172a; }
+.ch-bar { height: 10px; margin: 4px 0 2px; border-radius: 5px; }
+.ch-lab { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: #475569; }
+
+/* ===== ПАСПОРТ УЧАСТКА: разделы-блоки ===== */
+.pp-sec { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+.pp-sec-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card2); }
+.pp-sec-h h3 { font-size: 15px; color: var(--dark); }
+.pp-sec-h i { color: var(--green); }
+.pp-n { width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: var(--on-green); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.pp-sec-b { padding: 14px 16px; }
+.pp-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.pp-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; margin-top: 10px; }
+.pp-sub { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 12px; }
+.pp-sub h4 { font-size: 13px; color: var(--dark); margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+.pp-sub h4 i, .pp-sec h5 i { color: var(--green); }
+.pp-sec h5 { font-size: 12px; color: var(--dark); margin: 10px 0 6px; }
+.pp-mapw { position: relative; min-width: 0; }
+.pp-map { width: 100%; border-radius: 10px; overflow: hidden; background: #e5e7eb; border: 1px solid var(--line); }
+.pp-pdf { margin-top: 6px; height: 28px; font-size: 11px; }
+.pp-note { font-size: 12px; color: var(--muted); background: var(--card2); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; }
+.pp-sum { background: transparent; padding: 0; }
+.pp-sum ul { list-style: none; display: grid; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.pp-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.pp-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.pp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.pp-hist { width: 100%; height: auto; }
+.pp-hist text { fill: var(--muted); }
+.pp-hist line { stroke: var(--line); }
+.pp-legbar { height: 10px; border-radius: 5px; margin-top: 8px; }
+.pp-legl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pp-tbl3 th { font-size: 11px; color: var(--muted); text-align: right; font-weight: 600; padding: 4px 2px; }
+.pp-tbl3 td:not(:first-child) { text-align: right; }
+.pp-tbl3 td:first-child { text-align: left; font-weight: 400; color: var(--muted); }
+.pp-sel { height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 12px; }
+.pp-ph3 { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 20px 12px; text-align: center; margin-bottom: 8px; }
+@media (max-width: 900px) { .pp-2, .pp-3 { grid-template-columns: 1fr; } }
+@media print {
+    body * { visibility: hidden !important; }
+    #passportPane, #passportPane * { visibility: visible !important; }
+    #passportPane { position: absolute !important; left: 0; top: 0; width: 100% !important; overflow: visible !important; }
+    #passportPane .pp-top .pp-btn, .pp-pdf { display: none !important; }
+    .pp-sec { break-inside: avoid; }
+}
