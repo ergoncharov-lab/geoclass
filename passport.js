@@ -218,6 +218,25 @@
         return new Blob(parts, { type: 'application/pdf' });
     }
     function save(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+function tifF32(a, w, h, x0, y1, dx, dy, name) {
+        var n = w * h, px = new Float32Array(n), i;
+        for (i = 0; i < n; i++) px[i] = a[i] === a[i] ? a[i] : -9999;
+        var sO = 8 + n * 4, tO = sO + 24, gO = tO + 48, dO = gO + 32, ifd = dO + 8, NE = 14, buf = new ArrayBuffer(ifd + 2 + NE * 12 + 4), dv = new DataView(buf);
+        dv.setUint8(0, 73); dv.setUint8(1, 73); dv.setUint16(2, 42, true); dv.setUint32(4, ifd, true);
+        new Uint8Array(buf, 8, n * 4).set(new Uint8Array(px.buffer));
+        [dx, dy, 0].forEach(function (v, k) { dv.setFloat64(sO + k * 8, v, true); });
+        [0, 0, 0, x0, y1, 0].forEach(function (v, k) { dv.setFloat64(tO + k * 8, v, true); });
+        [1, 1, 0, 3, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, 4326].forEach(function (v, k) { dv.setUint16(gO + k * 2, v, true); });
+        '-9999'.split('').forEach(function (ch, k) { dv.setUint8(dO + k, ch.charCodeAt(0)); });
+        dv.setUint16(ifd, NE, true);
+        [[256, 4, 1, w], [257, 4, 1, h], [258, 3, 1, 32], [259, 3, 1, 1], [262, 3, 1, 1], [273, 4, 1, 8], [277, 3, 1, 1], [278, 4, 1, h], [279, 4, 1, n * 4],
+            [339, 3, 1, 3], [33550, 12, 3, sO], [33922, 12, 6, tO], [34735, 3, 16, gO], [42113, 2, 6, dO]].forEach(function (e, k) {
+            var o = ifd + 2 + k * 12;
+            dv.setUint16(o, e[0], true); dv.setUint16(o + 2, e[1], true); dv.setUint32(o + 4, e[2], true);
+            if (e[1] === 3) dv.setUint16(o + 8, e[3], true); else dv.setUint32(o + 8, e[3], true);
+        });
+        save(new Blob([buf], { type: 'image/tiff' }), name);
+    }
     body.addEventListener('click', function (e) {
         var b = e.target.closest('[data-pdf]'); if (b) {
             var o = minis[b.dataset.pdf]; if (!o) return;
@@ -232,13 +251,14 @@
             catch (err) { updateStatus('⚠️ Не удалось сохранить 3D-вид', true); }
             return;
         }
+        b = e.target.closest('[data-tif]'); if (b && D.tifs && D.tifs[b.dataset.tif]) { var TF = D.tifs[b.dataset.tif]; tifF32(TF.a, TF.w, TF.h, TF.x0, TF.y1, TF.dx, TF.dy, TF.name); return; }
         b = e.target.closest('[data-soil-tif]'); if (b && D.soil) {
             var p = b.getAttribute('data-soil-tif'); if (D.soil.cov[p]) ppSoil.tif(D.soil.cov[p], p, '0-5cm', D.soil.bb);
         }
     });
     body.addEventListener('click', function (e) {
-        var b = e.target.closest('.pp-i-btn'); if (b) { b.closest('.pp-sub').classList.toggle('open'); return; }
-        b = e.target.closest('[data-pp-all]'); if (b) { var on = body.classList.toggle('pp-all'); b.innerHTML = on ? '<i class="fas fa-eye-slash"></i> Скрыть все' : '<i class="fas fa-eye"></i> Показать все'; }
+        var b = e.target.closest('.pp-i-btn'); if (b) { b.closest('.pp-sub').classList.toggle('closed'); return; }
+        b = e.target.closest('[data-pp-all]'); if (b) { var on = body.classList.toggle('pp-none'); b.innerHTML = on ? '<i class="fas fa-eye"></i> Показать все' : '<i class="fas fa-eye-slash"></i> Скрыть все'; }
     });
 
     // ---------- 3D-карта (MapLibre): рельеф + снимок, при наличии heat — тепловая карта высот поверх ----------
@@ -444,12 +464,12 @@
     function elevSec() {
         return sec(5, 'mountain', 'Рельеф: высоты, уклоны и экспозиция', 'Цифровая модель рельефа: перепады, склоны, стекание воды, 3D', CC.rel,
             blk({
-                t: 'Высоты над уровнем моря', i: 'mountain', id: 'ppElBody', body: SPIN, map: mapBox('elh', '', 'Высоты — тепловая карта'),
+                t: 'Высоты над уровнем моря', i: 'mountain', id: 'ppElBody', body: SPIN, map: mapBox('elh', '<button type="button" class="pp-btn" data-tif="elh" disabled><i class="fas fa-download"></i> GeoTIFF</button>', 'Высоты — тепловая карта'),
                 info: ['Абсолютные высоты поверхности над уровнем моря в пределах участка.', 'Показывают общий характер рельефа, направление стока воды, возможные западины и риск застоя воды и подтопления. Гипсометрическая кривая показывает, какая доля площади лежит выше или ниже заданной отметки.',
                     'Цифровая модель рельефа (плитки Terrarium / AWS, разрешение порядка 30 м). По ячейкам внутри контура считаются минимум, среднее, максимум, медиана и перцентили; гистограмма — доли площади в 16 равных интервалах высот; гипсометрическая кривая — отметка высоты в зависимости от доли площади выше неё.']
             }) +
             blk({
-                t: 'Уклоны (крутизна склонов)', i: 'angle-right', id: 'ppElB2', body: SPIN, map: mapBox('els', '', 'Уклоны — тепловая карта'),
+                t: 'Уклоны (крутизна склонов)', i: 'angle-right', id: 'ppElB2', body: SPIN, map: mapBox('els', '<button type="button" class="pp-btn" data-tif="els" disabled><i class="fas fa-download"></i> GeoTIFF</button>', 'Уклоны — тепловая карта'),
                 info: ['Крутизна склона — угол наклона поверхности в градусах.', 'Определяет выбор техники и севооборота, опасность водной эрозии, требования к дренажу и дорогам. На уклонах больше 5° начинается риск смыва почвы, больше 10–15° — ограничения для техники.',
                     'Для каждой ячейки по центральным разностям высот соседних ячеек: уклон = arctan(√((dz/dx)² + (dz/dy)²)). Классы: < 2°, 2–5°, 5–10°, 10–15°, > 15°; площадь класса (га) = доля ячеек класса × площадь участка.']
             }) +
@@ -506,6 +526,8 @@
                 '<div class="pp-rl">' + D8.map(function (d, k) { return '<span style="--c:' + AC[k] + '">' + d + ' <b>' + nf(asp[k] / at * 100, 0) + '%</b></span>'; }).join('') + '</div>' + '<div class="pp-cap">Красно-оранжевые лепестки — склоны, обращённые на юг (больше солнца); сине-голубые — на север (дольше лежит снег, больше влаги).</div>';
         }
         var hc = [0, 0.2, 0.4, 0.6, 0.8, 1].map(function (t) { var c = ppDem.col(t); return 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')'; });
+        D.tifs = { elh: { a: grid, w: cols, h: rows, x0: bw, y1: bn, dx: dLng, dy: dLat, name: 'Relief_height_m.tif' }, els: { a: sl, w: cols, h: rows, x0: bw, y1: bn, dx: dLng, dy: dLat, name: 'Relief_slope_deg.tif' } };
+        body.querySelectorAll('[data-tif]').forEach(function (x) { x.disabled = false; });
         var ov = ppDem.heat(r);
         if (minis.elh) { ov.addTo(minis.elh.map); minis.elh.title = 'Высоты, м'; setLeg('elh', hc, nf(mn, 0), nf(mx, 0), 'м'); }
         mk3d('m3b', gj, ov);
@@ -591,7 +613,7 @@
                 info: ['Продолжительность светового дня по месяцам и высота солнца над горизонтом в разные сезоны для широты участка.', 'Учитывается при выборе культур по фотопериоду (длиннодневные и короткодневные), планировании теплиц и размещении солнечных панелей.',
                     'Астрономический расчёт по широте центра участка: склонение солнца δ = 23,44° · sin(2π(284 + N) / 365), длина дня = 24/π · arccos(−tg φ · tg δ); полуденная высота солнца = 90° − |φ − δ|. От погоды не зависит.'],
                 body: tiles([['Самый длинный день (22 июн)', fh(dayLen(la, 172)), '', '#f59e0b'], ['Самый короткий день (22 дек)', fh(dayLen(la, 355)), '', '#3b82f6'], ['Равноденствие (21 мар)', fh(dayLen(la, 80)), '', '#22c55e'], ['Солнце в полдень, 22 июн', nf(noon(dec), 0) + '°', '', '#f59e0b'], ['Солнце в полдень, 22 дек', nf(noon(-dec), 0) + '°', '', '#3b82f6']]) +
-                    chart('Продолжительность дня по месяцам, ч', dayChart(dl), 'Цвет столбца: синий — короткий день, оранжевый — длинный. Рассчитано по широте участка.')
+                    chart('Продолжительность дня по месяцам, ч', '<div style="max-width:260px">' + dayChart(dl) + '</div>', 'Цвет столбца: синий — короткий день, оранжевый — длинный. Рассчитано по широте участка.')
             }));
     }
     async function climRun(gj, tok) {
@@ -689,7 +711,7 @@
         if (!l) { if (t) t.textContent = 'Паспорт участка'; body.innerHTML = '<div class="pp-sec"><div class="pp-sec-b"><div class="pp-note">Нет фигуры для паспорта. Нарисуйте участок (или загрузите контур / выписку Росреестра), выделите его на карте и нажмите «Обновить по фигуре».</div></div></div>'; return; }
         var gj = forced ? forced.gj : toGJ(l);
         var head = general(l, gj);
-        body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye"></i> Показать все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec() + weatherSec() + sumSec();
+        body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye-slash"></i> Скрыть все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec() + weatherSec() + sumSec();
         document.getElementById('ppKpi').innerHTML = kpiHtml();
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '');
         var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
