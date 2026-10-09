@@ -1188,3 +1188,36 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 
 /* ===== ПАСПОРТ: закреплённая шапка ===== */
 #passportPane .pp-top { position: sticky; top: -20px; z-index: 20; margin: -20px -26px 14px; padding: 12px 26px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(15,23,42,.08); }
+
+/* ===== ПАСПОРТ: статусы загрузки, пояснения на плашках, крупные карты, компактная логистика ===== */
+.pp-st { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pp-stc { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 700; border: 1px solid; cursor: default; white-space: nowrap; }
+.pp-stc.load { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.pp-stc.ok { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.pp-stc.err { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.pp-kpi .how { display: block; margin-top: 6px; font-size: 10.5px; line-height: 1.35; font-weight: 400; color: #64748b; }
+.pp-mc { grid-template-columns: 500px minmax(0, 1fr); }
+.pp-mapw { max-width: 500px; }
+.pp-maps { grid-template-columns: repeat(auto-fill, minmax(300px, 500px)); }
+@media (max-width: 1250px) { .pp-mc { grid-template-columns: 420px minmax(0, 1fr); } .pp-mapw { max-width: 420px; } }
+@media (max-width: 900px) { .pp-mc { grid-template-columns: 1fr; } .pp-mapw { max-width: 340px; } }
+.pp-compact .pp-sec-b { padding: 10px 16px 14px; }
+.pp-compact .pp-sub { margin-top: 10px; padding: 10px 12px 12px; }
+.pp-compact .pp-sub-h { margin-bottom: 8px; }
+.pp-compact .pp-mc { grid-template-columns: 250px minmax(0, 1fr); gap: 12px; }
+.pp-compact .pp-mapw { max-width: 250px; }
+.pp-compact .pp-db .r { padding: 4px 0; gap: 8px; font-size: 12px; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) auto; }
+.pp-compact .pp-db b { min-width: 64px; }
+.pp-compact .pp-tiles { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.pp-compact .pp-tile { padding: 6px 9px; }
+.pp-compact .pp-tile b { font-size: 14px; }
+.pp-compact .pp-cls .r { padding: 3px 0 8px; font-size: 12px; }
+.pp-compact .pp-cap { margin-top: 3px; font-size: 10.5px; }
+.pp-compact .pp-note { padding: 7px 10px; margin-bottom: 6px; }
+@media (min-width: 1250px) {
+    .pp-compact .pp-sec-b { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px 12px; align-items: start; }
+    .pp-compact .pp-sub { margin-top: 0; }
+    .pp-compact .pp-sec-b > .pp-sub:first-child { grid-row: span 2; }
+}
+@media (max-width: 900px) { .pp-compact .pp-mc { grid-template-columns: 1fr; } .pp-compact .pp-mapw { max-width: 300px; } }
+@media print { .pp-st { display: none !important; } }
