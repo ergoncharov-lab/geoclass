@@ -458,6 +458,50 @@ function snHosts(href) {
         `https://${m[1]}.s3.dualstack.${m[2]}.amazonaws.com/${m[3]}`];
 }
 
+// ---------- Кэш снимков и данных в браузере (Cache API): повторно открытые снимки грузятся без сети ----------
+// Работает на https:// (GitHub Pages) и на http://localhost. Кэшируются блоки COG (Range-запросы к Sentinel-2) и растры ISRIC.
+(function () {
+    if (!window.caches || !window.isSecureContext) return;
+    const CACHE = 'geoclass-data-v1', MAX_ENTRIES = 4000, origFetch = window.fetch.bind(window);
+    let puts = 0;
+    async function prune(cache) {
+        const ks = await cache.keys();
+        if (ks.length > MAX_ENTRIES) for (const k of ks.slice(0, 1000)) await cache.delete(k);   // самые старые записи
+    }
+    window.fetch = async function (input, init) {
+        let cache, key, isIsric = false;
+        try {
+            const isStr = typeof input === 'string';
+            const url = new URL(isStr ? input : input.url, location.href).href;
+            const method = ((init && init.method) || (!isStr && input.method) || 'GET').toUpperCase();
+            const range = new Headers((init && init.headers) || (!isStr ? input.headers : undefined)).get('Range') || '';
+            isIsric = /maps\.isric\.org\/mapserv\?|\/isric\?/.test(url);
+            if (method === 'GET' && ((url.indexOf('sentinel-s2-l2a-cogs/') > -1 && range) || isIsric)) {
+                cache = await caches.open(CACHE);
+                key = location.origin + '/__geoclass_cache__?u=' + encodeURIComponent(url) + '&r=' + encodeURIComponent(range);
+                const hit = await cache.match(key);
+                if (hit) {
+                    const h = new Headers();
+                    ['content-type', 'content-range'].forEach(n => { const v = hit.headers.get(n); if (v) h.set(n, v); });
+                    return new Response(hit.body, { status: Number(hit.headers.get('x-status')) || 200, headers: h });
+                }
+            }
+        } catch (e) { cache = null; }
+        const resp = await origFetch(input, init);
+        if (cache && resp.ok && (resp.status === 200 || resp.status === 206)) {
+            resp.clone().arrayBuffer().then(async buf => {
+                const b = new Uint8Array(buf, 0, 2);
+                if (isIsric && !((b[0] === 73 && b[1] === 73) || (b[0] === 77 && b[1] === 77))) return;   // ответ ISRIC не растр — не кэшируем
+                const h = { 'x-status': String(resp.status) };
+                ['content-type', 'content-range'].forEach(n => { const v = resp.headers.get(n); if (v) h[n] = v; });
+                await cache.put(key, new Response(buf, { status: 200, headers: h }));
+                if (++puts % 200 === 0) prune(cache);
+            }).catch(() => {});
+        }
+        return resp;
+    };
+})();
+
 // Локальный прокси (serve_site.py): если сайт открыт через него, снимки идут через /s3/... — тот же источник, без CORS
 let snProxyProbe = null;
 function snProxyAvailable() {

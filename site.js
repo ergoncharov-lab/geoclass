@@ -32,6 +32,31 @@
     var armed = null, armTimer = 0, lastWheel = 0, lockUntil = 0;
     var desktop = window.matchMedia('(min-width: 961px)');
 
+    // ---- блок карты (ПК): колесом, клавишами и полосой прокрутки отсюда никуда не листаем — переход только кнопками меню ----
+    var mapLock = false, settleT = 0;
+    function lockCheck() { mapLock = desktop.matches && where() === 'map-section'; }
+    function relock(ms) { clearTimeout(settleT); settleT = setTimeout(lockCheck, ms); }
+    window.addEventListener('scroll', function () {
+        if (mapLock && performance.now() > lockUntil) {
+            var y = pos()['map-section'];
+            if (Math.abs(window.scrollY - y) > 3) window.scrollTo({ top: y, behavior: 'instant' });
+            return;
+        }
+        relock(180);
+    }, { passive: true });
+    window.addEventListener('resize', function () {
+        if (!desktop.matches) { mapLock = false; return; }
+        if (mapLock) window.scrollTo({ top: pos()['map-section'], behavior: 'instant' }); else lockCheck();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (!mapLock || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (['PageDown', 'PageUp', 'Home', 'End', ' ', 'ArrowDown', 'ArrowUp'].indexOf(e.key) < 0) return;
+        var t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|SUMMARY)$/.test(t.tagName))) return;
+        e.preventDefault();
+    });
+    lockCheck();
+
     function disarm() { armed = null; prompt.classList.remove('show'); clearTimeout(armTimer); }
     function arm(t) {
         armed = t; pText.textContent = LABEL[t];
@@ -42,6 +67,7 @@
         clearTimeout(armTimer); armTimer = setTimeout(disarm, 3500);
     }
     function go(t) {
+        mapLock = false; relock(1300);
         disarm(); lockUntil = performance.now() + 1100;
         window.scrollTo({ top: pos()[t], behavior: 'smooth' });
     }
@@ -60,7 +86,13 @@
         if (!desktop.matches || e.defaultPrevented || e.ctrlKey || Math.abs(e.deltaY) < 3) return;
         var now = performance.now(), fresh = now - lastWheel > 200; lastWheel = now;
         if (now < lockUntil) { e.preventDefault(); return; }
-        var w = where(); if (!w) return;
+        var w = where();
+        if (mapLock || w === 'map-section') {   // на карте колесо только масштабирует карту и прокручивает панели; страница стоит на месте
+            if (!innerScroll(e.target, e.deltaY)) e.preventDefault();
+            if (armed) disarm();
+            return;
+        }
+        if (!w) return;
         var dy = e.deltaY, t = ORDER[ORDER.indexOf(w) + (dy > 0 ? 1 : -1)] || null;
         // блок выше окна: сначала обычная прокрутка до его низа
         var cur = w === 'top' ? hero : BLK[w];
@@ -79,7 +111,7 @@
         var a = e.target.closest('a[href^="#"]'); if (!a) return;
         nav.classList.remove('open');
         var t = ANCH[a.getAttribute('href')]; if (!t) return;
-        e.preventDefault(); disarm(); lockUntil = performance.now() + 1100;
+        e.preventDefault(); mapLock = false; relock(1300); disarm(); lockUntil = performance.now() + 1100;
         window.scrollTo({ top: pos()[t], behavior: 'smooth' });
     });
 
@@ -153,7 +185,7 @@
         if (!rpList) return;
         rpCount.textContent = reports.length + 1;
         rpList.innerHTML = reports.map(function (r) {
-            return '<button type="button" class="rp-item" data-rp="' + r.id + '"><i class="fas fa-file-pdf"></i><span><b>' + rpEsc(r.name) + '</b><small>' + r.areaHa.toFixed(2).replace('.', ',') + ' га · анализ от ' + rpEsc(r.date) + '</small></span><span class="rp-del" data-rp-del="' + r.id + '" title="Удалить отчёт" style="padding:6px;color:#94a3b8"><i class="fas fa-trash" style="width:auto;height:auto;background:none;color:inherit"></i></span></button>';
+            return '<button type="button" class="rp-item" data-rp="' + r.id + '"><i class="fas fa-file-pdf"></i><span><b>' + rpEsc(r.name) + '</b><small>' + r.areaHa.toFixed(2).replace('.', ',') + ' га · анализ от ' + rpEsc(r.date) + (r.sat ? ' · снимок ' + rpEsc(r.sat.day) : '') + '</small></span><span class="rp-del" data-rp-del="' + r.id + '" title="Удалить отчёт" style="padding:6px;color:#94a3b8"><i class="fas fa-trash" style="width:auto;height:auto;background:none;color:inherit"></i></span></button>';
         }).join('');
     }
     if (rpList) rpList.addEventListener('click', function (e) {
@@ -161,7 +193,7 @@
         if (d) { e.stopPropagation(); reports = reports.filter(function (r) { return r.id !== d.getAttribute('data-rp-del'); }); rpSave(); rpRender(); return; }
         var b = e.target.closest('[data-rp]'); if (!b) return;
         var r = reports.filter(function (x) { return x.id === b.getAttribute('data-rp'); })[0];
-        if (r && window.ppShow) window.ppShow(r.gj, { cad: r.cad });
+        if (r && window.ppShow) window.ppShow(r.gj, { cad: r.cad, sat: r.sat });
     });
     rpRender();
     // плоский список слоёв участков (группы GeoJSON раскрываются) → GeoJSON-полигоны
@@ -178,21 +210,107 @@
         })(drawnItems);
         return out;
     }
+    // ---- выбор даты снимка Sentinel-2 для анализа (календарь как в разделе «Снимки»; сцены ищутся по контуру участка) ----
+    var snCal = document.getElementById('anSatCal');
+    if (snCal) (function () {
+        var month = new Date(), groups = [], seq = 0, cache = {}, lastKey = '', sel = null, note = 'Сначала загрузите или нарисуйте участок — затем здесь появятся даты со снимками.';
+        month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
+        var $ = function (id) { return document.getElementById(id); }, p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+        var ccCol = function (c) { return c == null ? '#94a3b8' : c <= 10 ? '#10b981' : c <= 30 ? '#84cc16' : c <= 60 ? '#f59e0b' : '#ef4444'; };
+        var fmtD = function (d) { return new Date(d + 'T00:00:00Z').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); };
+        var stacUrl = function () { return (typeof SENTINEL !== 'undefined' && SENTINEL.stacUrl) || 'https://earth-search.aws.element84.com/v1'; };
+        function curShape() { var l = rpShapes(); return l.filter(function (s) { return s.layer === selectedLayer; })[0] || l[0] || null; }
+        function bboxOf(s) { var t = turf.bbox(s.gj); return [t[0] - 0.0005, t[1] - 0.0005, t[2] + 0.0005, t[3] + 0.0005].map(function (v) { return +v.toFixed(3); }); }
+        function viewBox() {   // нет фигуры — ищем снимки по видимой области карты
+            if (map.getZoom() < 7) return null;
+            var v = map.getBounds();
+            return [v.getWest(), v.getSouth(), v.getEast(), v.getNorth()].map(function (x) { return +x.toFixed(3); });
+        }
+        function group(fs) {
+            var by = {};
+            fs.forEach(function (f) { var p = f.properties || {}; if (!p.datetime) return; var d = p.datetime.slice(0, 10), cc = p['eo:cloud_cover'] != null ? Math.round(p['eo:cloud_cover']) : null; (by[d] = by[d] || { day: d, scenes: [] }).scenes.push({ id: f.id, cc: cc }); });
+            return Object.keys(by).map(function (k) {
+                var g = by[k]; g.scenes.sort(function (a, b) { return (a.cc == null ? 101 : a.cc) - (b.cc == null ? 101 : b.cc); });
+                var v = g.scenes.filter(function (s) { return s.cc != null; }); g.cc = v.length ? Math.round(v.reduce(function (t, s) { return t + s.cc; }, 0) / v.length) : null; return g;
+            });
+        }
+        function showSel() {
+            var b = $('anSatBadge'), s = $('anSatSel');
+            if (sel) { b.textContent = sel.day.split('-').reverse().join('.'); s.innerHTML = '<i class="fas fa-circle-check"></i> Выбрано: <b>' + fmtD(sel.day) + '</b> · облачность ' + (sel.cc == null ? 'нет данных' : sel.cc + ' %') + ' · снимков: ' + sel.scenes.length; }
+            else { b.textContent = 'не выбрана'; s.textContent = 'Дата не выбрана — выберите день, отмеченный цветной чертой.'; }
+            window.gcSatSel = sel;
+        }
+        function draw() {
+            var y = month.getUTCFullYear(), m = month.getUTCMonth(), dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(), lead = (month.getUTCDay() + 6) % 7, by = {}, max = +$('anSatCc').value, h = '', i, d, day, g;
+            groups.forEach(function (x) { by[x.day] = x; });
+            for (i = 0; i < lead; i++) h += '<span class="sn-cd empty"></span>';
+            for (d = 1; d <= dim; d++) {
+                day = y + '-' + p2(m + 1) + '-' + p2(d); g = by[day];
+                if (!g) { h += '<span class="sn-cd off">' + d + '</span>'; continue; }
+                h += '<button type="button" class="sn-cd has' + (sel && sel.day === day ? ' sel' : '') + (g.cc != null && g.cc > max ? ' dim' : '') + '" data-day="' + day + '" style="--c:' + ccCol(g.cc) + '" title="' + fmtD(day) + ' · облачность ' + (g.cc == null ? 'нет данных' : g.cc + ' %') + ' · снимков: ' + g.scenes.length + '">' + d + '<i></i></button>';
+            }
+            snCal.innerHTML = h; snCal.classList.remove('busy');
+            $('anSatMonth').textContent = month.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+            var now = new Date(); $('anSatNext').disabled = month >= new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+            $('anSatInfo').textContent = note;
+        }
+        function load(retries) {   // retries — на сколько месяцев можно шагнуть назад, если в месяце нет снимков
+            var shp = curShape(), my = ++seq;
+            var bb = shp ? bboxOf(shp) : viewBox();
+            if (!bb) { groups = []; note = 'Загрузите или нарисуйте участок (либо приблизьте карту) — появятся даты со снимками.'; draw(); return; }
+            var y = month.getUTCFullYear(), m = month.getUTCMonth(), ck = bb.join(',') + '|' + y + '-' + m, last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+            if (cache[ck]) { groups = cache[ck]; note = groups.length ? '' : 'В этом месяце снимков нет.'; draw(); return; }
+            snCal.classList.add('busy'); $('anSatInfo').textContent = 'Поиск снимков…';
+            fetch(stacUrl() + '/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox: bb, limit: 200, datetime: y + '-' + p2(m + 1) + '-01T00:00:00Z/' + y + '-' + p2(m + 1) + '-' + p2(last) + 'T23:59:59Z', fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover'] } }) })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (data) {
+                    if (my !== seq) return;
+                    groups = group(data.features || []); cache[ck] = groups;
+                    if (!groups.length && retries > 0) { month = new Date(Date.UTC(y, m - 1, 1)); load(retries - 1); return; }
+                    note = groups.length ? '' : 'В этом месяце снимков нет.'; draw();
+                })
+                .catch(function (e) { if (my !== seq) return; console.warn('Sentinel STAC', e); groups = []; note = 'Не удалось получить список снимков (' + (e && e.message || 'нет связи с каталогом') + '). Нажмите ⟳.'; draw(); });
+        }
+        snCal.addEventListener('click', function (e) {
+            var b = e.target.closest('[data-day]'); if (!b) return;
+            var g = groups.filter(function (x) { return x.day === b.getAttribute('data-day'); })[0]; if (!g) return;
+            sel = { day: g.day, cc: g.cc, scenes: g.scenes.map(function (s) { return { id: s.id, cc: s.cc }; }) }; showSel(); draw();
+        });
+        $('anSatPrev').addEventListener('click', function () { month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)); load(0); });
+        $('anSatNext').addEventListener('click', function () { month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)); load(0); });
+        $('anSatFind').addEventListener('click', function () { cache = {}; lastKey = ''; load(3); });
+        $('anSatCc').addEventListener('input', function () { $('anSatCcVal').textContent = this.value; draw(); });
+        // контур участка могли загрузить, нарисовать или изменить — следим, пока вкладка «Анализ» открыта
+        setInterval(function () {
+            if (!snCal.getClientRects().length) return;
+            var shp = curShape(), k = shp ? bboxOf(shp).join(',') : 'v' + (viewBox() || []).join(',');
+            if (k === lastKey) return;
+            lastKey = k; if (sel && shp) { sel = null; showSel(); }
+            load(3);
+        }, 1500);
+        showSel(); draw();
+    })();
     if (run) run.addEventListener('click', function () {
         if (typeof updateStatus !== 'function') return;
         var list = rpShapes();
         if (!list.length) { updateStatus('⚠️ Сначала загрузите или нарисуйте участок', true); return; }
         var sel = list.filter(function (s) { return s.layer === selectedLayer; });
         if (sel.length) list = sel;
+        var sat = window.gcSatSel;   // дата снимка Sentinel-2 обязательна
+        if (!sat || !sat.day) {
+            updateStatus('⚠️ Сначала выберите дату снимка Sentinel-2 в календаре', true);
+            var ss = document.getElementById('anSatSection'); if (ss) { ss.scrollIntoView({ behavior: 'smooth', block: 'center' }); ss.classList.add('an-need'); setTimeout(function () { ss.classList.remove('an-need'); }, 2200); }
+            return;
+        }
         var now = new Date(), date = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         list.forEach(function (s, i) {
             var ha = turf.area(s.gj) / 1e4;
-            reports.unshift({ id: 'r' + now.getTime().toString(36) + i, name: s.cad ? 'Участок № ' + s.cad : 'Участок ' + ha.toFixed(2).replace('.', ',') + ' га', cad: s.cad, areaHa: ha, date: date, gj: s.gj });
+            reports.unshift({ id: 'r' + now.getTime().toString(36) + i, name: s.cad ? 'Участок № ' + s.cad : 'Участок ' + ha.toFixed(2).replace('.', ',') + ' га', cad: s.cad, areaHa: ha, date: date, gj: s.gj, sat: { day: sat.day, cc: sat.cc, scenes: sat.scenes } });
         });
         rpSave(); rpRender();
         var tab = document.querySelector('.panel-tab[data-tab="reports"]'); if (tab) tab.click();
         updateStatus('✅ Анализ выполнен, отчётов сохранено: ' + list.length + ' (вкладка «Отчёты»)');
-        if (list.length === 1 && window.ppShow) window.ppShow(reports[0].gj, { cad: reports[0].cad });
+        if (list.length === 1 && window.ppShow) window.ppShow(reports[0].gj, { cad: reports[0].cad, sat: reports[0].sat });
     });
     // в 3D рисование недоступно (инструменты теперь в панели, а не на карте)
     var anDraw = document.querySelector('.an-draw');
@@ -815,4 +933,65 @@
     panel.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('.sp-stub') && typeof updateStatus === 'function') updateStatus('ℹ️ Раздел в разработке');
     });
+})();
+
+
+/* ===== Мобильная карта (≤960px): нижняя шторка с тремя положениями и нижнее меню разделов — как в картографических приложениях ===== */
+(function () {
+    var mq = window.matchMedia('(max-width: 960px)');
+    var panel = document.getElementById('mainPanel'), app = document.querySelector('#map-section .app-container');
+    var head = panel && panel.querySelector('.sp-head'), rail = document.getElementById('gcRail');
+    if (!panel || !app || !head) return;
+    var grab = document.createElement('div'); grab.className = 'sp-grab'; grab.innerHTML = '<i></i>'; grab.title = 'Потяните вверх или вниз';
+    head.appendChild(grab);
+    var st = 'peek', drag = null;
+    function dims() {
+        var h = Math.max(200, app.clientHeight - (rail && rail.offsetHeight || 58));
+        return { peek: Math.min(head.offsetHeight + 2, Math.round(h * 0.45)), half: Math.round(h * 0.5), full: h - 10 };
+    }
+    function apply(s) { st = s; if (!mq.matches) return; app.setAttribute('data-sheet', s); app.style.setProperty('--sh', dims()[s] + 'px'); }
+    function sync() { if (mq.matches) apply(st); else { app.removeAttribute('data-sheet'); app.style.removeProperty('--sh'); } }
+    if (mq.addEventListener) mq.addEventListener('change', sync); else mq.addListener(sync);
+    window.addEventListener('resize', function () { if (mq.matches && !drag) apply(st); });
+    window.addEventListener('load', sync);
+    if (window.ResizeObserver) new ResizeObserver(function () { if (mq.matches && st === 'peek' && !drag) apply('peek'); }).observe(head);
+
+    function end() {
+        if (!drag) return;
+        var d = dims(), cur = panel.offsetHeight, moved = drag.moved;
+        drag = null; panel.classList.remove('dragging');
+        if (!moved) { apply(st === 'peek' ? 'half' : st === 'half' ? 'full' : 'peek'); return; }
+        var best = 'peek', bd = 1e9;
+        ['peek', 'half', 'full'].forEach(function (k) { var x = Math.abs(d[k] - cur); if (x < bd) { bd = x; best = k; } });
+        apply(best);
+    }
+    grab.addEventListener('pointerdown', function (e) {
+        if (!mq.matches) return;
+        drag = { y: e.clientY, h: panel.offsetHeight, moved: false };
+        panel.classList.add('dragging');
+        try { grab.setPointerCapture(e.pointerId); } catch (x) { /* не критично */ }
+    });
+    grab.addEventListener('pointermove', function (e) {
+        if (!drag) return;
+        var dy = drag.y - e.clientY, d = dims();
+        if (Math.abs(dy) > 4) drag.moved = true;
+        app.style.setProperty('--sh', Math.max(d.peek, Math.min(d.full, drag.h + dy)) + 'px');
+    });
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+
+    // авто-положения: поиск и маршрут — на всю высоту; открыт раздел — половина; указание точки и рисование — карта открывается
+    document.addEventListener('focusin', function (e) { if (mq.matches && e.target.closest && e.target.closest('#searchInput, .rt-in')) apply('full'); });
+    new MutationObserver(function () { if (mq.matches && panel.getAttribute('data-view') !== 'home' && st === 'peek') apply('half'); }).observe(panel, { attributes: true, attributeFilter: ['data-view'] });
+    var gs = document.getElementById('geoSection');
+    if (gs) new MutationObserver(function () { if (mq.matches && st === 'full' && gs.classList.contains('geo-on')) apply('peek'); }).observe(gs, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('click', function (e) {
+        if (!mq.matches || !e.target.closest) return;
+        var t = e.target;
+        if (t.closest('#searchResults') || t.closest('.rt-pick')) setTimeout(function () { apply('peek'); }, 0);
+        else if (t.closest('[data-sk-tool], [data-lg-tool], .draw-tool-btn, .an-draw .map-btn')) { if (st === 'full') apply('half'); }
+        else if (t.closest('.map-controls-right .map-btn')) { if (st !== 'peek') apply('peek'); }
+        else if (t.closest('#gcRail .gc-rail-btn:not([data-rail="help"])')) { if (st === 'peek') apply('half'); }
+    });
+    setTimeout(sync, 0);
 })();

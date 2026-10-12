@@ -1221,3 +1221,112 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 }
 @media (max-width: 900px) { .pp-compact .pp-mc { grid-template-columns: 1fr; } .pp-compact .pp-mapw { max-width: 300px; } }
 @media print { .pp-st { display: none !important; } }
+
+/* ===== ПАСПОРТ: координаты вершин, 3 карты 3D, логистика 50/50, климат + солнце в ряд, статус «не подключено» ===== */
+.pp-vt { max-height: 190px; overflow: auto; border: 1px solid #e8edf3; border-radius: 10px; }
+.pp-vt table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.pp-vt th { position: sticky; top: 0; background: #f8fafc; color: #64748b; font-weight: 700; text-align: right; padding: 4px 8px; }
+.pp-vt td { padding: 3px 8px; text-align: right; border-top: 1px solid #eef2f6; color: #0f172a; }
+.pp-vt th:first-child, .pp-vt td:first-child { text-align: left; color: #64748b; width: 1%; }
+.pp-maps { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.pp-maps .pp-mapw { max-width: none; }
+.pp-stc.off { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
+.pp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.pp-two > .pp-sub { margin-top: 0; min-width: 0; }
+.pp-compact .pp-sec-b > .pp-lg2, .pp-compact .pp-sec-b > .pp-two { grid-column: 1 / -1; }
+.pp-lg2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.pp-lg-l { position: sticky; top: 70px; min-width: 0; }
+.pp-lg-r { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pp-lg-r > .pp-sub { margin-top: 0; }
+.pp-compact .pp-lg-l .pp-mapw { max-width: none; }
+.pp-lg-l .pp-map { aspect-ratio: 1 / 1; }
+@media (max-width: 1100px) { .pp-two, .pp-lg2 { grid-template-columns: minmax(0, 1fr); } .pp-lg-l { position: static; } }
+@media print { .pp-lg-l { position: static; } }
+
+/* ===== ПАСПОРТ: таблица вершин (компактная, с копированием), логистика — пункты, границы, маршруты ===== */
+.pp-vtw { max-width: 340px; }
+.pp-vtw h5 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pp-vcopy { height: 24px; margin: 0; padding: 0 9px; font-size: 11px; border-radius: 7px; }
+.pp-lgt { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pp-lgt th { text-align: left; font-size: 10.5px; font-weight: 700; color: #64748b; padding: 3px 6px 5px; border-bottom: 1px solid #e2e8f0; }
+.pp-lgt td { padding: 6px; border-top: 1px solid #eef2f6; vertical-align: top; color: #0f172a; }
+.pp-lgt td em { display: block; font-style: normal; font-size: 10.5px; color: #64748b; }
+.pp-lgt td b { display: block; font-weight: 800; }
+.pp-lgt td small { display: block; font-size: 10.5px; line-height: 1.3; color: #64748b; }
+.pp-lgn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 50%; background: #7e22ce; color: #fff; font-size: 10px; font-weight: 800; }
+.pp-lgw { font-size: 11px; color: #94a3b8; }
+.leaflet-tooltip.pp-lgtt { padding: 1px 6px; background: rgba(255,255,255,.92); border: 1px solid #7e22ce; box-shadow: none; color: #581c87; font-size: 11px; font-weight: 700; }
+.leaflet-tooltip.pp-lgtt:before { display: none; }
+
+/* ===== АНАЛИЗ: выбор даты снимка Sentinel-2 ===== */
+.an-sat-sel { margin-top: 10px; font-size: 12.5px; font-weight: 600; color: #0f766e; }
+.an-need { outline: 2px solid #ef4444; outline-offset: 4px; border-radius: 12px; }
+
+/* календарь снимков в паспорте участка */
+.pp-cal { position: relative; flex: none; }
+.pp-cal-t { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.pp-cal-t:hover, .pp-cal.open .pp-cal-t { background: #f1f5f9; }
+.pp-cal-p { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 252px; padding: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 12px 32px rgba(15, 23, 42, .18); }
+.pp-cal.open .pp-cal-p { display: block; }
+.pp-cal-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; text-transform: capitalize; }
+.pp-cal-h button { width: 26px; height: 26px; border: 0; border-radius: 8px; background: #f1f5f9; cursor: pointer; }
+.pp-cal-h button:disabled { opacity: .35; cursor: default; }
+.pp-cal-w, .pp-cal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.pp-cal-w span { text-align: center; font-size: 10px; color: #94a3b8; }
+.pp-cal-g .sn-cd { height: 28px; font-size: 12px; border-radius: 8px; }
+.pp-cal-g .sn-cd.has i { bottom: 2px; width: 10px; height: 2px; margin-left: -5px; }
+.pp-cal-i { min-height: 14px; margin-top: 6px; font-size: 11px; color: #64748b; }
+@media print { .pp-cal { display: none !important; } }
+.pp-sec:has(.pp-cal.open) { overflow: visible; }
+
+
+/* ===== АДАПТИВ (≤960px): карта на весь экран, боковая панель — нижняя шторка, меню разделов — нижняя панель ===== */
+.sp-grab { display: none; }
+@media (max-width: 960px) {
+    :root { --gc-nav: 58px; }
+    #map-section { position: relative; top: auto; padding: 0; }
+    #map-section .app-container { display: block; position: relative; --sh: 140px; height: calc(100vh - var(--hdr) - 46px); height: calc(100dvh - var(--hdr) - 46px); min-height: 320px; border-radius: 0; border-width: 1px 0; box-shadow: none; }
+    #map-section .map-container { position: absolute; left: 0; right: 0; top: 0; bottom: var(--gc-nav); width: auto; height: auto; flex: none; }
+    .panel-resizer { display: none !important; }
+    .s-mapbar { height: 46px; padding: 0 12px; background: var(--bg); }
+    .s-mapbar a { padding: 9px 16px; font-size: 13px; }
+    .s-nav { max-height: calc(100vh - var(--hdr)); max-height: calc(100dvh - var(--hdr)); overflow-y: auto; }
+
+    /* боковая панель → шторка снизу (потянуть за ручку: узкая / половина / вся высота) */
+    #mainPanel, #mainPanel.hidden { position: absolute; left: 0; right: 0; bottom: var(--gc-nav); width: 100% !important; min-width: 0 !important; max-width: none; max-height: none; height: var(--sh); zoom: 1; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -6px 24px rgba(15,23,42,.22); z-index: 25; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; transition: height .28s cubic-bezier(.2,.8,.2,1); }
+    #mainPanel.dragging { transition: none; }
+    #map-section .app-container[data-sheet="peek"] #mainPanel { overflow-y: hidden; }
+    #mainPanel .sp-head { padding: 26px 14px 8px; border-radius: 20px 20px 0 0; }
+    .sp-grab { display: flex; position: absolute; left: 0; right: 0; top: 0; height: 26px; align-items: center; justify-content: center; cursor: grab; touch-action: none; z-index: 3; }
+    .sp-grab i { width: 42px; height: 5px; border-radius: 3px; background: #cbd5e1; }
+    #map-section .app-container.passport-open #mainPanel { position: fixed; inset: var(--hdr) 0 0 0; height: auto; z-index: 2500; border-radius: 0; animation: none; }
+    .gc-help-win { position: fixed; inset: var(--hdr) 0 0 0; z-index: 2500; animation: none; }
+
+    /* левое меню → нижняя панель с горизонтальной прокруткой */
+    .gc-rail { display: flex !important; position: absolute; left: 0; right: 0; bottom: 0; width: auto; height: var(--gc-nav); flex: none; flex-direction: row; align-items: stretch; justify-content: flex-start; gap: 0; padding: 4px 6px; overflow-x: auto; overflow-y: hidden; border-right: 0; border-top: 1px solid #e2e8f0; z-index: 26; -webkit-overflow-scrolling: touch; }
+    .gc-rail-btn { flex: 0 0 66px; width: 66px; padding: 5px 2px; }
+    .gc-rail-sp { display: none; }
+
+    /* кнопки на карте: компактно, масштаб — щипком, ниже шторки не прячутся */
+    #map-section .map-controls-left, #map-section .mini-map-container { display: none !important; }
+    #map-section .map-controls-right { right: 10px; top: 10px; gap: 8px; max-height: max(150px, calc(100% - var(--sh) - 24px)); transition: opacity .2s; }
+    #map-section .map-controls-br { right: 10px; bottom: calc(var(--sh) + 14px); flex-direction: column; align-items: flex-end; gap: 8px; transition: bottom .28s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+    #map-section .map-controls-br .mc-group { flex-direction: column; }
+    #map-section .map-controls-br .mc-group:nth-child(2), #map-section #fullscreenBtn { display: none !important; }
+    #map-section #northBtn { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
+    #map-section .map-bottom-left { left: 10px; bottom: calc(var(--sh) + 10px); transition: bottom .28s cubic-bezier(.2,.8,.2,1); }
+    #map-section #map .leaflet-bottom { bottom: var(--sh); transition: bottom .28s cubic-bezier(.2,.8,.2,1); }
+    #map-section .map-clear-btn, #mainPanel.hidden ~ .map-container .map-clear-btn { left: 10px; top: 10px; transition: opacity .2s; }
+    .app-container[data-sheet="full"] .map-controls-right, .app-container[data-sheet="full"] .map-controls-br, .app-container[data-sheet="full"] .map-clear-btn { opacity: 0; pointer-events: none; }
+    .mc-group .widget-btn, .mc-group > .map-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
+    #map-section .widget-panel-horizontal .widget-panel-body-horizontal { max-height: 46vh; }
+
+    /* удобные для пальца поля и кнопки (16px — iOS не увеличивает страницу при вводе) */
+    #mainPanel input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]), #mainPanel select, #mainPanel textarea { font-size: 16px !important; }
+    .sp-tile i { width: 48px; height: 48px; }
+    #bottomPanel .dw-tool-grid { grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); }
+    #bottomPanel .dw-tool { height: 42px; min-height: 42px; }
+    #bottomPanel .dw-act { min-height: 44px; }
+    .sp-back-btn, .rt-ib { width: 42px; height: 42px; }
+}
+@media (max-width: 380px) { .sp-tile span { font-size: 10px; } .gc-rail-btn { flex-basis: 62px; width: 62px; } }

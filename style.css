@@ -80,7 +80,35 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .panel-tab:focus-visible { outline: 2px solid #34d399; outline-offset: -2px; }
 
 .tab-pane { display: none; flex-shrink: 0; }
-.tab-pane.active { display: block; }
+.tab-pane.active { display: flex; flex-direction: column; flex: 1 0 auto; }
+
+/* ===== КАРТИНКА ПОД КНОПКАМИ ВКЛАДКИ: заполняет свободное место панели (файлы — в папке img/) ===== */
+.tab-art {
+    flex: 1 0 auto;
+    min-height: 230px;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-top: 1px solid #eef2f6;
+}
+.tab-art::before {
+    content: "";
+    flex: 1 1 auto;
+    min-height: 120px;
+    margin: 14px 18px 0;
+    background: var(--art, none) center / contain no-repeat;
+}
+.tab-art[data-art="main"]      { --art: url('img/tab-main.png'); }
+.tab-art[data-art="analysis"]  { --art: url('img/tab-analysis.png'); }
+.tab-art[data-art="reports"]   { --art: url('img/tab-reports.png'); }
+.tab-art[data-art="catalog"]   { --art: url('img/tab-catalog.png'); }
+.tab-art[data-art="help"]      { --art: url('img/tab-help.png'); }
+.tab-art[data-art="bookmarks"] { --art: url('img/tab-bookmarks.png'); }
+.tab-art-txt { padding: 10px 18px 20px; width: 100%; }
+.tab-art-txt b { display: block; font-size: 16px; font-weight: 700; color: #059669; }
+.tab-art-txt p { font-size: 12.5px; line-height: 1.45; margin: 4px 0 8px; color: #475569; }
+.tab-art-txt ul { list-style: none; }
+.tab-art-txt li { font-size: 12px; line-height: 1.4; padding: 2px 0 2px 10px; border-left: 2px solid #34d399; margin-top: 4px; color: #64748b; }
 .tab-placeholder {
     display: flex;
     flex-direction: column;
