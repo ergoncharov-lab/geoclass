@@ -251,11 +251,11 @@
                 <div class="sp-group" data-group="weather">
                     <div class="sp-group-title" style="margin-top:4px">Погода</div>
                     <div class="sp-grid">
-                        <button type="button" class="sp-tile" data-bp="weather" style="--c:#0ea5e9" title="Погода&#10;Текущая погода и прогноз на 7 дней для видимой области карты (Open-Meteo, сетка 5×5 точек): температура, осадки, влажность, ветер, сумма температур выше 5 °C, дни с заморозком."><i class="fas fa-cloud-sun-rain"></i><span>Погода</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#3b82f6" title="Анализ осадков&#10;Раздел в разработке."><i class="fas fa-cloud-showers-heavy"></i><span>Осадки</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#f97316" title="Анализ температур&#10;Раздел в разработке."><i class="fas fa-temperature-half"></i><span>Температура</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#06b6d4" title="Риски заморозков&#10;Раздел в разработке."><i class="fas fa-snowflake"></i><span>Заморозки</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#64748b" title="Ветер&#10;Раздел в разработке."><i class="fas fa-wind"></i><span>Ветер</span></button>
+                        <button type="button" class="sp-tile" data-bp="weather" style="--c:#0ea5e9" title="Прогноз погоды&#10;Текущая погода и прогноз на 7 дней по нарисованному участку (Open-Meteo): температура, осадки, влажность, ветер."><i class="fas fa-cloud-sun-rain"></i><span>Прогноз</span></button>
+                        <button type="button" class="sp-tile" data-bp="climate" style="--c:#6366f1" title="Климат участка&#10;Климатограмма за 10 лет (ERA5): температура и осадки по месяцам, ГТК Селянинова."><i class="fas fa-chart-line"></i><span>Климат</span></button>
+                        <button type="button" class="sp-tile" data-bp="gdd" style="--c:#22c55e" title="Тепло и вегетация&#10;Суммы температур выше 5 и 10 °C, период вегетации, подходящие культуры по теплу."><i class="fas fa-seedling"></i><span>Тепло</span></button>
+                        <button type="button" class="sp-tile" data-bp="frost" style="--c:#06b6d4" title="Заморозки&#10;Безморозный период, даты последнего и первого заморозков, риск по датам."><i class="fas fa-snowflake"></i><span>Заморозки</span></button>
+                        <button type="button" class="sp-tile" data-bp="windwork" style="--c:#64748b" title="Ветер и окна работ&#10;Роза ветров за 10 лет и окна для опрыскивания и полевых работ на 7 дней."><i class="fas fa-wind"></i><span>Ветер</span></button>
                     </div>
                 </div>
             </div>
@@ -476,6 +476,10 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="logistics" title="Логистический анализ: буфер, дороги и водоёмы OSM, расстояния до ближайших"><i class="fas fa-route"></i><span>Логистика</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="weather" title="Погода: анализ и прогноз в текущем экстенте карты"><i class="fas fa-cloud-sun-rain"></i><span>Погода</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="climate" title="Климат участка"><i class="fas fa-chart-line"></i><span>Климат участка</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="gdd" title="Тепло и вегетация"><i class="fas fa-seedling"></i><span>Тепло и вегетация</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="frost" title="Заморозки"><i class="fas fa-snowflake"></i><span>Заморозки</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="windwork" title="Ветер и окна работ"><i class="fas fa-wind"></i><span>Ветер и окна работ</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Снимки Sentinel-2: выбор даты, область, скачивание GeoTIFF"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
@@ -946,32 +950,12 @@
               </div>
           </div><!-- /bp-pane logistics -->
 
-          <!-- ВКЛАДКА «ПОГОДА»: анализ погоды в текущем экстенте карты (Open-Meteo, сетка 5×5 точек) -->
-          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="weather" role="tabpanel">
-              <div class="dw-block wx-ctrl">
-                  <div class="dw-title">Экстент карты</div>
-                  <div class="dw-act-grid">
-                      <button class="dw-act" id="wxRefresh" title="Загрузить погоду для текущего экстента карты"><i class="fas fa-arrows-rotate"></i><span>Обновить</span></button>
-                  </div>
-                  <label class="dw-check"><input type="checkbox" id="wxAuto" checked> Обновлять при сдвиге карты</label>
-                  <div class="m3-hint" id="wxStatus">Нажмите «Обновить» — погода считается по сетке 5×5 точек внутри видимой области</div>
-              </div>
-              <div class="dw-block wx-now">
-                  <div class="dw-title">Сейчас (среднее, мин…макс)</div>
-                  <div class="pf-stat-grid" id="wxNow"></div>
-              </div>
-              <div class="dw-block wx-week">
-                  <div class="dw-title">7 дней</div>
-                  <div class="pf-stat-grid" id="wxWeek"></div>
-              </div>
-              <div class="dw-block pf-chartblock wx-chartblock">
-                  <div class="dw-title">Прогноз на 7 дней <span class="pf-legend"><i style="background:#ef4444"></i>макс. <i style="background:#38bdf8"></i>мин. <i style="background:#3b82f6"></i>осадки <span class="wx-note">· % под датой — вероятность осадков</span></span></div>
-                  <div class="pf-chart-wrap" id="wxWrap">
-                      <canvas id="wxCanvas"></canvas>
-                      <div class="pf-empty" id="wxEmpty">Нет данных</div>
-                  </div>
-              </div>
-          </div><!-- /bp-pane weather -->
+          <!-- РАЗДЕЛЫ «ПОГОДА» (Прогноз / Климат / Тепло / Заморозки / Ветер): содержимое строит script.js, анализ по нарисованной фигуре, Open-Meteo -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="weather" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="climate" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="gdd" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="frost" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
 
           <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDWI / NDMI / NBR): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
           <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->

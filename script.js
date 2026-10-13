@@ -3572,6 +3572,7 @@ function deactivateAllTools() {
     if (typeof lgCancelTool === 'function') lgCancelTool();   // инструмент вкладки «Логистика»
     if (typeof snCancelTool === 'function') snCancelTool();   // инструмент разделов со снимками
 if (typeof chCancelTool === 'function') chCancelTool();   // вкладка «Почвенный анализ»
+    if (typeof wxCancelTool === 'function') wxCancelTool();   // разделы «Погода»
     if (activeDrawHandler) {
         activeDrawHandler.disable();
         activeDrawHandler = null;
@@ -4177,6 +4178,7 @@ map.on(L.Draw.Event.CREATED, function(event) {
     if (typeof chOnCreated === 'function' && chOnCreated(event)) return;   // вкладка «Почвенный анализ»
     if (typeof lgOnCreated === 'function' && lgOnCreated(event)) return;   // вкладка «Логистика»
     if (typeof hyOnCreated === 'function' && hyOnCreated(event)) return;   // вкладка «Профиль» → «По площади»
+    if (typeof wxOnCreated === 'function' && wxOnCreated(event)) return;   // разделы «Погода»
     const layer = event.layer;
     
     // ===== ПРОВЕРКА ПЕРЕСЕЧЕНИЙ =====
@@ -11764,133 +11766,549 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (typeof updateStatus === 'function') updateStatus(windOn ? '🌬️ Анимированный ветер включён (Open-Meteo, 10 м над землёй)' : '🌬️ Анимированный ветер выключен');
     });
 
-    // ---------- Анализ в экстенте ----------
-    const st = { days: null, busy: false, timer: null };
-    const setStatus = (t, err) => { const e = $('wxStatus'); e.textContent = t; e.style.color = err ? '#dc2626' : ''; };
+    // ---------- Анализ погоды по участку: 5 разделов (прогноз, климат, тепло, заморозки, ветер и окна работ) ----------
+    // Область — фигура, нарисованная так же, как в «Почвенном анализе» (полигон / прямоугольник / круг, правка вершин, импорт и экспорт).
+    // Без фигуры анализ идёт по центру видимой области карты. Данные: Open-Meteo (прогноз) и ERA5 через Open-Meteo Archive (климат за 10 лет).
+    const SECS = {
+        weather: ['Прогноз погоды', 'fc'], climate: ['Климат участка', 'cl'], gdd: ['Тепло и вегетация', 'cl'],
+        frost: ['Заморозки', 'cl'], windwork: ['Ветер и окна работ', 'both']
+    };
+    const KEYS = Object.keys(SECS);
+    const st = { shape: null, gj: null, handler: null, tool: null, editing: false, cur: 'weather', busy: false, again: false, ctl: null, done: {}, cache: {} };
+    const grp = L.featureGroup().addTo(map);
+    const SO = { color: '#0ea5e9', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.1 };
+    const panes = {};
+    KEYS.forEach(k => { panes[k] = document.querySelector('[data-bp-pane="' + k + '"]'); });
+    const qAll = n => KEYS.map(k => panes[k].querySelector('[data-wx2="' + n + '"]'));
+    const setStat = (t, err) => qAll('status').forEach(e => { e.textContent = t; e.style.color = err ? '#dc2626' : ''; });
     const avg = a => a.reduce((s, v) => s + v, 0) / a.length;
-    const f = (v, d) => (v == null || isNaN(v)) ? '—' : v.toFixed(d == null ? 1 : d);
+    const f = (v, d) => (v == null || isNaN(v)) ? '—' : v.toLocaleString('ru-RU', { minimumFractionDigits: d == null ? 1 : d, maximumFractionDigits: d == null ? 1 : d });
     const rng = (a, d) => f(avg(a), d) + ' (' + f(Math.min.apply(null, a), d) + '…' + f(Math.max.apply(null, a), d) + ')';
-    const row = (k, v) => '<div class="pf-st"><span>' + k + '</span><b>' + v + '</b></div>';
-    const isVisible = () => $('bottomPanel').querySelector('.bp-pane[data-bp-pane="weather"]').classList.contains('active') && !$('bottomPanel').classList.contains('collapsed');
+    const row = (k, v, c) => '<div class="pf-st"><span>' + k + '</span><b' + (c ? ' style="color:' + c + '"' : '') + '>' + v + '</b></div>';
+    const grid = a => '<div class="pf-stat-grid">' + a.join('') + '</div>';
+    const blk = (t, body, note) => '<div class="wx2-blk"><div class="wx2-t">' + t + '</div>' + body + (note ? '<div class="wx2-note">' + note + '</div>' : '') + '</div>';
+    const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const DIR = ['С', 'ССВ', 'СВ', 'ВСВ', 'В', 'ВЮВ', 'ЮВ', 'ЮЮВ', 'Ю', 'ЮЮЗ', 'ЮЗ', 'ЗЮЗ', 'З', 'ЗСЗ', 'СЗ', 'ССЗ'];
+    const dateOf = doy => new Date(Date.UTC(2001, 0, 1 + Math.round(doy))).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+    const svg = (W, H, inner) => '<svg class="wx2-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img">' + inner + '</svg>';
+    const T = (x, y, s, fill, size, anchor, w) => '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" fill="' + fill + '" font-size="' + (size || 10) + '" text-anchor="' + (anchor || 'middle') + '"' + (w ? ' font-weight="' + w + '"' : '') + '>' + s + '</text>';
+    const mx = a => Math.max.apply(null, a), mn = a => Math.min.apply(null, a);
 
-    async function analyze(silent) {
-        if (st.busy) return;
-        st.busy = true; setStatus('Загрузка погоды…');
-        const al = (window.AnLoader && silent !== true) ? AnLoader.start('Анализ погоды', 'Загружаю прогноз Open-Meteo для видимой области…') : 0;
+    // ---------- фигура ----------
+    function toGJ(layer) {
         try {
-            const b = map.getBounds(), s = Math.max(b.getSouth(), -85), n = Math.min(b.getNorth(), 85);
-            let w = b.getWest(), e = b.getEast();
-            if (e - w >= 360) { w = -180; e = 180; }
-            const cl = x => ((x + 540) % 360) - 180;
-            const lats = [], lons = [];
-            for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) {
-                lats.push((s + (n - s) * (i + 0.5) / ROWS).toFixed(3));
-                lons.push(cl(w + (e - w) * (j + 0.5) / COLS).toFixed(3));
-            }
-            const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lats.join(',') + '&longitude=' + lons.join(',')
-                + '&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m'
-                + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max'
-                + '&wind_speed_unit=ms&timezone=auto&forecast_days=7';
-            const r = await fetch(url);
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            let d = await r.json(); if (!Array.isArray(d)) d = [d];
-            const cur = k => d.map(p => p.current[k]);
-            $('wxNow').innerHTML =
-                row('Температура, °C', rng(cur('temperature_2m'))) +
-                row('Влажность, %', rng(cur('relative_humidity_2m'), 0)) +
-                row('Облачность, %', rng(cur('cloud_cover'), 0)) +
-                row('Ветер, м/с', rng(cur('wind_speed_10m'))) +
-                row('Осадки, мм', rng(cur('precipitation')));
-            const N = d[0].daily.time.length, day = k => Array.from({ length: N }, (_, i) => avg(d.map(p => p.daily[k][i])));
-            const tmax = day('temperature_2m_max'), tmin = day('temperature_2m_min'), pr = day('precipitation_sum'), pp = day('precipitation_probability_max'), wd = day('wind_speed_10m_max');
-            const allMin = Math.min.apply(null, d.map(p => Math.min.apply(null, p.daily.temperature_2m_min)));
-            const allMax = Math.max.apply(null, d.map(p => Math.max.apply(null, p.daily.temperature_2m_max)));
-            const rainSum = d.map(p => p.daily.precipitation_sum.reduce((a, v) => a + v, 0));
-            const gdd = tmax.reduce((sum, v, i) => sum + Math.max((v + tmin[i]) / 2 - 5, 0), 0);
-            $('wxWeek').innerHTML =
-                row('Осадки за 7 дн., мм', rng(rainSum)) +
-                row('T мин…макс, °C', f(allMin) + '…' + f(allMax)) +
-                row('Сумма T>5°C, °C·дн', f(gdd, 0)) +
-                row('Дней с заморозком', tmin.filter(v => v < 0).length) +
-                row('Дождливых дней (≥1 мм)', pr.filter(v => v >= 1).length) +
-                row('Порывистых (≥10 м/с)', wd.filter(v => v >= 10).length);
-            st.days = { t: d[0].daily.time, tmax, tmin, pr, pp, wd };
-            setStatus('Обновлено ' + new Date().toLocaleTimeString().slice(0, 5) + ' · ' + lats.length + ' точек · Open-Meteo' + (map.getZoom() < 5 ? ' · малый масштаб: данные усреднены по большой площади' : ''));
-            draw();
-        } catch (err) {
-            setStatus('Ошибка загрузки погоды: ' + (err.message || err), true);
-        } finally { st.busy = false; if (al && window.AnLoader) AnLoader.end(al); }
+            if (layer instanceof L.Circle) { const c = layer.getLatLng(); return turf.circle([c.lng, c.lat], layer.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
+            const g = layer.toGeoJSON(), x = g.type === 'FeatureCollection' ? g.features[0] : g;
+            if (x && x.geometry && /Polygon/.test(x.geometry.type)) return x;
+        } catch (e) { /* не полигон */ }
+        return null;
     }
-
-    function draw() {
-        const wrap = $('wxWrap'), c = $('wxCanvas'), W = wrap.clientWidth, H = wrap.clientHeight;
-        if (!W || !H || !st.days) return;
-        $('wxEmpty').hidden = true;
-        const dpr = window.devicePixelRatio || 1;
-        if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
-        const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-        g.clearRect(0, 0, W, H);
-        const D = st.days, n = D.t.length, PL = 10, PR = 10, FONT = '"Segoe UI", Arial, sans-serif';
-        const pw = W - PL - PR; if (pw < 120 || H < 200) return;
-        // три полосы: температура (сверху), осадки, подписи дней
-        const hLab = 54, gap = 10, plotH = H - hLab - 8 - gap;
-        const hT = Math.round(plotH * 0.6), hP = plotH - hT;
-        const topT = 22, botT = topT + hT - 22, topP = hT + gap + 22 + 6, botP = hT + gap + hP;
-        const X = i => PL + (i + 0.5) / n * pw;
-        const tLo = Math.min.apply(null, D.tmin), tHi = Math.max.apply(null, D.tmax), span = Math.max(tHi - tLo, 4);
-        const YT = v => botT - (v - tLo) / span * (botT - topT - 14) - 0;
-        const pMax = Math.max(4, Math.ceil(Math.max.apply(null, D.pr)));
-        const YP = v => botP - v / pMax * (botP - topP);
-        const rr = (x, y, w, h, r) => { r = Math.min(r, w / 2, Math.max(h, 0.1)); g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, 0); g.arcTo(x, y + h, x, y, 0); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-        // фоновые полосы дней (через одну) и подписи панелей
-        g.fillStyle = 'rgba(148,163,184,.10)';
-        for (let i = 0; i < n; i += 2) g.fillRect(PL + i / n * pw, 0, pw / n, H - hLab + 6);
-        g.font = '600 11px ' + FONT; g.textAlign = 'left'; g.textBaseline = 'top'; g.fillStyle = '#64748b';
-        g.fillText('ТЕМПЕРАТУРА, °C', PL + 2, 2); g.fillText('ОСАДКИ, мм', PL + 2, hT + gap);
-        // ноль
-        if (tLo < 0 && tHi > 0) {
-            g.strokeStyle = '#94a3b8'; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(PL, YT(0)); g.lineTo(W - PR, YT(0)); g.stroke(); g.setLineDash([]);
-            g.fillStyle = '#94a3b8'; g.font = '10px ' + FONT; g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText('0°', W - PR - 2, YT(0) - 1);
+    function info() {
+        let h;
+        if (!st.gj) h = 'Нарисуйте участок или загрузите его из файла (KML, GeoJSON, Excel, XML Росреестра) — погодный анализ считается только по фигуре. Значок «рука» берёт фигуру, выбранную на карте.';
+        else { const a = turf.area(st.gj); h = 'Участок: <b>' + (a < 1e7 ? f(a / 1e4, 2) + ' га' : f(a / 1e6, 1) + ' км²') + '</b>'; }
+        qAll('info').forEach(e => { e.innerHTML = h; });
+    }
+    function region() {
+        const gj = st.gj;
+        const bb = turf.bbox(gj), polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+        let c; try { c = turf.pointOnFeature(gj).geometry.coordinates; } catch (e) { c = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]; }
+        const wd = bb[2] - bb[0], hd = bb[3] - bb[1], pts = [];
+        if (Math.max(wd, hd) < 0.15) pts.push(c);
+        else for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+            const x = bb[0] + wd * (j + 0.5) / 3, y = bb[1] + hd * (i + 0.5) / 3;
+            if (polys.some(p => snPip(x, y, p[0]))) pts.push([x, y]);
         }
-        // температурная полоса между мин. и макс.
-        const grad = g.createLinearGradient(0, topT, 0, botT);
-        grad.addColorStop(0, 'rgba(239,68,68,.30)'); grad.addColorStop(1, 'rgba(56,189,248,.28)');
-        g.fillStyle = grad; g.beginPath();
-        D.tmax.forEach((v, i) => i ? g.lineTo(X(i), YT(v)) : g.moveTo(X(i), YT(v)));
-        for (let i = n - 1; i >= 0; i--) g.lineTo(X(i), YT(D.tmin[i]));
-        g.closePath(); g.fill();
-        const line = (arr, col) => { g.strokeStyle = col; g.lineWidth = 2.5; g.lineJoin = 'round'; g.beginPath(); arr.forEach((v, i) => i ? g.lineTo(X(i), YT(v)) : g.moveTo(X(i), YT(v))); g.stroke(); arr.forEach((v, i) => { g.fillStyle = '#fff'; g.beginPath(); g.arc(X(i), YT(v), 4, 0, 7); g.fill(); g.strokeStyle = col; g.lineWidth = 2; g.stroke(); }); };
-        line(D.tmax, '#ef4444'); line(D.tmin, '#38bdf8');
-        g.font = '700 12px ' + FONT; g.textAlign = 'center';
-        D.tmax.forEach((v, i) => { g.textBaseline = 'bottom'; g.fillStyle = '#dc2626'; g.fillText(Math.round(v) + '°', X(i), YT(v) - 8); });
-        D.tmin.forEach((v, i) => { g.textBaseline = 'top'; g.fillStyle = '#0284c7'; g.fillText(Math.round(v) + '°', X(i), YT(v) + 8); });
-        // осадки: столбики + значение + вероятность
-        const bw = Math.min(26, pw / n * 0.46);
-        D.pr.forEach((v, i) => {
-            const y = YP(v), h = botP - y;
-            g.fillStyle = 'rgba(148,163,184,.25)'; rr(X(i) - bw / 2, topP, bw, botP - topP, 5); g.fill();
-            if (v > 0.05) { g.fillStyle = '#3b82f6'; rr(X(i) - bw / 2, y, bw, Math.max(h, 3), 5); g.fill(); }
-            g.font = '700 11px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'bottom';
-            g.fillStyle = v > 0.05 ? '#1d4ed8' : '#94a3b8'; g.fillText(v > 0.05 ? f(v) : '—', X(i), Math.min(y, botP) - 3);
+        if (!pts.length) pts.push(c);
+        return { pts: pts, c: c, own: true };
+    }
+    function markTool() { KEYS.forEach(k => panes[k].querySelectorAll('[data-wx-tool]').forEach(b => b.classList.toggle('active', b.dataset.wxTool === st.tool))); }
+    function setEditing(on) {
+        st.editing = !!(on && st.shape);
+        if (st.editing) gcSelect(st.shape); else if (st.shape && st.shape === gcSel) gcDeselect();
+        KEYS.forEach(k => panes[k].querySelectorAll('[data-wx-act="edit"]').forEach(b => b.classList.toggle('active', st.editing)));
+    }
+    function cancelTool() {
+        if (st.handler) { try { st.handler.disable(); } catch (e) { /* уже выключен */ } st.handler = null; }
+        st.tool = null; markTool();
+    }
+    window.wxCancelTool = cancelTool;
+    function shapeChanged() {
+        waStop(); st.done = {}; st.cache = {};
+        qAll('out').forEach(o => { o.innerHTML = ''; });
+        if (st.busy) { st.again = true; if (st.ctl) st.ctl.abort(); } else run(st.cur);
+    }
+    function setShape(layer) {
+        setEditing(false);
+        grp.clearLayers(); st.shape = layer; grp.addLayer(layer);
+        gcShape(layer, { name: 'pogoda', onChange: (l, fin) => { st.gj = toGJ(l); info(); if (fin) shapeChanged(); }, onDelete: () => del() });
+        st.gj = toGJ(layer); info(); shapeChanged();
+    }
+    function del() {
+        waStop(); cancelTool(); setEditing(false);
+        grp.clearLayers(); st.shape = null; st.gj = null; st.done = {}; st.cache = {};
+        qAll('out').forEach(o => { o.innerHTML = ''; }); info(); setStat('');
+    }
+    window.wxClearAll = () => del();   // кнопка «Очистить» на карте
+    function startTool(t) {
+        if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('ℹ️ Рисование работает в 2D — выключите 3D кнопкой «2D» на карте', true); return; }
+        const same = st.tool === t;
+        cancelTool(); setEditing(false);
+        if (same) return;
+        if (typeof deactivateAllTools === 'function') deactivateAllTools();
+        st.tool = t; markTool();
+        st.handler = t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: SO })
+            : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: SO, showArea: false })
+            : new L.Draw.Circle(map, { shapeOptions: SO, showRadius: true });
+        st.handler.enable();
+        updateStatus('✏️ Рисуйте участок для анализа погоды — будет создана одна фигура (прежняя заменится)');
+    }
+    window.wxOnCreated = e => {
+        if (!st.handler || !e.layer) return false;
+        const layer = e.layer;
+        cancelTool(); setShape(layer);
+        layer.on('edit', () => { st.gj = toGJ(layer); info(); shapeChanged(); });
+        return true;
+    };
+    gcShapeIO.wx = {
+        name: 'pogoda',
+        get: () => gcFC(st.gj ? [st.gj] : []),
+        put: fc => {
+            const x = fc.features.find(v => /Polygon/.test(v.geometry.type));
+            if (!x) { updateStatus('⚠️ В файле нет полигона', true); return; }
+            cancelTool();
+            const l = L.geoJSON(x, { style: SO }).getLayers()[0];
+            setShape(l); map.fitBounds(l.getBounds());
+        }
+    };
+
+    // ---------- загрузка данных: тайм-аут, повтор, отмена ----------
+    async function getJ(url) {
+        let err;
+        for (let a = 0; a < 2; a++) {
+            const c = new AbortController(), onAb = () => c.abort(), tm = setTimeout(() => c.abort(), 25000);
+            st.ctl.signal.addEventListener('abort', onAb);
+            try {
+                const r = await fetch(url, { signal: c.signal });
+                if (r.status === 429) throw new Error('превышен лимит запросов Open-Meteo — подождите минуту и повторите');
+                if (!r.ok) throw new Error('Open-Meteo: HTTP ' + r.status);
+                return await r.json();
+            } catch (e) {
+                if (st.ctl.signal.aborted) throw e;
+                err = c.signal.aborted ? new Error('сервер Open-Meteo не ответил за 25 с') : e;
+                if (a === 0) await new Promise(r => setTimeout(r, 700));
+            } finally { clearTimeout(tm); st.ctl.signal.removeEventListener('abort', onAb); }
+        }
+        throw err;
+    }
+    const keyOf = (p, n) => p.map(v => v[0].toFixed(2) + ',' + v[1].toFixed(2)).join(';') + '|' + n;
+    async function getFc(pts) {
+        const key = 'fc' + keyOf(pts, 0), hit = st.cache[key];
+        if (hit && Date.now() - hit.t < 600000) return hit.v;
+        let v;
+        try { v = await getFcOM(pts); }
+        catch (e) {   // api.open-meteo.com может быть недоступен из сети — пробуем резервный источник MET Norway
+            if (st.ctl.signal.aborted) throw e;
+            try { v = await getFcMet(pts); }
+            catch (e2) { if (st.ctl.signal.aborted) throw e2; throw new Error((e && e.message || e) + '; резервный источник MET Norway тоже не ответил: ' + (e2 && e2.message || e2)); }
+        }
+        v.pts = pts.slice(0, v.cur.t.length);
+        st.cache[key] = { t: Date.now(), v: v };
+        return v;
+    }
+    async function getFcOM(pts) {
+        const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(p => p[1].toFixed(3)).join(',') + '&longitude=' + pts.map(p => p[0].toFixed(3)).join(',')
+            + '&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m'
+            + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max'
+            + '&wind_speed_unit=ms&timezone=auto&forecast_days=7';
+        let d = await getJ(url); if (!Array.isArray(d)) d = [d];
+        const cur = k => d.map(p => p.current[k]);
+        const N = d[0].daily.time.length, day = k => Array.from({ length: N }, (_, i) => avg(d.map(p => p.daily[k][i])));
+        const v = {
+            cur: { t: cur('temperature_2m'), h: cur('relative_humidity_2m'), c: cur('cloud_cover'), w: cur('wind_speed_10m'), wd: cur('wind_direction_10m'), p: cur('precipitation') },
+            D: { t: d[0].daily.time, tmax: day('temperature_2m_max'), tmin: day('temperature_2m_min'), pr: day('precipitation_sum'), pp: day('precipitation_probability_max'), wd: day('wind_speed_10m_max') },
+            rain: d.map(p => p.daily.precipitation_sum.reduce((a, x) => a + x, 0)), n: d.length
+        };
+        return v;
+    }
+    // резервный прогноз: MET Norway (без ключа, одна точка на запрос, до 4 точек участка); вероятность осадков — доля шагов с осадками
+    async function getFcMet(pts) {
+        const P = pts.slice(0, 4);
+        const R = await Promise.all(P.map(p => getJ('https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=' + p[1].toFixed(3) + '&lon=' + p[0].toFixed(3))));
+        const dk = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const now = new Date(), keys = [];
+        for (let i = 0; i < 7; i++) keys.push(dk(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)));
+        const per = R.map(r => {
+            const A = {}; keys.forEach(k => { A[k] = { tx: -99, tn: 99, pr: 0, wd: 0, n: 0, w: 0 }; });
+            r.properties.timeseries.forEach(s => {
+                const a = A[dk(new Date(s.time))]; if (!a) return;
+                const i = s.data.instant.details, nx = s.data.next_1_hours || s.data.next_6_hours, p = nx && nx.details ? nx.details.precipitation_amount || 0 : 0;
+                a.tx = Math.max(a.tx, i.air_temperature); a.tn = Math.min(a.tn, i.air_temperature); a.wd = Math.max(a.wd, i.wind_speed || 0);
+                a.pr += p; a.n++; if (p > 0.1) a.w++;
+            });
+            return A;
         });
-        // подписи дней и вероятность осадков
-        D.t.forEach((t, i) => {
-            const dt = new Date(t + 'T00:00:00'), today = i === 0;
-            let wd = dt.toLocaleDateString('ru-RU', { weekday: 'short' }); wd = wd.charAt(0).toUpperCase() + wd.slice(1);
-            g.textAlign = 'center'; g.textBaseline = 'top';
-            g.fillStyle = today ? '#0f172a' : '#475569'; g.font = (today ? '800 ' : '600 ') + '12px ' + FONT; g.fillText(today ? 'Сегодня'.slice(0, pw / n < 52 ? 3 : 7) : wd, X(i), H - hLab + 8);
-            g.fillStyle = '#94a3b8'; g.font = '11px ' + FONT; g.fillText(dt.getDate() + '.' + String(dt.getMonth() + 1).padStart(2, '0'), X(i), H - hLab + 22);
-            g.fillStyle = '#2563eb'; g.font = '600 10px ' + FONT; g.fillText(Math.round(D.pp[i]) + '%', X(i), H - hLab + 38);
-        });
+        const ok = keys.filter(k => per.every(A => A[k].n > 0)), g = (k, fn) => avg(per.map(A => fn(A[k])));
+        if (!ok.length) throw new Error('MET Norway: нет данных');
+        const first = R.map(r => r.properties.timeseries[0]);
+        return {
+            src: 'MET Norway (резерв)',
+            cur: { t: first.map(s => s.data.instant.details.air_temperature), h: first.map(s => s.data.instant.details.relative_humidity), c: first.map(s => s.data.instant.details.cloud_area_fraction), w: first.map(s => s.data.instant.details.wind_speed), wd: first.map(s => s.data.instant.details.wind_from_direction), p: first.map(s => (s.data.next_1_hours && s.data.next_1_hours.details.precipitation_amount) || 0) },
+            D: { t: ok, tmax: ok.map(k => g(k, a => a.tx)), tmin: ok.map(k => g(k, a => a.tn)), pr: ok.map(k => g(k, a => a.pr)), pp: ok.map(k => g(k, a => a.w / a.n * 100)), wd: ok.map(k => g(k, a => a.wd)) },
+            rain: per.map(A => ok.reduce((s, k) => s + A[k].pr, 0)), n: P.length
+        };
+    }
+    async function getCl(c) {
+        const key = 'cl' + keyOf([c], 0);
+        if (st.cache[key]) return st.cache[key].v;
+        const y1 = new Date().getFullYear() - 1, y0 = y1 - 9;
+        const j = await getJ('https://archive-api.open-meteo.com/v1/archive?latitude=' + c[1].toFixed(4) + '&longitude=' + c[0].toFixed(4) + '&start_date=' + y0 + '-01-01&end_date=' + y1 + '-12-31'
+            + '&daily=temperature_2m_mean,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant&wind_speed_unit=ms&timezone=auto');
+        if (!j.daily || !j.daily.time || !j.daily.time.length) throw new Error('нет климатических данных для этой точки');
+        const v = procClim(j.daily, y0, y1);
+        st.cache[key] = { t: Date.now(), v: v };
+        return v;
+    }
+    // обработка суточного ряда ERA5 за 10 лет
+    function procClim(d, y0, y1) {
+        const mT = Array(12).fill(0), mN = Array(12).fill(0), mP = Array(12).fill(0), mF = Array(12).fill(0), yr = {};
+        const inc5 = new Float64Array(366), inc10 = new Float64Array(366), rose = Array(16).fill(0), roseS = Array(16).fill(0);
+        let sT = 0, nT = 0, sP = 0, s5 = 0, s10 = 0, p10 = 0, wS = 0, wN = 0, wHi = 0;
+        for (let i = 0; i < d.time.length; i++) {
+            const ds = d.time[i], Y = +ds.slice(0, 4), mo = +ds.slice(5, 7) - 1, dd = +ds.slice(8, 10);
+            const doy = Math.round((Date.UTC(Y, mo, dd) - Date.UTC(Y, 0, 1)) / 864e5);
+            const Q = yr[Y] || (yr[Y] = { t: new Array(366).fill(null), a: -1, b: 999 });
+            const t = d.temperature_2m_mean[i], tn = d.temperature_2m_min[i], p = d.precipitation_sum[i], w = d.wind_speed_10m_max[i], wd = d.wind_direction_10m_dominant[i];
+            if (p != null) { mP[mo] += p; sP += p; }
+            if (t != null) {
+                Q.t[doy] = t; mT[mo] += t; mN[mo]++; sT += t; nT++;
+                if (t > 5) { s5 += t; inc5[doy] += t; }
+                if (t > 10) { s10 += t; inc10[doy] += t; if (p != null) p10 += p; }
+            }
+            if (tn != null && tn < 0) { mF[mo]++; if (mo < 6) { if (doy > Q.a) Q.a = doy; } else if (doy < Q.b) Q.b = doy; }
+            if (w != null) { wS += w; wN++; if (w >= 10) wHi++; if (wd != null) { const k = Math.round(wd / 22.5) % 16; rose[k]++; roseS[k] += w; } }
+        }
+        const ys = Object.keys(yr).map(Number), NY = ys.length;
+        // устойчивый переход средней суточной температуры через порог: 10 дней подряд скользящее среднее (5 сут.) выше порога
+        const cross = thr => {
+            const A = [], B = [];
+            ys.forEach(y => {
+                const t = yr[y].t, rm = [];
+                for (let k = 0; k < 366; k++) { let s = 0, c = 0; for (let j = k - 4; j <= k; j++) if (j >= 0 && t[j] != null) { s += t[j]; c++; } rm.push(c >= 3 ? s / c : null); }
+                let run = 0, a = -1, b = -1;
+                for (let k = 4; k < 366; k++) { if (rm[k] != null && rm[k] >= thr) { run++; if (run >= 10) { if (a < 0) a = k - 9; b = k; } } else run = 0; }
+                if (a >= 0 && b > a) { A.push(a); B.push(b); }
+            });
+            return A.length ? { a: avg(A), b: avg(B) } : null;
+        };
+        let fsum = 0; const la = [], fa = [];
+        ys.forEach(y => { const q = yr[y]; fsum += (q.b === 999 ? 365 : q.b) - (q.a < 0 ? 0 : q.a); if (q.a >= 0) la.push(q.a); if (q.b < 999) fa.push(q.b); });
+        const c5 = [], c10 = []; let a5 = 0, a10 = 0;
+        for (let k = 0; k < 365; k++) { a5 += inc5[k] / NY; a10 += inc10[k] / NY; c5.push(a5); c10.push(a10); }
+        return {
+            y0: y0, y1: y1, NY: NY, tm: nT ? sT / nT : null, pr: sP / NY,
+            tM: mT.map((v, k) => mN[k] ? v / mN[k] : 0), pM: mP.map(v => v / NY), fM: mF.map(v => v / NY),
+            s5: s5 / NY, s10: s10 / NY, gtk: s10 > 0 ? p10 * 10 / s10 : null, ff: fsum / NY,
+            lastS: la.length ? avg(la) : null, firstA: fa.length ? avg(fa) : null, lateS: la.length ? mx(la) : null, earlyA: fa.length ? mn(fa) : null,
+            pS: D => ys.filter(y => yr[y].a > D).length / NY * 100, pA: D => ys.filter(y => yr[y].b < D).length / NY * 100,
+            c5: c5, c10: c10, x5: cross(5), x10: cross(10),
+            rose: rose, roseS: roseS, wMean: wN ? wS / wN : null, wHi: wHi / NY
+        };
     }
 
-    $('wxRefresh').addEventListener('click', analyze);
-    document.querySelector('.bp-tab[data-bp-tab="weather"]').addEventListener('click', () => { setTimeout(() => { if (!st.days) analyze(); else draw(); }, 30); });
-    map.on('moveend', () => {
-        if (!$('wxAuto').checked || !isVisible()) return;
-        clearTimeout(st.timer); st.timer = setTimeout(() => analyze(true), 900);
+    // ---------- графики (SVG: подстраиваются под ширину панели) ----------
+    function weekSvg(D) {
+        const W = 360, H = 262, PL = 6, n = D.t.length, pw = W - PL * 2, X = i => PL + (i + 0.5) / n * pw;
+        const lo = mn(D.tmin), hi = mx(D.tmax), span = Math.max(hi - lo, 4), Y = v => 38 + (hi - v) / span * 62;
+        const pMax = Math.max(4, Math.ceil(mx(D.pr))), YP = v => 192 - v / pMax * 48;
+        let s = '';
+        for (let i = 0; i < n; i += 2) s += '<rect x="' + (PL + i / n * pw).toFixed(1) + '" y="0" width="' + (pw / n).toFixed(1) + '" height="205" fill="#94a3b8" opacity=".10"/>';
+        s += T(PL + 2, 12, 'ТЕМПЕРАТУРА, °C', '#64748b', 9.5, 'start', 700) + T(PL + 2, 134, 'ОСАДКИ, мм', '#64748b', 9.5, 'start', 700);
+        const line = (arr, c) => '<polyline fill="none" stroke="' + c + '" stroke-width="2.4" stroke-linejoin="round" points="' + arr.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ') + '"/>'
+            + arr.map((v, i) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(v).toFixed(1) + '" r="3.6" fill="#fff" stroke="' + c + '" stroke-width="2"/>').join('');
+        s += line(D.tmax, '#ef4444') + line(D.tmin, '#38bdf8');
+        D.tmax.forEach((v, i) => { s += T(X(i), Y(v) - 8, Math.round(v) + '°', '#dc2626', 10.5, 'middle', 700); });
+        D.tmin.forEach((v, i) => { s += T(X(i), Y(v) + 17, Math.round(v) + '°', '#0284c7', 10.5, 'middle', 700); });
+        const bw = Math.min(24, pw / n * 0.5);
+        D.pr.forEach((v, i) => {
+            const y = YP(v), x = (X(i) - bw / 2).toFixed(1);
+            s += '<rect x="' + x + '" y="144" width="' + bw.toFixed(1) + '" height="48" rx="4" fill="#94a3b8" opacity=".22"/>';
+            if (v > 0.05) s += '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(192 - y, 3).toFixed(1) + '" rx="4" fill="#3b82f6"/>';
+            s += T(X(i), Math.min(y, 192) - 4, v > 0.05 ? f(v) : '—', v > 0.05 ? '#1d4ed8' : '#94a3b8', 10, 'middle', 700);
+        });
+        D.t.forEach((t, i) => {
+            const dt = new Date(t + 'T00:00:00'); let w = dt.toLocaleDateString('ru-RU', { weekday: 'short' }); w = w.charAt(0).toUpperCase() + w.slice(1);
+            s += T(X(i), 218, i ? w : 'Сег.', i ? '#475569' : '#0f172a', 11, 'middle', i ? 600 : 800)
+                + T(X(i), 232, dt.getDate() + '.' + String(dt.getMonth() + 1).padStart(2, '0'), '#94a3b8', 10)
+                + T(X(i), 246, Math.round(D.pp[i]) + '%', '#2563eb', 9.5, 'middle', 600);
+        });
+        return svg(W, H, s);
+    }
+    function climoSvg(tM, pM) {
+        const W = 360, H = 232, PL = 8, pw = W - PL * 2, X = i => PL + (i + 0.5) / 12 * pw;
+        const pMax = Math.max(10, Math.ceil(mx(pM) / 10) * 10), YP = v => 186 - v / pMax * 118;
+        const lo = Math.min(mn(tM), 0), hi = mx(tM), span = Math.max(hi - lo, 10), YT = v => 186 - (v - lo) / span * 118;
+        let s = '';
+        if (lo < 0) s += '<line x1="' + PL + '" x2="' + (W - PL) + '" y1="' + YT(0).toFixed(1) + '" y2="' + YT(0).toFixed(1) + '" stroke="#94a3b8" stroke-dasharray="4 4"/>' + T(W - PL, YT(0) - 3, '0°', '#94a3b8', 9, 'end');
+        const bw = pw / 12 * 0.56;
+        pM.forEach((v, i) => {
+            const y = YP(v), h = 186 - y, x = (X(i) - bw / 2).toFixed(1);
+            s += '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="3" fill="#60a5fa" opacity=".85"/>';
+            s += h > 16 ? T(X(i), 181, Math.round(v), '#fff', 9, 'middle', 700) : T(X(i), y - 3, Math.round(v), '#1d4ed8', 9, 'middle', 700);
+        });
+        s += '<polyline fill="none" stroke="#ef4444" stroke-width="2.4" stroke-linejoin="round" points="' + tM.map((v, i) => X(i).toFixed(1) + ',' + YT(v).toFixed(1)).join(' ') + '"/>';
+        tM.forEach((v, i) => { s += '<circle cx="' + X(i).toFixed(1) + '" cy="' + YT(v).toFixed(1) + '" r="3.2" fill="#fff" stroke="#ef4444" stroke-width="2"/>' + T(X(i), YT(v) - 8, Math.round(v) + '°', '#dc2626', 10, 'middle', 700); });
+        MON.forEach((m, i) => { s += T(X(i), 204, m, '#475569', 10.5, 'middle', 600); });
+        return svg(W, H, s + T(PL + 2, 14, 'красная линия — t°, °C · столбики — осадки, мм', '#64748b', 9.5, 'start', 600));
+    }
+    function cumSvg(K) {
+        const W = 360, H = 232, PL = 34, PR = 10, pw = W - PL - PR, top = 22, bot = 190;
+        const yMax = Math.max(500, Math.ceil(K.c5[364] / 500) * 500), X = d => PL + d / 364 * pw, Y = v => bot - v / yMax * (bot - top);
+        let s = '';
+        for (let v = 0; v <= yMax; v += yMax > 3000 ? 1000 : 500) s += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '" stroke="#e2e8f0"/>' + T(PL - 4, Y(v) + 3, v, '#94a3b8', 9, 'end');
+        [[1600, 'Σt 1600'], [2200, 'Σt 2200'], [3000, 'Σt 3000']].forEach(r => { if (r[0] < yMax) s += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + Y(r[0]).toFixed(1) + '" y2="' + Y(r[0]).toFixed(1) + '" stroke="#f59e0b" stroke-dasharray="3 4" opacity=".7"/>' + T(PL + 3, Y(r[0]) - 3, r[1], '#b45309', 8.5, 'start'); });
+        const path = a => a.map((v, k) => (k ? 'L' : 'M') + X(k).toFixed(1) + ',' + Y(v).toFixed(1)).join('');
+        s += '<path d="' + path(K.c5) + '" fill="none" stroke="#22c55e" stroke-width="2.4"/><path d="' + path(K.c10) + '" fill="none" stroke="#ef4444" stroke-width="2.4"/>';
+        MON.forEach((m, i) => { s += T(X(i * 30.4 + 15), 206, m, '#475569', 9.5, 'middle', 600); });
+        s += T(PL, 12, 'Накопленная сумма температур за год, °C', '#64748b', 9.5, 'start', 600);
+        s += '<rect x="' + (PL + 4) + '" y="216" width="10" height="4" fill="#22c55e"/>' + T(PL + 18, 221, 't > 5 °C', '#475569', 9.5, 'start') + '<rect x="' + (PL + 80) + '" y="216" width="10" height="4" fill="#ef4444"/>' + T(PL + 94, 221, 't > 10 °C', '#475569', 9.5, 'start');
+        return svg(W, H, s);
+    }
+    function frostSvg(fM) {
+        const W = 360, H = 170, PL = 8, pw = W - PL * 2, X = i => PL + (i + 0.5) / 12 * pw, yMax = Math.max(5, Math.ceil(mx(fM))), Y = v => 130 - v / yMax * 100, bw = pw / 12 * 0.56;
+        let s = T(PL + 2, 14, 'Дней с заморозком (t мин < 0 °C) в месяц, в среднем за год', '#64748b', 9.5, 'start', 600);
+        fM.forEach((v, i) => {
+            s += '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + Y(v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(130 - Y(v), 1).toFixed(1) + '" rx="3" fill="#38bdf8"/>' + T(X(i), Y(v) - 4, f(v, 0), '#0369a1', 10, 'middle', 700) + T(X(i), 148, MON[i], '#475569', 10.5, 'middle', 600);
+        });
+        return svg(W, H, s);
+    }
+    function roseSvg(K) {
+        const W = 260, H = 250, cx = 130, cy = 125, R = 88, mF = mx(K.rose) || 1, tot = K.rose.reduce((a, v) => a + v, 0) || 1;
+        let s = '';
+        [0.25, 0.5, 0.75, 1].forEach(q => { s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R * q).toFixed(1) + '" fill="none" stroke="#e2e8f0"/>'; });
+        const pt = (r, a) => (cx + r * Math.sin(a)).toFixed(1) + ',' + (cy - r * Math.cos(a)).toFixed(1);
+        K.rose.forEach((v, i) => {
+            const r = v / mF * R, a1 = (i * 22.5 - 9.5) * Math.PI / 180, a2 = (i * 22.5 + 9.5) * Math.PI / 180, ms = v ? K.roseS[i] / v : 0;
+            s += '<path d="M' + cx + ',' + cy + ' L' + pt(r, a1) + ' A' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 0 1 ' + pt(r, a2) + ' Z" fill="' + (ms >= 8 ? '#f97316' : ms >= 5 ? '#38bdf8' : '#7dd3fc') + '" opacity=".85"><title>' + DIR[i] + ': ' + (v / tot * 100).toFixed(0) + '% дней, ср. макс. ветер ' + f(ms) + ' м/с</title></path>';
+        });
+        [['С', 0], ['В', 90], ['Ю', 180], ['З', 270]].forEach(d => { const a = d[1] * Math.PI / 180; s += T(cx + (R + 14) * Math.sin(a), cy - (R + 14) * Math.cos(a) + 4, d[0], '#334155', 12, 'middle', 700); });
+        s += T(cx, H - 6, 'откуда дует ветер, доля дней', '#64748b', 9.5, 'middle', 600);
+        return svg(W, H, s);
+    }
+    function meters(items) {   // items: [подпись, процент, цвет]
+        return items.map(it => '<div class="wx2-mt"><span>' + it[0] + '</span><div><i style="width:' + Math.round(it[1]) + '%;background:' + it[2] + '"></i></div><b>' + Math.round(it[1]) + '%</b></div>').join('');
+    }
+    function windows(D) {
+        const C = { g: ['#22c55e', 'можно'], o: ['#f59e0b', 'с оговорками'], r: ['#ef4444', 'нельзя'] };
+        const rules = [
+            ['Опрыскивание', i => (D.wd[i] <= 5 && D.pr[i] < 0.5 && D.pp[i] <= 30 && D.tmax[i] >= 8 && D.tmax[i] <= 27) ? 'g' : (D.wd[i] > 8 || D.pr[i] >= 2 || D.tmax[i] > 30) ? 'r' : 'o'],
+            ['Полевые работы', i => (D.pr[i] < 1 && D.pp[i] <= 40) ? 'g' : D.pr[i] >= 5 ? 'r' : 'o'],
+            ['Заморозок', i => D.tmin[i] <= -2 ? 'r' : D.tmin[i] < 0 ? 'o' : 'g']
+        ];
+        let h = '<div class="wx2-win"><span></span>' + D.t.map(t => { const d = new Date(t + 'T00:00:00'); return '<em>' + d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '</em>'; }).join('');
+        rules.forEach(r => { h += '<span>' + r[0] + '</span>' + D.t.map((t, i) => { const k = r[1](i); return '<i style="background:' + C[k][0] + '" title="' + C[k][1] + '"></i>'; }).join(''); });
+        return h + '</div>';
+    }
+    const gtkCl = g => g < 0.5 ? 'очень засушливо' : g < 0.7 ? 'засушливо' : g < 1.0 ? 'недостаточное увлажнение' : g < 1.3 ? 'умеренное увлажнение' : g < 1.6 ? 'достаточное увлажнение' : 'избыточное увлажнение';
+
+    // ---------- анимация ветра внутри участка (сетка стрелок, обрезанная по фигуре) ----------
+    // Поле ветра — по текущему ветру в точках участка (скорость и направление), между точками — взвешенная интерполяция.
+    map.createPane('wxAnimPane'); map.getPane('wxAnimPane').style.zIndex = 410; map.getPane('wxAnimPane').style.pointerEvents = 'none';
+    const WA = { cv: null, ctx: null, raf: 0, grid: [], pts: [], pp: [], path: null, org: null, W: 0, on: false };
+    const WA_COLS = [[3, '#38bdf8'], [6, '#0ea5e9'], [10, '#f59e0b'], [15, '#ea580c'], [99, '#dc2626']];
+    function waPlace() {   // холст на всю видимую область, сетка стрелок привязана к карте (при сдвиге не «прыгает»)
+        if (!WA.cv || !st.gj) return;
+        const sz = map.getSize(), d = Math.ceil(Math.hypot(sz.x, sz.y)) + 40, ctr = map.latLngToLayerPoint(map.getCenter());
+        WA.org = L.point(Math.round(ctr.x - d / 2), Math.round(ctr.y - d / 2));
+        if (WA.W !== d) { WA.cv.width = d; WA.cv.height = d; WA.W = d; }
+        L.DomUtil.setPosition(WA.cv, WA.org);
+        const polys = st.gj.geometry.type === 'Polygon' ? [st.gj.geometry.coordinates] : st.gj.geometry.coordinates, P = new Path2D();
+        let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        polys.forEach(poly => poly.forEach(ring => {
+            ring.forEach((c, i) => {
+                const q = map.latLngToLayerPoint([c[1], c[0]]), x = q.x - WA.org.x, y = q.y - WA.org.y;
+                if (i) P.lineTo(x, y); else P.moveTo(x, y);
+                x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+            });
+            P.closePath();
+        }));
+        x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(d, x1); y1 = Math.min(d, y1);
+        WA.path = P; WA.grid = [];
+        WA.pp = WA.pts.map(c => { const q = map.latLngToLayerPoint([c.lat, c.lng]); return { x: q.x - WA.org.x, y: q.y - WA.org.y, u: c.u, v: c.v }; });
+        if (x1 > x0 && y1 > y0) {
+            const step = Math.max(34, Math.sqrt((x1 - x0) * (y1 - y0) / 700)), ox = WA.org.x, oy = WA.org.y;
+            for (let gy = Math.ceil((y0 + oy) / step) * step - oy; gy < y1; gy += step)
+                for (let gx = Math.ceil((x0 + ox) / step) * step - ox; gx < x1; gx += step)
+                    if (WA.ctx.isPointInPath(P, gx, gy, 'evenodd')) WA.grid.push({ x: gx, y: gy, ph: (gx + ox) * 0.05 + (gy + oy) * 0.031 });
+            WA.step = step;
+        }
+    }
+    function waAt(x, y) {
+        let su = 0, sv = 0, sw = 0;
+        WA.pp.forEach(q => { const w = 1 / ((x - q.x) * (x - q.x) + (y - q.y) * (y - q.y) + 1); su += q.u * w; sv += q.v * w; sw += w; });
+        return [su / sw, sv / sw];
+    }
+    function waFrame(now) {
+        WA.raf = 0;
+        if (!WA.on || !WA.cv) return;
+        WA.raf = requestAnimationFrame(waFrame);
+        if (!WA.path || WA.cv.style.display === 'none') return;
+        const ctx = WA.ctx, d = WA.W, t = now / 1000, S = WA.step || 34;
+        ctx.clearRect(0, 0, d, d);
+        ctx.save(); ctx.clip(WA.path, 'evenodd'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        WA.grid.forEach(g => {
+            const w = waAt(g.x, g.y), wx = g.x + WA.org.x, wy = g.y + WA.org.y;
+            // естественность: плавная пространственно-временная «рябь» направления и скорости + лёгкое покачивание и порывы
+            const jit = 0.2 * Math.sin(wx * 0.012 + t * 0.45 + wy * 0.007) + 0.07 * Math.sin(t * 1.6 + g.ph);
+            const sp = Math.hypot(w[0], w[1]) * (1 + 0.15 * Math.sin(wy * 0.01 - t * 0.7 + wx * 0.006) + 0.08 * Math.sin(t * 1.3 + g.ph));
+            if (sp < 0.25) { ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.arc(g.x, g.y, 2, 0, 7); ctx.fill(); return; }
+            const a = Math.atan2(-w[1], w[0]) + jit, L = Math.min(S * 0.8, 9 + Math.min(sp, 14) / 14 * 24), hs = 4.5 + Math.min(sp, 14) * 0.2;
+            const c = Math.cos(a), s = Math.sin(a), hx = g.x + c * L / 2, hy = g.y + s * L / 2, tx = g.x - c * L / 2, ty = g.y - s * L / 2;
+            let k = 0; while (WA_COLS[k][0] < sp) k++;
+            const path = () => { ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.moveTo(hx - c * hs + s * hs * 0.6, hy - s * hs - c * hs * 0.6); ctx.lineTo(hx, hy); ctx.lineTo(hx - c * hs - s * hs * 0.6, hy - s * hs + c * hs * 0.6); };
+            ctx.lineWidth = 3.6 + sp * 0.06; ctx.strokeStyle = 'rgba(255,255,255,.85)'; path(); ctx.stroke();   // светлая обводка для читаемости на любой подложке
+            ctx.lineWidth = 1.8 + sp * 0.06; ctx.strokeStyle = WA_COLS[k][1]; path(); ctx.stroke();
+        });
+        ctx.restore();
+    }
+    const waMove = () => { if (WA.on) waPlace(); };
+    const waHide = () => { if (WA.cv) WA.cv.style.display = 'none'; };
+    const waShow = () => { if (WA.cv) { WA.cv.style.display = ''; waMove(); } };
+    function waStop() {
+        WA.on = false;
+        if (WA.raf) cancelAnimationFrame(WA.raf);
+        WA.raf = 0;
+        map.off('moveend', waMove).off('resize', waMove).off('zoomstart', waHide).off('zoomend', waShow);
+        if (WA.cv && WA.cv.parentNode) WA.cv.parentNode.removeChild(WA.cv);
+        WA.cv = WA.ctx = null; WA.W = 0; WA.grid = []; WA.path = null;
+    }
+    function waStart(fc) {
+        waStop();
+        if (!fc || !st.gj || !fc.pts || !fc.cur.wd || fc.cur.wd.some(v => v == null)) return;
+        WA.pts = fc.pts.map((p, i) => { const sp = fc.cur.w[i], dr = fc.cur.wd[i] * Math.PI / 180; return { lng: p[0], lat: p[1], u: -sp * Math.sin(dr), v: -sp * Math.cos(dr) }; });   // направление — откуда дует ветер
+        const cv = document.createElement('canvas'); cv.className = 'wx-wind'; cv.style.pointerEvents = 'none';
+        map.getPane('wxAnimPane').appendChild(cv);
+        WA.cv = cv; WA.ctx = cv.getContext('2d'); WA.W = 0; WA.on = true;
+        map.on('moveend', waMove).on('resize', waMove).on('zoomstart', waHide).on('zoomend', waShow);
+        waPlace();
+        WA.raf = requestAnimationFrame(waFrame);
+    }
+    function waBlk(fc) {
+        let u = 0, v = 0, w = avg(fc.cur.w);
+        if (fc.cur.wd && !fc.cur.wd.some(x => x == null)) fc.cur.wd.forEach((d, i) => { u += Math.sin(d * Math.PI / 180); v += Math.cos(d * Math.PI / 180); });
+        const dir = (u || v) ? DIR[Math.round(((Math.atan2(u, v) * 180 / Math.PI) + 360) % 360 / 22.5) % 16] : null;
+        return blk('Анимация на карте', '<label class="dw-check"><input type="checkbox" data-wx2="anim" checked> Показывать стрелки ветра на участке</label>'
+            + grid([row('Ветер сейчас', f(w) + ' м/с' + (dir ? ' · с ' + dir : ''))]),
+            'Стрелки по сетке показывают, куда дует ветер; длина и цвет — скорость (голубые — слабый, жёлтые и оранжевые — сильный), лёгкое покачивание изображает порывы. Источник: ' + (fc.src || 'Open-Meteo') + '.');
+    }
+
+    // ---------- содержимое разделов ----------
+    const RENDER = {
+        weather: (fc, cl, rg) => {
+            const c = fc.cur, D = fc.D, gdd = D.tmax.reduce((s, v, i) => s + Math.max((v + D.tmin[i]) / 2 - 5, 0), 0);
+            return blk('Сейчас (среднее, мин…макс)', grid([row('Температура, °C', rng(c.t)), row('Влажность, %', rng(c.h, 0)), row('Облачность, %', rng(c.c, 0)), row('Ветер, м/с', rng(c.w)), row('Осадки, мм', rng(c.p))]))
+                + blk('Прогноз на 7 дней', weekSvg(D), '% под датой — вероятность осадков. Красная линия — максимум, синяя — минимум, столбики — осадки за сутки.')
+                + blk('За 7 дней', grid([row('Осадки, мм', rng(fc.rain)), row('T мин…макс, °C', f(mn(D.tmin)) + '…' + f(mx(D.tmax))), row('Сумма T>5°C, °C·дн', f(gdd, 0)), row('Дней с заморозком', D.tmin.filter(v => v < 0).length), row('Дождливых дней (≥1 мм)', D.pr.filter(v => v >= 1).length), row('Порывистых (≥10 м/с)', D.wd.filter(v => v >= 10).length)]),
+                    (fc.src || 'Open-Meteo') + ', ' + 'точек внутри участка: ' + fc.n + '.');
+        },
+        climate: (fc, K) => {
+            const wm = K.tM.indexOf(mx(K.tM)), cm = K.tM.indexOf(mn(K.tM)), wp = K.pM.indexOf(mx(K.pM));
+            return blk('Климат за ' + K.y0 + '–' + K.y1 + ' гг.', grid([row('Средняя t° года', f(K.tm) + ' °C', '#ef4444'), row('Осадки за год', f(K.pr, 0) + ' мм', '#0ea5e9'), row('Самый тёплый месяц', MON[wm] + ', ' + f(K.tM[wm]) + ' °C'), row('Самый холодный месяц', MON[cm] + ', ' + f(K.tM[cm]) + ' °C'), row('Самый влажный месяц', MON[wp] + ', ' + f(K.pM[wp], 0) + ' мм'), row('ГТК Селянинова', K.gtk != null ? f(K.gtk, 2) + ' · ' + gtkCl(K.gtk) : '—')]))
+                + blk('Климатограмма по месяцам', climoSvg(K.tM, K.pM), 'Месяцы с низкими столбиками осадков и высокой температурой — риск засухи. Реанализ ERA5 (Open-Meteo Archive), ячейка сетки ≈ 10–25 км, данные в точке участка.');
+        },
+        gdd: (fc, K) => {
+            const CR = [['Ранние яровые зерновые', 1400], ['Картофель', 1600], ['Озимые зерновые', 1800], ['Подсолнечник, соя', 2200], ['Кукуруза на зерно', 2500], ['Хлопчатник, рис', 3200]];
+            const per = x => x ? dateOf(x.a) + ' — ' + dateOf(x.b) + ' (' + Math.round(x.b - x.a) + ' дн.)' : 'не наступает';
+            return blk('Теплообеспеченность', grid([row('Σ t > 5 °C за год', f(K.s5, 0) + ' °', '#22c55e'), row('Σ t > 10 °C за год', f(K.s10, 0) + ' °', '#ef4444'), row('ГТК за период t > 10 °C', K.gtk != null ? f(K.gtk, 2) : '—')]))
+                + blk('Период вегетации', '<div class="pf-stat-grid" style="grid-template-columns:1fr">' + row('Устойчиво t > 5 °C', per(K.x5)) + row('Устойчиво t > 10 °C', per(K.x10)) + '</div>', 'Начало и конец — по скользящему среднему суточной температуры (5 суток): не менее 10 дней подряд выше порога. Среднее за ' + K.NY + ' лет.')
+                + blk('Накопление тепла в течение года', cumSvg(K), 'Пунктир — границы агроклиматических зон по Σt > 10 °C: 1600, 2200, 3000 °.')
+                + blk('Подходящие культуры по теплу', '<div class="wx2-cr">' + CR.map(c => '<div class="' + (K.s10 >= c[1] ? 'ok' : 'no') + '"><span>' + c[0] + '</span><em>от ' + c[1] + ' °</em><b>' + (K.s10 >= c[1] ? 'хватает' : 'мало тепла') + '</b></div>').join('') + '</div>', 'Ориентировочная потребность за период вегетации по Σ t > 10 °C; сорт и срок сева могут изменить порог.');
+        },
+        frost: (fc, K) => {
+            const sp = [[104, 'после 15 апр.'], [120, 'после 1 мая'], [134, 'после 15 мая'], [151, 'после 1 июн.']].map(a => [a[1], K.pS(a[0]), '#38bdf8']);
+            const au = [[243, 'до 1 сен.'], [257, 'до 15 сен.'], [273, 'до 1 окт.'], [287, 'до 15 окт.']].map(a => [a[1], K.pA(a[0]), '#6366f1']);
+            return blk('Безморозный период', grid([row('Безморозный период', f(K.ff, 0) + ' дн.', '#0ea5e9'), row('Последний весенний', K.lastS != null ? dateOf(K.lastS) : 'нет'), row('Первый осенний', K.firstA != null ? dateOf(K.firstA) : 'нет'), row('Самый поздний весенний', K.lateS != null ? dateOf(K.lateS) : 'нет'), row('Самый ранний осенний', K.earlyA != null ? dateOf(K.earlyA) : 'нет')]), 'Заморозок — минимальная суточная температура ниже 0 °C. Даты усреднены за ' + K.NY + ' лет (ERA5).')
+                + blk('Заморозки по месяцам', frostSvg(K.fM))
+                + blk('Риск весенних заморозков', meters(sp), 'Доля лет, когда заморозок был после указанной даты (в 10-летнем ряду). Чем выше, тем позже безопасно высевать теплолюбивые культуры.')
+                + blk('Риск осенних заморозков', meters(au), 'Доля лет, когда первый осенний заморозок наступил до указанной даты — риск для поздних культур перед уборкой.');
+        },
+        windwork: (fc, K) => {
+            let mi = 0; K.rose.forEach((v, i) => { if (v > K.rose[mi]) mi = i; });
+            return waBlk(fc) + blk('Ветер (ERA5, ' + K.y0 + '–' + K.y1 + ')', grid([row('Средний макс. за сутки', f(K.wMean) + ' м/с'), row('Дней с ветром ≥ 10 м/с', f(K.wHi, 0) + ' в год'), row('Преобладающее направление', 'с ' + DIR[mi] + ' · ' + Math.round(K.rose[mi] / (K.rose.reduce((a, v) => a + v, 0) || 1) * 100) + '% дней')]))
+                + blk('Роза ветров', '<div style="max-width:260px;margin:0 auto">' + roseSvg(K) + '</div>', 'Длина лепестка — доля дней с ветром из этого направления; цвет: голубой — слабый (< 5 м/с), синий — умеренный, оранжевый — сильный (≥ 8 м/с в среднем за сутки). Нужна для выбора направления лесополос и сноса при опрыскивании.')
+                + blk('Окна для работ на 7 дней', windows(fc.D), 'Опрыскивание — ветер ≤ 5 м/с, без осадков, 8…27 °C. Полевые работы — осадки < 1 мм и вероятность ≤ 40 %. Заморозок — t мин < 0 °C. Ориентировочно, по прогнозу Open-Meteo.');
+        }
+    };
+
+    // ---------- запуск раздела ----------
+    async function run(k, force) {
+        if (st.busy) return;
+        const need = SECS[k][1], out = panes[k].querySelector('[data-wx2="out"]');
+        if (!st.gj) { out.innerHTML = ''; setStat('Сначала нарисуйте участок или загрузите его из файла — по экстенту карты погода не считается.', true); return; }
+        const rg = region();
+        if (force) st.cache = {};
+        st.busy = true; st.again = false; st.ctl = new AbortController();
+        const ck = (need !== 'cl' && !st.cache['fc' + keyOf(rg.pts, 0)]) || (need !== 'fc' && !st.cache['cl' + keyOf([rg.c], 0)]);
+        const al = (window.AnLoader && ck) ? AnLoader.start(SECS[k][0], 'Загружаю данные Open-Meteo…', { delay: 0, onCancel: () => st.ctl.abort() }) : 0;
+        setStat('Загрузка данных…');
+        try {
+            let fc = null, cl = null;
+            if (need !== 'cl') { if (al) AnLoader.progress(null, 'Загружаю прогноз на 7 дней…'); fc = await getFc(rg.pts); }
+            if (need !== 'fc') { if (al) AnLoader.progress(null, 'Загружаю климат ERA5 за 10 лет…'); cl = await getCl(rg.c); }
+            out.innerHTML = RENDER[k](fc, cl, rg);
+            if (k === 'windwork') { st.wfc = fc; const c = out.querySelector('[data-wx2="anim"]'); if (!c || c.checked) waStart(fc); } else waStop();
+            st.done[k] = true;
+            setStat('Обновлено ' + new Date().toLocaleTimeString().slice(0, 5) + ' · ' + 'участок' + ' · Open-Meteo');
+        } catch (err) {
+            if (st.ctl.signal.aborted) setStat(st.again ? 'Участок изменён — пересчёт…' : 'Загрузка отменена. Нажмите «Обновить», чтобы повторить.');
+            else setStat('Ошибка загрузки: ' + (err && err.message || err) + '. Нажмите «Обновить».', true);
+        } finally {
+            st.busy = false; if (al && window.AnLoader) AnLoader.end(al);
+            if (st.again) { st.again = false; run(st.cur); }
+        }
+    }
+
+    // ---------- интерфейс вкладок ----------
+    KEYS.forEach(k => {
+        const p = panes[k];
+        p.innerHTML =
+            '<div class="dw-block"><div class="dw-title">Область на карте</div><div class="an-draw">' +
+            '<button type="button" class="map-btn" data-wx-tool="polygon" title="Полигон"><i class="gc-pent"></i></button>' +
+            '<button type="button" class="map-btn" data-wx-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i></button>' +
+            '<button type="button" class="map-btn" data-wx-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i></button>' +
+            '<button type="button" class="map-btn" data-wx-act="edit" title="Редактировать фигуру"><i class="fas fa-edit"></i></button>' +
+            '<button type="button" class="map-btn" data-wx-act="sel" title="Взять фигуру, выбранную на карте"><i class="fas fa-hand-pointer"></i></button>' +
+            '<button type="button" class="map-btn" data-wx-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="wx" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="wx" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
+            '<div class="an-hint" data-wx2="info"></div></div>' +
+            '<div class="dw-block"><div class="dw-title">' + SECS[k][0] + '</div>' +
+            '<button type="button" class="wx2-go" data-wx-act="run"><i class="fas fa-rotate"></i><span>Обновить</span></button>' +
+            '<div class="wx2-note" data-wx2="status"></div><div data-wx2="out"></div></div>';
+        p.addEventListener('click', e => {
+            const t = e.target.closest('[data-wx-tool]'), a = e.target.closest('[data-wx-act]');
+            if (t) { startTool(t.dataset.wxTool); return; }
+            if (!a) return;
+            const act = a.dataset.wxAct;
+            if (act === 'run') { st.cur = k; run(k, true); }
+            else if (act === 'del') del();
+            else if (act === 'edit') { if (st.shape) setEditing(!st.editing); }
+            else if (act === 'sel') {
+                const g = typeof gcSel !== 'undefined' && gcSel instanceof L.Path ? toGJ(gcSel) : null;
+                if (!g) { updateStatus('ℹ️ Выберите на карте полигон, прямоугольник или круг (клик по фигуре)', true); return; }
+                cancelTool(); setShape(L.geoJSON(g, { style: SO }).getLayers()[0]);
+            }
+        });
+        const tab = document.querySelector('.bp-tab[data-bp-tab="' + k + '"]');
+        if (tab) tab.addEventListener('click', () => { st.cur = k; setTimeout(() => { if (!st.done[k]) run(k); else if (k === 'windwork' && !WA.on && st.wfc) { const c = p.querySelector('[data-wx2="anim"]'); if (!c || c.checked) waStart(st.wfc); } }, 30); });
+        p.addEventListener('change', e => { if (e.target.matches('[data-wx2="anim"]')) { if (e.target.checked) waStart(st.wfc); else waStop(); } });
     });
-    if (window.ResizeObserver) new ResizeObserver(() => draw()).observe($('wxWrap'));
+    info();
+    document.addEventListener('click', e => {
+        const t = e.target.closest && e.target.closest('.bp-tab, .panel-tab');
+        if (t && !(t.classList.contains('bp-tab') && KEYS.indexOf(t.dataset.bpTab) >= 0)) cancelTool();
+        if (t && !(t.classList.contains('bp-tab') && t.dataset.bpTab === 'windwork')) waStop();
+    });
 })();
 
 // ============================================================
