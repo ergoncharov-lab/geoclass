@@ -232,10 +232,10 @@
                     <div class="sp-group-title" style="margin-top:4px">Слои</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile sp-stub" style="--c:#84cc16" title="Почвы&#10;Раздел в разработке."><i class="fas fa-seedling"></i><span>Почвы</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#78716c" title="Рельеф&#10;Раздел в разработке."><i class="fas fa-mountain"></i><span>Рельеф</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#ef4444" title="Границы&#10;Раздел в разработке."><i class="fas fa-border-all"></i><span>Границы</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#6366f1" title="Кадастр&#10;Раздел в разработке."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#16a34a" title="Лес&#10;Раздел в разработке."><i class="fas fa-tree"></i><span>Лес</span></button>
+                        <button type="button" class="sp-tile" id="ulOpenBtn" data-bp="userlayers" style="--c:#0d9488" title="Свои слои&#10;Подключите собственный слой: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON по ссылке. Подключённые слои сохраняются в браузере и возвращаются при следующем открытии."><i class="fas fa-plus"></i><span>Свои слои</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="catalog">
@@ -487,6 +487,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
           </div>
 
           <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
@@ -958,6 +959,25 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
 
           <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDWI / NDMI / NBR): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
+          <!-- ВКЛАДКА «СВОИ СЛОИ»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON (сохраняются в localStorage) -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-ul" data-bp-pane="userlayers" role="tabpanel">
+              <div class="dw-block ul-form">
+                  <div class="dw-title">Подключить слой</div>
+                  <div class="dw-row"><label>Тип</label><select id="ulType"></select></div>
+                  <div class="dw-row"><label>Название</label><input type="text" id="ulName" class="ul-in" maxlength="60" placeholder="Например: Лесничества"></div>
+                  <div class="dw-row"><label>Ссылка</label><input type="text" id="ulUrl" class="ul-in" placeholder="https://…"></div>
+                  <div class="dw-row" id="ulLyrRow"><label>Слой(и)</label><input type="text" id="ulLyr" class="ul-in" placeholder="workspace:layer"></div>
+                  <div class="dw-row"><label>Прозрачность</label><input type="range" id="ulOp" min="10" max="100" step="5" value="100"><span class="dw-val" id="ulOpVal">100</span></div>
+                  <div class="dw-row"><label>Цвет (векторы)</label><input type="color" id="ulCol" value="#0d9488"></div>
+                  <div class="dw-act-grid"><button class="dw-act" id="ulAdd" type="button" title="Подключить слой и сохранить в браузере"><i class="fas fa-plus"></i><span>Подключить</span></button></div>
+                  <div class="m3-hint" id="ulHint"></div>
+              </div>
+              <div class="dw-block ul-listblk">
+                  <div class="dw-title">Подключённые слои</div>
+                  <div id="ulList"></div>
+              </div>
+          </div>
+
           <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
           <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Загрузка раздела…</span></div></div>
@@ -1566,5 +1586,6 @@
 <script src="script.js"></script>
 <script src="passport.js"></script>
 <script src="site.js"></script>
+<script src="ux-extras.js"></script>
 </body>
 </html>

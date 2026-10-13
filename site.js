@@ -343,7 +343,7 @@
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
-        bp: { main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
+        bp: { userlayers: 'Свои слои', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
               weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', change: 'Изменения', catalog: 'Каталог данных' }
     };
     function setView(v, title) {
@@ -1083,4 +1083,233 @@
         });
     }
     window.gcTipsRefresh = refreshSlot; refreshSlot();
+})();
+
+/* «Свои слои»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON в боковой панели; список хранится в localStorage. */
+(function () {
+    'use strict';
+    var KEY = 'gc_user_layers', pane = document.querySelector('[data-bp-pane="userlayers"]');
+    if (!pane || typeof map === 'undefined') return;
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var TYPES = { xyz: 'XYZ / TMS / WMTS ({z}/{x}/{y})', wms: 'WMS', wfs: 'WFS', arcgis: 'ArcGIS MapServer (плитки)', arcfeat: 'ArcGIS FeatureServer', geojson: 'GeoJSON / KML по ссылке' };
+    var HINT = { xyz: 'Пример: https://tile.example.com/{z}/{x}/{y}.png', wms: 'Адрес сервиса без параметров; в поле «Слои» — имя слоя из GetCapabilities.', wfs: 'Адрес WFS и typeName. Сервер должен отдавать JSON и разрешать CORS.', arcgis: 'Адрес …/MapServer или …/MapServer/0 (растровый показ слоя).', arcfeat: 'Адрес слоя …/FeatureServer/0', geojson: 'Прямая ссылка на .geojson / .json / .kml.' };
+    var items = [], live = {};
+    try { items = JSON.parse(localStorage.getItem(KEY) || '[]'); if (!Array.isArray(items)) items = []; } catch (e) { items = []; }
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) { say('⚠️ Не удалось сохранить слои в браузере', true); } }
+    function say(m, w) { if (typeof updateStatus === 'function') updateStatus(m, w); }
+
+    var st = document.createElement('style');
+    st.textContent = '.bp-ul .ul-in{flex:1;min-width:0;height:28px;border:1px solid #cbd5e1;border-radius:8px;padding:0 8px;font:inherit;font-size:12px;box-sizing:border-box;background:#fff}' +
+        '.bp-ul .dw-row select{flex:1;min-width:0}.bp-ul .dw-row input[type=color]{width:42px;height:28px;border:1px solid #cbd5e1;border-radius:8px;padding:2px;background:#fff}' +
+        '.ul-it{padding:8px 0;border-bottom:1px solid #edf1f5}.ul-it:last-child{border-bottom:0}.ul-top{display:flex;gap:8px;align-items:center}.ul-top input[type=checkbox]{accent-color:#0d9488}' +
+        '.ul-leg{margin-top:6px;font-size:11px;max-height:200px;overflow:auto;color:#334155}.ul-le{display:flex;gap:6px;align-items:center;margin:2px 0}.ul-le img{max-width:100%}.ul-sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none}.ul-tb td{padding:1px 8px 1px 0;vertical-align:top}.ul-grip{cursor:grab;color:#94a3b8;font-size:12px;padding:0 2px}.ul-it.ul-drag{opacity:.4}.ul-it.ul-over{box-shadow:0 -2px 0 #0d9488}.ul-mv{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:11px;padding:0 2px}.ul-mv:hover{color:#0d9488}.ul-top .ul-in{height:26px}.ul-top small{font-size:10px;font-weight:700;color:#94a3b8}.ul-del{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:17px;padding:0 4px}.ul-del:hover{color:#ef4444}' +
+        '.ul-sub{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:#64748b}.ul-sub input[type=range]{flex:1;accent-color:#0d9488}.ul-empty{font-size:12px;color:#94a3b8}';
+    document.head.appendChild(st);
+
+    function vecLayer(it, loader) {
+        var tm, g = L.geoJSON(null, {
+            style: function () { return { color: it.color || '#0d9488', weight: 2, fillOpacity: 0.2 * it.opacity, opacity: it.opacity }; },
+            pointToLayer: function (f, ll) { return L.circleMarker(ll, { radius: 5, color: it.color || '#0d9488', weight: 1, fillOpacity: 0.7 * it.opacity, opacity: it.opacity }); },
+            onEachFeature: function (f, l) {
+                var p = f.properties || {}, k = Object.keys(p).slice(0, 50);
+                if (k.length) l.bindPopup('<div style="max-height:200px;overflow:auto;font-size:12px"><b>' + esc(it.name) + '</b><br>' + k.map(function (x) { return esc(x) + ': ' + esc(p[x]); }).join('<br>') + '</div>');
+            }
+        });
+        g._gcMove = function () { clearTimeout(tm); tm = setTimeout(function () { loader(g); }, 500); };
+        g.on('add', function () { if (it.type !== 'geojson') map.on('moveend', g._gcMove); loader(g); });
+        g.on('remove', function () { map.off('moveend', g._gcMove); });
+        return g;
+    }
+    function jfetch(url, g, kml) {
+        return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return kml ? r.text() : r.json(); }).then(function (d) {
+            if (kml) d = toGeoJSON.kml(new DOMParser().parseFromString(d, 'text/xml'));
+            g.clearLayers(); g.addData(d); applyOrder(); say('✅ Слой загружен');
+        }).catch(function (e) { say('⚠️ Слой недоступен (' + e.message + '). Возможно, сервер не разрешает CORS', true); });
+    }
+    function bbox() { var b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','); }
+    function build(it) {
+        var o = { opacity: it.opacity, zIndex: 460, maxZoom: 22 }, u = it.url.trim(), base = u.split('?')[0];
+        if (it.type === 'xyz') return L.tileLayer(u, o);
+        if (it.type === 'wms') return L.tileLayer.wms(base, Object.assign(o, { layers: it.layers, format: 'image/png', transparent: true, version: '1.3.0' }));
+        if (it.type === 'arcgis') {                                                   // динамический экспорт: работает и с некэшированными сервисами, и с адресом слоя …/MapServer/0
+            var m = base.match(/^(.*\/MapServer)(?:\/(\d+))?\/*$/i);
+            if (!m) throw new Error('адрес должен заканчиваться на /MapServer или /MapServer/N');
+            var AG = L.TileLayer.extend({
+                getTileUrl: function (c) {
+                    var b = this._tileCoordsToBounds(c), p1 = L.CRS.EPSG3857.project(b.getSouthWest()), p2 = L.CRS.EPSG3857.project(b.getNorthEast());
+                    return m[1] + '/export?bbox=' + [p1.x, p1.y, p2.x, p2.y].join(',') + '&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&f=image' + (m[2] != null ? '&layers=show:' + m[2] : '');
+                }
+            });
+            return new AG('', o);
+        }
+        if (it.type === 'geojson') return vecLayer(it, function (g) { jfetch(u, g, /\.kml(\?|$)/i.test(u)); });
+        if (it.type === 'wfs') return vecLayer(it, function (g) {
+            jfetch(base + '?service=WFS&version=1.1.0&request=GetFeature&typeName=' + encodeURIComponent(it.layers) + '&outputFormat=application%2Fjson&srsName=EPSG:4326&maxFeatures=3000&bbox=' + bbox() + ',EPSG:4326', g);
+        });
+        return vecLayer(it, function (g) {
+            jfetch(base.replace(/\/+$/, '') + '/query?where=1%3D1&outFields=*&f=geojson&inSR=4326&outSR=4326&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&geometry=' + bbox(), g);
+        });
+    }
+    // ---------- служебное: JSONP (ArcGIS отвечает без CORS), легенда, всплывающие окна ----------
+    function jsonp(url) {
+        return new Promise(function (res, rej) {
+            var cb = 'gcjp' + Date.now() + Math.floor(Math.random() * 1e4), sc = document.createElement('script'), to = setTimeout(function () { cl(); rej(new Error('timeout')); }, 15000);
+            function cl() { clearTimeout(to); delete window[cb]; sc.remove(); }
+            window[cb] = function (d) { cl(); res(d); };
+            sc.onerror = function () { cl(); rej(new Error('load')); };
+            sc.src = url + (url.indexOf('?') < 0 ? '?' : '&') + 'f=json&callback=' + cb; document.head.appendChild(sc);
+        });
+    }
+    function ag(it) { var m = it.url.split('?')[0].match(/^(.*\/MapServer)(?:\/(\d+))?\/*$/i); return m ? { root: m[1], layer: m[2] != null ? m[2] : null } : null; }
+    function tbl(p) {
+        var k = Object.keys(p || {}).filter(function (x) { return !/^shape/i.test(x) && p[x] != null && p[x] !== 'Null'; }).slice(0, 50);
+        return k.length ? '<table class="ul-tb">' + k.map(function (x) { return '<tr><td><b>' + esc(x) + '</b></td><td>' + esc(p[x]) + '</td></tr>'; }).join('') + '</table>' : '';
+    }
+    function legendHtml(it) {
+        if (it.type === 'wms') {
+            var base = it.url.split('?')[0];
+            return Promise.resolve(it.layers.split(',').map(function (n) { n = n.trim(); return '<div class="ul-le"><img src="' + esc(base + '?service=WMS&version=1.1.0&request=GetLegendGraphic&format=image/png&layer=' + encodeURIComponent(n)) + '" alt="' + esc(n) + '" onerror="this.outerHTML=\'Легенда недоступна\'"></div>'; }).join(''));
+        }
+        if (it.type === 'arcgis') {
+            var a = ag(it);
+            return a ? jsonp(a.root + '/legend').then(function (d) {
+                var ls = (d.layers || []).filter(function (l) { return a.layer == null || String(l.layerId) === a.layer; });
+                return ls.map(function (l) {
+                    return (ls.length > 1 ? '<b>' + esc(l.layerName) + '</b>' : '') + (l.legend || []).map(function (e) {
+                        return '<div class="ul-le">' + (e.imageData ? '<img src="data:' + (e.contentType || 'image/png') + ';base64,' + e.imageData + '" alt="">' : '') + '<span>' + esc(e.label || l.layerName) + '</span></div>';
+                    }).join('');
+                }).join('') || 'Легенда пуста';
+            }) : Promise.resolve('Легенда недоступна');
+        }
+        if (it.type === 'xyz') return Promise.resolve('Для плиточного слоя легенда не передаётся сервером');
+        return Promise.resolve('<div class="ul-le"><i class="ul-sw" style="background:' + esc(it.color) + '"></i><span>' + esc(it.name) + '</span></div>');
+    }
+    var lgOpen = {}, lgCache = {};
+    function fillLegends() {
+        items.forEach(function (it) {
+            var box = $('ulList').querySelector('[data-lg-box="' + it.id + '"]');
+            if (!box) return;
+            if (lgCache[it.id]) { box.innerHTML = lgCache[it.id]; return; }
+            legendHtml(it).then(function (h) { lgCache[it.id] = h; box.innerHTML = h; }).catch(function () { box.textContent = 'Легенда недоступна'; });
+        });
+    }
+    function queryHtml(it, e) {
+        var b = map.getBounds(), sz = map.getSize(), p1 = L.CRS.EPSG3857.project(b.getSouthWest()), p2 = L.CRS.EPSG3857.project(b.getNorthEast());
+        if (it.type === 'arcgis') {
+            var a = ag(it);
+            if (!a) return Promise.resolve('');
+            return jsonp(a.root + '/identify?geometry=' + e.latlng.lng + ',' + e.latlng.lat + '&geometryType=esriGeometryPoint&sr=4326&layers=' + (a.layer != null ? 'all:' + a.layer : 'visible') +
+                '&tolerance=5&mapExtent=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',') + '&imageDisplay=' + sz.x + ',' + sz.y + ',96&returnGeometry=false').then(function (d) {
+                return (d.results || []).slice(0, 5).map(function (r) { return '<b>' + esc(r.layerName || it.name) + '</b>' + tbl(r.attributes); }).join('<hr>');
+            }).catch(function () { return ''; });
+        }
+        var url = it.url.split('?')[0] + '?service=WMS&version=1.3.0&request=GetFeatureInfo&layers=' + encodeURIComponent(it.layers) + '&query_layers=' + encodeURIComponent(it.layers) + '&styles=&crs=EPSG:3857&bbox=' +
+            [p1.x, p1.y, p2.x, p2.y].join(',') + '&width=' + sz.x + '&height=' + sz.y + '&i=' + Math.round(e.containerPoint.x) + '&j=' + Math.round(e.containerPoint.y) + '&feature_count=5&info_format=';
+        function get(fmt) { return fetch(url + encodeURIComponent(fmt)).then(function (r) { return r.text(); }); }
+        return get('application/json').then(function (t) {
+            var d = JSON.parse(t);
+            return (d.features || []).map(function (f) { return '<b>' + esc(it.name) + '</b>' + tbl(f.properties); }).join('<hr>');
+        }).catch(function () {
+            return get('text/plain').then(function (t) { return /^\s*$|no features|nothing/i.test(t) ? '' : '<b>' + esc(it.name) + '</b><pre style="white-space:pre-wrap;margin:2px 0">' + esc(t.slice(0, 800)) + '</pre>'; }).catch(function () { return ''; });
+        });
+    }
+    var ppOn = localStorage.getItem('gc_user_layers_pp') !== '0';
+    map.on('click', function (e) {
+        if (!ppOn || (typeof m3d !== 'undefined' && m3d.active) || measureMode || currentTool || activeDrawHandler) return;
+        var at = document.querySelector('.bp-tab.active'), k = at && at.getAttribute('data-bp-tab');
+        if (/^(draw|measure|profile|logistics|3d|export)$/.test(k || '')) return;
+        var qs = items.filter(function (it) { return it.on && (it.type === 'wms' || it.type === 'arcgis') && live[it.id] && map.hasLayer(live[it.id]); });
+        if (!qs.length) return;
+        Promise.all(qs.map(function (it) { return queryHtml(it, e); })).then(function (parts) {
+            parts = parts.filter(Boolean);
+            if (parts.length) L.popup({ maxWidth: 340 }).setLatLng(e.latlng).setContent('<div style="max-height:240px;overflow:auto;font-size:12px">' + parts.join('<hr>') + '</div>').openOn(map);
+        });
+    });
+    function applyOrder() {                                                           // верх списка = верх на карте
+        var n = items.length;
+        items.forEach(function (it, i) { var l = live[it.id]; if (l && l.setZIndex) l.setZIndex(460 + n - i); });
+        for (var i = n - 1; i >= 0; i--) { var l = live[items[i].id]; if (l && l.bringToFront && map.hasLayer(l)) l.bringToFront(); }
+    }
+    function setOn(it, on) {
+        it.on = on;
+        if (on) {
+            if (!live[it.id]) { try { live[it.id] = build(it); } catch (e) { say('⚠️ Ошибка слоя: ' + e.message, true); it.on = false; return; } }
+            live[it.id].addTo(map); applyOrder();
+        } else if (live[it.id]) map.removeLayer(live[it.id]);
+    }
+    function setOp(it) {
+        var l = live[it.id];
+        if (!l) return;
+        if (l.setOpacity) l.setOpacity(it.opacity); else if (l.setStyle) l.setStyle({ opacity: it.opacity, fillOpacity: 0.2 * it.opacity });
+    }
+
+    // ---------- форма и список ----------
+    $('ulType').innerHTML = Object.keys(TYPES).map(function (k) { return '<option value="' + k + '">' + TYPES[k] + '</option>'; }).join('');
+    function form() {
+        var t = $('ulType').value;
+        $('ulLyrRow').style.display = (t === 'wms' || t === 'wfs') ? '' : 'none';
+        $('ulHint').textContent = HINT[t] + ' Если сервер не разрешает CORS, слой не отобразится.';
+    }
+    function list() {
+        $('ulList').innerHTML = items.length ? items.map(function (it) {
+            return '<div class="ul-it" data-id="' + it.id + '"><div class="ul-top"><i class="fas fa-grip-vertical ul-grip" title="Перетащите, чтобы изменить порядок: верх списка — верх на карте"></i><input type="checkbox" data-t="' + it.id + '" title="Показать на карте"' + (it.on ? ' checked' : '') + '>' +
+                '<input type="text" class="ul-in" data-n="' + it.id + '" maxlength="60" value="' + esc(it.name) + '" title="Название слоя — можно изменить"><small>' + it.type.toUpperCase() + '</small>' +
+                '<button type="button" class="ul-mv" data-lg="' + it.id + '" title="Легенда">▤</button><button type="button" class="ul-mv" data-up="' + it.id + '" title="Выше">▲</button><button type="button" class="ul-mv" data-dn="' + it.id + '" title="Ниже">▼</button><button type="button" class="ul-del" data-d="' + it.id + '" title="Удалить слой">×</button></div>' +
+                '<div class="ul-sub" title="' + esc(it.url) + '">Прозр. <input type="range" min="10" max="100" step="5" data-o="' + it.id + '" value="' + Math.round(it.opacity * 100) + '"></div>' + (lgOpen[it.id] ? '<div class="ul-leg" data-lg-box="' + it.id + '">Загрузка…</div>' : '') + '</div>';
+        }).join('') : '<div class="ul-empty">Подключённых слоёв пока нет.</div>';
+        fillLegends();
+    }
+    function find(id) { return items.filter(function (x) { return x.id === id; })[0]; }
+    $('ulType').addEventListener('change', form);
+    $('ulOp').addEventListener('input', function () { $('ulOpVal').textContent = this.value; });
+    $('ulAdd').addEventListener('click', function () {
+        var it = { id: 'ul' + Date.now(), type: $('ulType').value, name: $('ulName').value.trim(), url: $('ulUrl').value.trim(), layers: $('ulLyr').value.trim(), color: $('ulCol').value, opacity: (+$('ulOp').value || 100) / 100, on: true };
+        if (!/^https?:\/\//i.test(it.url)) { say('⚠️ Укажите ссылку, начинающуюся с http(s)://', true); return; }
+        if ((it.type === 'wms' || it.type === 'wfs') && !it.layers) { say('⚠️ Укажите имя слоя', true); return; }
+        if (!it.name) it.name = TYPES[it.type].split(' ')[0] + ' ' + (items.length + 1);
+        items.unshift(it); setOn(it, true); applyOrder(); save(); list();
+        $('ulName').value = ''; $('ulUrl').value = ''; $('ulLyr').value = '';
+        say('✅ Слой «' + it.name + '» подключён и сохранён');
+    });
+    $('ulList').addEventListener('change', function (e) {
+        var it = find(e.target.getAttribute('data-t')), n = find(e.target.getAttribute('data-n'));
+        if (it) { setOn(it, e.target.checked); save(); }
+        if (n) { n.name = e.target.value.trim() || n.name; e.target.value = n.name; save(); }
+    });
+    $('ulList').addEventListener('input', function (e) {
+        var it = find(e.target.getAttribute('data-o'));
+        if (it) { it.opacity = e.target.value / 100; setOp(it); save(); }
+    });
+    $('ulList').addEventListener('click', function (e) {
+        var lg = e.target.getAttribute('data-lg');
+        if (lg) { lgOpen[lg] = !lgOpen[lg]; list(); return; }
+        var up = e.target.getAttribute('data-up'), dn = e.target.getAttribute('data-dn');
+        if (up || dn) { var i = items.indexOf(find(up || dn)), j = up ? i - 1 : i + 1; if (j >= 0 && j < items.length) { var t = items[i]; items[i] = items[j]; items[j] = t; applyOrder(); save(); list(); } return; }
+        var id = e.target.getAttribute('data-d');
+        if (!id) return;
+        if (live[id]) { map.removeLayer(live[id]); delete live[id]; }
+        delete lgOpen[id]; delete lgCache[id]; items = items.filter(function (x) { return x.id !== id; }); save(); list();
+    });
+    var ppl = document.createElement('label');
+    ppl.className = 'dw-check'; ppl.innerHTML = '<input type="checkbox" id="ulPP"' + (ppOn ? ' checked' : '') + '> Всплывающие окна по клику на слой (WMS, ArcGIS)';
+    $('ulList').parentNode.insertBefore(ppl, $('ulList'));
+    $('ulPP').addEventListener('change', function () { ppOn = this.checked; try { localStorage.setItem('gc_user_layers_pp', ppOn ? '1' : '0'); } catch (x) { } });
+    var dragId = null;
+    $('ulList').addEventListener('mousedown', function (e) { var r = e.target.closest('.ul-it'); if (r) r.draggable = !!e.target.closest('.ul-grip'); });
+    $('ulList').addEventListener('dragstart', function (e) { var r = e.target.closest('.ul-it'); if (!r) return; dragId = r.getAttribute('data-id'); r.classList.add('ul-drag'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (x) { } });
+    $('ulList').addEventListener('dragover', function (e) {
+        var r = e.target.closest('.ul-it'); if (!r || !dragId) return;
+        e.preventDefault(); [].forEach.call($('ulList').querySelectorAll('.ul-over'), function (x) { x.classList.remove('ul-over'); }); r.classList.add('ul-over');
+    });
+    $('ulList').addEventListener('drop', function (e) {
+        var r = e.target.closest('.ul-it'); if (!r || !dragId) return;
+        e.preventDefault();
+        var a = find(dragId), b = find(r.getAttribute('data-id'));
+        if (a && b && a !== b) { items.splice(items.indexOf(a), 1); items.splice(items.indexOf(b), 0, a); applyOrder(); save(); }
+        dragId = null; list();
+    });
+    $('ulList').addEventListener('dragend', function () { dragId = null; list(); });
+    form(); list();
+    items.forEach(function (it) { if (it.on) setOn(it, true); }); applyOrder();                     // восстановление при запуске
 })();
