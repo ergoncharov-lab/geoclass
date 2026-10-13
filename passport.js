@@ -5,7 +5,7 @@
     if (!body) return;
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
     var nf = function (v, d) { return isFinite(v) ? v.toLocaleString('ru-RU', { maximumFractionDigits: d == null ? 1 : d }) : '—'; };
-    var minis = {}, m3s = {}, seq = 0, D = {}, forced = null, keep = false;   // forced — контур из сохранённого отчёта
+    var minis = {}, m3s = {}, seq = 0, D = {}, forced = null, keep = false, retry = null;   // forced — контур из сохранённого отчёта
     var ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     var DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
@@ -183,9 +183,13 @@
         m.invalidateSize(); m.fitBounds(poly.getBounds(), { padding: [18, 18] });
         return (minis[key] = { map: m, el: el, gj: gj, title: title, leg: null });
     }
+    function legSrc(key) {   // краткое описание источника под легендой
+        var s = /^soil_/.test(key) ? 'ISRIC SoilGrids, 250 м' : /^(ndvi|ndwi|ndmi|nbr|s2rgb)$/.test(key) ? 'Sentinel-2 L2A (ESA Copernicus), 10 м' : /^el[hs]$/.test(key) ? 'цифровая модель рельефа Terrarium (Mapzen / AWS)' : '';
+        return s ? '<div class="pp-legsrc">Источник: ' + s + '</div>' : '';
+    }
     function setLeg(key, cols, lo, hi, unit) {
         var o = minis[key]; if (o) o.leg = { cols: cols, lo: lo, hi: hi, unit: unit };
-        var el = document.getElementById('ppLeg_' + key); if (el) el.innerHTML = legHtml(cols, lo, hi, unit);
+        var el = document.getElementById('ppLeg_' + key); if (el) el.innerHTML = legHtml(cols, lo, hi, unit) + legSrc(key);
     }
     function addImg(key, url, bounds, op) { var o = minis[key]; if (!o) return null; return L.imageOverlay(url, bounds, { pane: 'tilePane', zIndex: 12, opacity: op || 0.85, interactive: false }).addTo(o.map); }
     function snap(o) {
@@ -338,8 +342,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     function stSet(k, st, msg) {
         var el = document.querySelector('#ppSt [data-st="' + k + '"]'); if (!el) return;
-        el.className = 'pp-stc ' + st; el.title = msg || (st === 'off' ? (k === 'sat' ? 'Дата снимка не выбрана: выберите её на вкладке «Анализ» и запустите анализ' : 'Блок пока не работает: данные будут подключены позже') : st === 'load' ? 'Загружается…' : st === 'ok' ? 'Данные получены' : 'Ошибка');
-        el.innerHTML = '<i class="fas fa-' + (st === 'load' ? 'spinner fa-spin' : st === 'off' ? 'circle-pause' : st === 'ok' ? 'circle-check' : 'triangle-exclamation') + '"></i>' + STL[k] + (st === 'off' ? (k === 'sat' ? ' · нет даты' : ' · не подключено') : st === 'load' ? ' · загрузка' : st === 'err' ? ' · ошибка' : '');
+        el.className = 'pp-stc ' + st; el.style.cursor = st === 'err' ? 'pointer' : ''; el.title = (st === 'err' ? (msg || 'Ошибка') + ' — нажмите, чтобы обновить только этот раздел' : '') || msg || (st === 'off' ? (k === 'sat' ? 'Дата снимка не выбрана: выберите её на вкладке «Анализ» и запустите анализ' : 'Блок пока не работает: данные будут подключены позже') : st === 'load' ? 'Загружается…' : st === 'ok' ? 'Данные получены' : 'Ошибка');
+        el.innerHTML = '<i class="fas fa-' + (st === 'load' ? 'spinner fa-spin' : st === 'off' ? 'circle-pause' : st === 'ok' ? 'circle-check' : 'triangle-exclamation') + '"></i>' + STL[k] + (st === 'off' ? (k === 'sat' ? ' · нет даты' : ' · не подключено') : st === 'load' ? ' · загрузка' : st === 'err' ? ' · ошибка <i class="fas fa-rotate-right"></i>' : '');
     }
     function address(c, tok) {
         fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }).then(function (j) {
@@ -416,6 +420,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var pr = function (f, t) { if (box && tok === seq && box.querySelector('.fa-spin')) box.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> ' + esc(t || 'Загрузка') + '</div>'; };
         var args = { key: k === 's2rgb' ? 'sentinel2' : k, st: st, gj: gj, onProgress: pr, isAborted: function () { return tok !== seq; } };
         if (k === 's2rgb') {
+            var mb = minis[k] && minis[k].map.getBounds();   // обычный снимок — на весь экстент мини-карты, а не только по контуру
+            if (mb) args.gj = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[mb.getWest(), mb.getSouth()], [mb.getEast(), mb.getSouth()], [mb.getEast(), mb.getNorth()], [mb.getWest(), mb.getNorth()], [mb.getWest(), mb.getSouth()]]] } };
             var res = await snExportGeoTiff(args); if (tok !== seq) return;
             var im = await (await GeoTIFF.fromBlob(res.blob)).getImage(), w = im.getWidth(), h = im.getHeight(), ras = await im.readRasters({ interleave: true }), spp = Math.round(ras.length / (w * h)), bx = im.getBoundingBox();
             var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -424,8 +430,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             g.putImageData(id, 0, 0);
             if (tok !== seq) return;
             D.sat[k] = { blob: res.blob, name: res.name, day: sat.day };
-            if (minis[k]) satOv[k] = addImg(k, cv.toDataURL('image/png'), satLLB(res.epsg, bx[0], bx[1], bx[2], bx[3]), 1);
-            if (box) box.innerHTML = tiles([['Дата съёмки', st.date.split('-').reverse().join('.'), '', s.c], ['Облачность сцены', sat.cc == null ? '—' : nf(sat.cc, 0) + ' %', '', '#64748b'], ['Сцен в контуре', nf(sat.scenes.length, 0), '', '#0ea5e9'], ['Разрешение', '10 м', 'Sentinel-2 L2A', '#14b8a6']]) + '<div class="pp-cap">Естественные цвета (B04 · B03 · B02) внутри контура участка; за пределами контура изображение не строится.</div>';
+            if (minis[k]) { var rgbU = cv.toDataURL('image/png'), rgbB = satLLB(res.epsg, bx[0], bx[1], bx[2], bx[3]); satOv[k] = addImg(k, rgbU, rgbB, 1); D.satRgb = { url: rgbU, bounds: rgbB, day: sat.day }; }
+            if (box) box.innerHTML = tiles([['Дата съёмки', st.date.split('-').reverse().join('.'), '', s.c], ['Облачность сцены', sat.cc == null ? '—' : nf(sat.cc, 0) + ' %', '', '#64748b'], ['Сцен в контуре', nf(sat.scenes.length, 0), '', '#0ea5e9'], ['Разрешение', '10 м', 'Sentinel-2 L2A', '#14b8a6']]) + '<div class="pp-cap">Естественные цвета (B04 · B03 · B02) на весь экстент карты. Источник: Sentinel-2 L2A (ESA Copernicus), 10 м.</div>';
             satOn(k, s.t); return;
         }
         args.raw = true;
@@ -433,6 +439,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var S = satStats(r, k), R = S.R, ccol = function (t) { var li = Math.round(cl01(t) * 255) * 3; return 'rgb(' + R.lut[li] + ',' + R.lut[li + 1] + ',' + R.lut[li + 2] + ')'; };
         D.sat[k] = { r: r, stats: S, day: sat.day };
         if (minis[k]) {
+            if (D.satRgb && D.satRgb.day === sat.day) satOv[k + '_u'] = addImg(k, D.satRgb.url, D.satRgb.bounds, 1);   // снизу — обычный снимок на весь экстент
             satOv[k] = addImg(k, satImg(r, k), satLLB(r.epsg, r.minE, r.maxN - r.H * SN_RES, r.minE + r.W * SN_RES, r.maxN), 0.9);
             setLeg(k, [0, 0.2, 0.4, 0.6, 0.8, 1].map(ccol), nf(R.min, 1), nf(R.max, 1), '');
         }
@@ -496,10 +503,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var sat = { day: g.day, cc: g.cc, scenes: g.scenes.map(function (x) { return { id: x.id, cc: x.cc }; }) };
         satCal[k].day = g.day; calDraw(k); root.querySelector('.pp-cal-t span').textContent = satDay(g.day); root.classList.remove('open');
         if (satOv[k]) { try { satOv[k].remove(); } catch (e) { /* нет */ } satOv[k] = null; }
+        if (satOv[k + '_u']) { try { satOv[k + '_u'].remove(); } catch (e) { /* нет */ } satOv[k + '_u'] = null; }
         if (D.sat) delete D.sat[k];
         var b = body.querySelector('[data-sat-tif="' + k + '"]'); if (b) { b.disabled = true; b.title = 'GeoTIFF станет доступен после расчёта'; }
         if (box) box.innerHTML = SPIN;
-        try { await satBlock(s, sat, D.gj, tok); }
+        try { await satBlock(s, sat, D.gj, tok); if (tok === seq) summary(); }
         catch (e) { if (tok !== seq) return; console.warn('Паспорт: снимки', e); if (box) box.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>'; }
     }
     body.addEventListener('click', function (e) {
@@ -542,11 +550,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     function satellites() {
         var sat = satSel(); D.satSel = sat; satCal = {}; satOv = {};
         return sec(3, 'satellite', 'Спутниковые снимки и индексы', 'Sentinel-2: вегетация, влажность, вода, нарушения покрова', CC.sat,
-            '<div class="pp-note">' + (sat ? 'Снимок Sentinel-2 L2A от <b>' + satDay(sat.day) + '</b>' + (sat.cc != null ? ' · облачность ' + nf(sat.cc, 0) + ' %' : '') + ' · сцен: ' + sat.scenes.length + '. Дату каждого блока можно сменить значком календаря. Облака и тени не исключаются — выбирайте дату с малой облачностью.' : 'Дата снимка не выбрана: выберите её значком календаря в нужном блоке ниже (или во вкладке «Анализ»).') + '</div>' +
+            '<div class="pp-note">' + (sat ? 'Снимок Sentinel-2 L2A от <b>' + satDay(sat.day) + '</b>' + (sat.cc != null ? ' · облачность ' + nf(sat.cc, 0) + ' %' : '') + ' · сцен: ' + sat.scenes.length + '. Дату каждого блока можно сменить кнопкой календаря под картой. Облака и тени не исключаются — выбирайте дату с малой облачностью.' : 'Дата снимка не выбрана: выберите её кнопкой календаря под картой нужного блока (или во вкладке «Анализ»).') + '</div>' +
             SATS.map(function (s) {
                 return blk({
-                    t: s.t, i: s.i, c: s.c, info: s.f, cal: calHtml(s.k), id: 'ppSatB_' + s.k, body: sat ? SPIN : '<div class="pp-note">Дата не выбрана — нажмите на календарь в заголовке блока.</div>',
-                    map: mapBox(s.k, '<button type="button" class="pp-btn" data-sat-tif="' + s.k + '" disabled title="' + (sat ? 'GeoTIFF станет доступен после расчёта' : 'Нет даты снимка') + '"><i class="fas fa-download"></i> GeoTIFF</button>')
+                    t: s.t, i: s.i, c: s.c, info: s.f, id: 'ppSatB_' + s.k, body: sat ? SPIN : '<div class="pp-note">Дата не выбрана — выберите её кнопкой с календарём под картой.</div>',
+                    map: mapBox(s.k, calHtml(s.k) + '<button type="button" class="pp-btn" data-sat-tif="' + s.k + '" disabled title="' + (sat ? 'GeoTIFF станет доступен после расчёта' : 'Нет даты снимка') + '"><i class="fas fa-download"></i> GeoTIFF</button>')
                 });
             }).join(''));
     }
@@ -972,8 +980,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             }) +
             blk({
                 t: 'Индекс пригодности участка', i: 'gauge-high', id: 'ppScore', body: SPIN,
-                info: ['Сводная ориентировочная оценка пригодности участка для сельскохозяйственного использования по пяти факторам, 0–100 баллов.', 'Позволяет сравнивать участки между собой и сразу видеть слабое место — фактор, который тянет оценку вниз.',
-                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Почва: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Итог — среднее по доступным факторам.']
+                info: ['Сводная ориентировочная оценка пригодности участка для сельскохозяйственного использования по шести факторам, 0–100 баллов.', 'Позволяет сравнивать участки между собой и сразу видеть слабое место — фактор, который тянет оценку вниз.',
+                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Почва: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Вегетация (по снимку выбранной даты): среднее оценок NDVI (100 при ≥ 0,6, 0 при ≤ 0,1), NDMI (100 при ≥ 0,3, 0 при ≤ −0,2), NDWI как признака переувлажнения (100 при ≤ 0, 0 при ≥ 0,3), NBR (100 при ≥ 0,5, 0 при ≤ 0,1) и однородности NDVI (100 при вариации ≤ 10 %, 0 при ≥ 50 %); оценка зависит от сезона и облачности выбранной даты. Итог — среднее по доступным факторам.']
             }));
     }
     function scores() {
@@ -983,12 +991,19 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (ce) so.push(100 * cl01(ce.mean / 30));
         if (k && k.gtk != null) cm.push(k.gtk <= 1.6 ? 100 * cl01(k.gtk / 1.1) : 100 * cl01(1 - (k.gtk - 1.6) / 1.5));
         if (k && k.ff != null) cm.push(100 * cl01((k.ff - 100) / 80));
+        var sv = [], sT = D.sat || {}, sf = function (q) { return sT[q] && sT[q].stats; }, n1 = sf('ndvi'), n2 = sf('ndmi'), n3 = sf('ndwi'), n4 = sf('nbr');   // вегетация по снимку выбранной даты
+        if (n1) { sv.push(100 * cl01((n1.mean - 0.1) / 0.5)); sv.push(100 * (1 - cl01((n1.std / Math.max(0.05, Math.abs(n1.mean)) - 0.1) / 0.4))); }
+        if (n2) sv.push(100 * cl01((n2.mean + 0.2) / 0.5));
+        if (n3) sv.push(100 * (1 - cl01(n3.mean / 0.3)));
+        if (n4) sv.push(100 * cl01((n4.mean - 0.1) / 0.4));
+        var svb = sv.length ? [n1 ? 'NDVI ' + nf(n1.mean, 2) : '', n2 ? 'NDMI ' + nf(n2.mean, 2) : '', n3 ? 'NDWI ' + nf(n3.mean, 2) : '', n4 ? 'NBR ' + nf(n4.mean, 2) : ''].filter(Boolean).join(', ') + (D.satSel ? ' · ' + satDay(D.satSel.day) : '') : 'нет данных — выберите дату снимка';
         return [
             { l: 'Рельеф', v: e && e.ms != null ? 100 * (1 - cl01((e.ms - 1) / 11)) : null, b: e && e.ms != null ? 'средний уклон ' + nf(e.ms, 1) + '°' : 'нет данных' },
             { l: 'Почва', v: so.length ? avg(so) : null, b: ph || oc || ce ? [ph ? 'pH ' + nf(ph.mean, 1) : '', oc ? 'C ' + nf(oc.mean, 1) + ' г/кг' : '', ce ? 'CEC ' + nf(ce.mean, 1) : ''].filter(Boolean).join(', ') : 'нет данных' },
             { l: 'Климат', v: cm.length ? avg(cm) : null, b: k ? (k.gtk != null ? 'ГТК ' + nf(k.gtk, 2) + ', ' : '') + 'безморозный период ' + nf(k.ff, 0) + ' дн.' : 'нет данных' },
             { l: 'Логистика', v: g ? (rd ? 100 * (1 - cl01(Math.log(Math.max(rd.d, 500) / 500) / Math.log(20))) : 0) : null, b: g ? (rd ? 'твёрдая дорога в ' + (rd.d < 1000 ? nf(rd.d, 0) + ' м' : nf(rd.d / 1000, 1) + ' км') : 'дорог в радиусе 6 км не найдено') : 'нет данных' },
-            { l: 'Форма', v: D.comp != null ? 100 * cl01(D.comp / 0.7) : null, b: D.comp != null ? 'компактность K = ' + nf(D.comp, 2) : 'нет данных' }
+            { l: 'Форма', v: D.comp != null ? 100 * cl01(D.comp / 0.7) : null, b: D.comp != null ? 'компактность K = ' + nf(D.comp, 2) : 'нет данных' },
+            { l: 'Вегетация', v: sv.length ? avg(sv) : null, b: svb }
         ];
     }
     function scoreTbl() {
@@ -1001,7 +1016,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var s = D.soil && D.soil.S, e = D.elev, g = D.lg, k = D.clim, ph = s && s.phh2o, so = s && s.soc, r = radar(scores()), fd = function (d) { return d < 1000 ? nf(d, 0) + ' м' : nf(d / 1000, 1) + ' км'; };
         var K = [['Площадь', nf(D.area / 1e4, 2) + ' га', 'ruler-combined', CC.gen, 'геодезическая площадь контура на эллипсоиде WGS-84 (Turf)'], ['Перепад высот', e ? nf(e.mx - e.mn, 0) + ' м' : '…', 'mountain', CC.rel, 'максимум минус минимум высоты по цифровой модели рельефа внутри контура'], ['Средний уклон', e && e.ms != null ? nf(e.ms, 1) + '°' : '…', 'chart-line', CC.rel, 'среднее по ячейкам модели рельефа внутри контура, по разнице высот соседних ячеек'], ['pH почвы', ph ? nf(ph.mean, 1) : '…', 'flask', CC.soil, 'SoilGrids 250 м, слой 0–5 см: среднее по ячейкам внутри контура'],
             ['Гумус (оценка)', so ? nf(so.mean * 0.1724, 1) + ' %' : '…', 'leaf', CC.soil, 'органический углерод SoilGrids (г/кг) × 0,1724 → % гумуса'], ['До дороги', g && g.road ? fd(g.road.d) : '…', 'road', CC.log, 'по прямой от границы участка до ближайшей дороги с твёрдым покрытием (OSM, радиус 6 км)'], ['ГТК', k && k.gtk != null ? nf(k.gtk, 2) : '…', 'cloud-rain', CC.clim, '10 · Σосадков / Σt за дни теплее 10 °C; ERA5, среднее за 10 лет'], ['Σ t > 10 °C', k ? nf(k.sat, 0) + ' °' : '…', 'temperature-half', CC.clim, 'сумма средних суточных температур в дни теплее 10 °C за год; ERA5, 10 лет']];
-        return '<div class="pp-score"><small>Индекс пригодности</small><div class="big" style="color:' + (r.avg == null ? '#94a3b8' : scCol(r.avg)) + '">' + (r.avg == null ? '…' : Math.round(r.avg)) + '<span>/100</span></div>' + r.svg + '<div class="pp-cap2">Как считается: среднее пяти оценок 0–100 — рельеф, почва, климат, логистика, форма (по доступным). Формулы — в разделе 8.</div></div>' +
+        return '<div class="pp-score"><small>Индекс пригодности</small><div class="big" style="color:' + (r.avg == null ? '#94a3b8' : scCol(r.avg)) + '">' + (r.avg == null ? '…' : Math.round(r.avg)) + '<span>/100</span></div>' + r.svg + '<div class="pp-cap2">Как считается: среднее шести оценок 0–100 — рельеф, почва, климат, логистика, форма, вегетация по снимку выбранной даты (по доступным). Формулы — в разделе 8.</div></div>' +
             '<div class="pp-kgrid">' + K.map(function (q) { return '<div class="pp-kpi" style="--c:' + q[3] + '"><small><i class="fas fa-' + q[2] + '"></i>' + q[0] + '</small><b>' + q[1] + '</b><span class="how">' + q[4] + '</span></div>'; }).join('') + '</div>';
     }
     function summary() {
@@ -1028,7 +1043,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         Object.keys(m3s).forEach(function (k) { try { m3s[k].remove(); } catch (e) { /* уже удалена */ } delete m3s[k]; });
     }
     function render() {
-        var tok = ++seq; clearMinis(); D = {};
+        var tok = ++seq; clearMinis(); D = {}; retry = null;
         var l = forced ? { feature: { properties: { cad_number: forced.meta.cad || '' } } } : pick(), t = document.getElementById('ppTitle');
         if (!l) { if (t) t.textContent = 'Паспорт участка'; body.innerHTML = '<div class="pp-sec"><div class="pp-sec-b"><div class="pp-note">Нет фигуры для паспорта. Нарисуйте участок (или загрузите контур / выписку Росреестра), выделите его на карте и нажмите «Обновить по фигуре».</div></div></div>'; return; }
         var gj = forced ? forced.gj : toGJ(l); D.gj = gj;
@@ -1043,9 +1058,28 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         stInit(); address(D.c, tok); if (D.satSel) stSet('sat', 'load');
         var soilFail = function (e) { SOILS.forEach(function (p) { var b = document.getElementById('ppSB_' + p); if (b && b.querySelector('.fa-spin')) b.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>'; }); };
         var wrap = function (k, p, chk) { return p.then(function () { if (tok === seq) { var m = chk(); stSet(k, m ? 'err' : 'ok', m); } }, function (e) { if (tok === seq) stSet(k, 'err', e && e.message || 'ошибка'); throw e; }); };
-        var jobs = [wrap('soil', soilRun(gj, tok), function () { var S = D.soil && D.soil.S; return S && Object.keys(S).length ? '' : (D.soil && D.soil.err) || 'нет данных SoilGrids'; }).catch(soilFail)].concat([[elevRun, 'ppElBody', 'elev', function () { return D.elev ? '' : 'данные рельефа недоступны'; }], [logRun, 'ppLgBody', 'log', function () { return D.lg ? '' : 'нет данных OSM'; }], [climRun, 'ppClBody', 'clim', function () { return D.clim ? '' : 'нет данных климата'; }]].concat(D.satSel ? [[satRun, 'ppSatB_ndvi', 'sat', function () { return D.sat && Object.keys(D.sat).length ? '' : 'не удалось получить данные снимка'; }]] : []).map(function (x) {
-            return wrap(x[2], x[0](gj, tok), x[3]).catch(function (e) { console.warn('Паспорт:', e); var el = document.getElementById(x[1]); if (el) el.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>'; });
-        }));
+        var defs = {   // раздел: [функция расчёта, блоки на странице, проверка результата, ключ в D]
+            soil: [soilRun, SOILS.map(function (p) { return 'ppSB_' + p; }), function () { var S = D.soil && D.soil.S; return S && Object.keys(S).length ? '' : (D.soil && D.soil.err) || 'нет данных SoilGrids'; }, 'soil'],
+            elev: [elevRun, ['ppElBody', 'ppElB2', 'ppElB3', 'ppRose'], function () { return D.elev ? '' : 'данные рельефа недоступны'; }, 'elev'],
+            log: [logRun, ['ppLgBody'], function () { return D.lg ? '' : 'нет данных OSM'; }, 'lg'],
+            clim: [climRun, ['ppClBody'], function () { return D.clim ? '' : 'нет данных климата'; }, 'clim'],
+            sat: [satRun, SATS.map(function (x) { return 'ppSatB_' + x.k; }), function () { return D.sat && Object.keys(D.sat).length ? '' : 'не удалось получить данные снимка'; }, 'sat']
+        };
+        var launch = function (k, again) {
+            var d = defs[k];
+            if (again) { delete D[d[3]]; d[1].forEach(function (id) { var el = document.getElementById(id); if (el) el.innerHTML = SPIN; }); stSet(k, 'load'); }
+            return wrap(k, d[0](gj, tok), d[2]).catch(function (e) {
+                if (k === 'soil') { soilFail(e); return; }
+                console.warn('Паспорт:', e); var el = document.getElementById(d[1][0]); if (el) el.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>';
+            });
+        };
+        var jobs = ['soil', 'elev', 'log', 'clim'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k); });
+        retry = function (k) {   // повтор одного раздела по клику на его плашку статуса
+            if (tok !== seq) return;
+            if (k === 'addr') { stSet('addr', 'load'); var ad = document.getElementById('ppAddr'); if (ad) ad.textContent = 'определяется…'; address(D.c, tok); return; }
+            if (!defs[k] || (k === 'sat' && !D.satSel)) return;
+            launch(k, true).then(function () { if (tok === seq) summary(); });
+        };
         Promise.all(jobs).then(function () { if (tok === seq) summary(); });
     }
     window.ppShow = function (gj, meta) {   // открыть паспорт для заданного контура (сохранённый отчёт)
@@ -1054,6 +1088,10 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         app.classList.add('passport-open'); document.dispatchEvent(new Event('passport-open'));
     };
     document.addEventListener('passport-open', function () { if (!keep) forced = null; keep = false; setTimeout(render, 380); });   // после анимации раскрытия панели
+    document.addEventListener('click', function (e) {   // плашка раздела с ошибкой: обновляется только он
+        var c = e.target.closest && e.target.closest('#ppSt .pp-stc.err');
+        if (c && retry) retry(c.getAttribute('data-st'));
+    });
     var bR = document.getElementById('ppRefresh'); if (bR) bR.addEventListener('click', render);
     var bP = document.getElementById('ppPrint'); if (bP) bP.addEventListener('click', function () { window.print(); });
 })();

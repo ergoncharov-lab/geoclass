@@ -1400,3 +1400,13 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 @keyframes gtAura { 0% { background-position: 0% 0%, 100% 100%, 100% 0%, 0 0; } 100% { background-position: 60% 40%, 40% 60%, 30% 70%, 0 0; } }
 @keyframes gtPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); } 70%, 100% { box-shadow: 0 0 0 14px rgba(16,185,129,0); } }
 @keyframes gtShine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+
+/* паспорт: календарь выбора даты — под картой рядом с кнопкой GeoTIFF; список раскрывается вверх */
+.pp-dl .pp-cal-p { right: auto; left: 0; top: calc(100% + 6px); bottom: auto; z-index: 1200; }
+.pp-sub:has(.pp-cal.open), .pp-sec-b:has(.pp-cal.open), .pp-sec-b:has(.pp-cal.open) .pp-mc { overflow: visible; }
+.sn-loading { position: sticky; left: auto; top: 0; transform: none; margin: 8px 12px; z-index: 5; justify-content: center; }
+.pp-legsrc, .ll-src, .sn-lg-src { margin-top: 6px; font-size: 11px; line-height: 1.35; color: #64748b; }
+/* вместо слайдов подсказок: легенда слоя / данные выписки */
+.gc-leg-slot { margin: 10px 12px; padding: 12px 14px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(15, 23, 42, .06); max-height: 340px; overflow: auto; }
+.gls-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: #0f172a; }
+.gls-x { width: 24px; height: 24px; border: 0; border-radius: 8px; background: #f1f5f9; color: #334155; font-size: 16px; line-height: 1; cursor: pointer; }

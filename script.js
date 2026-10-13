@@ -1481,6 +1481,12 @@ const LAYER_LEGENDS = {
         ]
     }
 };
+// Краткое описание источника — в каждой легенде; дополнительные легенды для снимков
+Object.assign(LAYER_LEGENDS.esri_landcover, { src: 'Источник: Esri · Impact Observatory · Microsoft — классификация снимков Sentinel-2, 10 м.' });
+['ndvi', 'ndwi', 'modified_ndwi', 'ndmi', 'nbr'].forEach(k => { LAYER_LEGENDS[k].src = 'Источник: Sentinel-2 L2A (ESA Copernicus), расчёт индекса по спектральным каналам, 10 м.'; });
+LAYER_LEGENDS.ndvi_c = Object.assign({}, LAYER_LEGENDS.ndvi, { title: 'Контрастный NDVI', note: 'Цвета растянуты на выбранный диапазон — виден разброс внутри поля' });
+LAYER_LEGENDS.sentinel2 = { title: 'Sentinel-2 — естественные цвета', note: 'Снимок, как его видит глаз (красный · зелёный · синий), 10 м', items: [], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), канал TCI.' };
+LAYER_LEGENDS.falsecolor = { title: 'Sentinel-2 — ложные цвета (CIR)', note: 'Ближний ИК · красный · зелёный → R · G · B', items: [['#e11d48', 'Красный — растительность'], ['#1e3a8a', 'Тёмно-синий — вода'], ['#94a3b8', 'Серый — застройка, голая почва']], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), каналы B08 · B04 · B03, 10 м.' };
 // Почвенные слои: шкала строится прямо в интерфейсе (градиент + подписи значений).
 // Диапазоны и палитры ориентировочные (типичные значения верхнего слоя почвы).
 [
@@ -1512,7 +1518,8 @@ const LAYER_LEGENDS = {
     LAYER_LEGENDS[key] = {
         title: title,
         note: note + '. Шкала ориентировочная (данные ISRIC SoilGrids)',
-        gradient: gradient
+        gradient: gradient,
+        src: 'Источник: ISRIC SoilGrids (WCS), разрешение 250 м.'
     };
 });
 
@@ -1549,12 +1556,12 @@ function renderLayerLegendBlock(key) {
             ${rows ? `<div class="ll-items">${rows}</div>` : ''}
             ${grad}
             ${img}
+            ${def.src ? `<div class="ll-src">${def.src}</div>` : ''}
         </div>`;
 }
 
 function updateLayerLegend() {
     const box = document.getElementById('layerLegend');
-    if (!box) return;
     let keys;
     if (swipeState.active) {
         keys = ['left', 'right'].map(side => swipeState.sides[side] && swipeState.sides[side].layerKey).filter(Boolean);
@@ -1562,6 +1569,8 @@ function updateLayerLegend() {
         keys = [currentLayer];
     }
     keys = keys.filter((k, i) => keys.indexOf(k) === i && LAYER_LEGENDS[k]);
+    window.gcLegKeys = keys; if (window.gcTipsRefresh) window.gcTipsRefresh();   // легенда на боковой панели вместо слайдов
+    if (!box) return;
     box.innerHTML = keys.map(renderLayerLegendBlock).join('');
     box.hidden = keys.length === 0;
     const emptyNote = document.getElementById('layerLegendEmpty');
@@ -2338,13 +2347,16 @@ function snShpZip(feats, base) {
     let searching = 0, lastCalc = null, ctrT = 0;
     let sec = null, month = null, groups = [], seq = 0, timer = 0, note = '', entering = false, busy = false, abort = false;
     const stacCache = {};
-    // надпись «Загрузка снимков» на карте: пока идёт поиск снимков или рисуются тайлы (другая подложка не показывается)
+    // надпись «Загрузка снимков» на боковой панели: пока идёт поиск снимков или рисуются тайлы (другая подложка не показывается)
     const lo = document.createElement('div');
     lo.className = 'sn-loading'; lo.hidden = true;
     lo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Загрузка снимков…</span>';
-    (document.getElementById('mapStage') || document.querySelector('.map-stage') || document.body).appendChild(lo);
     const lf = { search: false, tiles: false };
-    window.snLoadingSet = (k, v) => { lf[k] = v; lo.hidden = !(sec && (lf.search || lf.tiles)); };
+    window.snLoadingSet = (k, v) => {
+        lf[k] = v; const on = !!(sec && (lf.search || lf.tiles));
+        if (on && ui[sec] && lo.parentNode !== ui[sec].pane) ui[sec].pane.insertBefore(lo, ui[sec].pane.firstChild);   // надпись — на боковой панели раздела
+        lo.hidden = !on;
+    };
     const setSearch = d => { searching = Math.max(0, searching + d); window.snLoadingSet('search', searching > 0); };
     const grp = L.featureGroup();
     let shape = null, shapeGJ = null, handler = null, tool = null, editing = false, shapeTimer = 0;
@@ -2610,10 +2622,9 @@ function snShpZip(feats, base) {
         if (st && st.date && groups.some(g => g.day === st.date)) {
             select(st.date, true);   // та же дата в новой области — обновим список сцен
         } else if (!(st && st.date)) {
-            const g = (SENTINEL.lastDay && groups.find(x => x.day === SENTINEL.lastDay)) || groups.find(x => x.cc != null && x.cc <= max);
-            if (g) { select(g.day); return; }
-            if (retries > 0) { month = new Date(Date.UTC(y, m - 1, 1)); load(retries - 1); return; }
-            if (groups.length) note = `Нет снимков с облачностью ≤ ${max}% — увеличьте порог или смените месяц`;
+            // дата не выбирается автоматически: слой включится только после выбора даты пользователем
+            if (!groups.length && retries > 0) { month = new Date(Date.UTC(y, m - 1, 1)); load(retries - 1); return; }
+            if (groups.length) note = 'Выберите дату съёмки в календаре или в списке — слой появится на карте';
         }
         renderAll();
     }
@@ -2664,7 +2675,7 @@ function snShpZip(feats, base) {
     // превью: для естественных цветов — готовый снимок-превью каталога; для индексов и ложных цветов — рисуется в нужном спектре
     function thumbHtml(scene, lay) {
         if (lay === 'sentinel2') {
-            if (!scene.thumb) return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="sentinel2"><i class="fa-solid fa-image"></i></span>`;
+            if (true) return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="sentinel2"><i class="fa-solid fa-image"></i></span>`;
         return `<span class="sn-th" data-tid="${esc(scene.id)}"><img decoding="async" referrerpolicy="no-referrer" alt="" data-href="${esc(scene.thumb)}" src="${esc(thumbUrl(scene.thumb))}"><i class="fa-solid fa-image"></i></span>`;
         }
         return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="${lay}"><i class="fa-solid fa-image"></i></span>`;
@@ -2712,7 +2723,7 @@ function snShpZip(feats, base) {
             const mo = d.toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '');
             const over = g.cc != null && g.cc > max;
             return `<button type="button" class="sn-card${g.day === st.date ? ' sel' : ''}${over ? ' dim' : ''}" data-day="${g.day}" style="--c:${ccColor(g.cc)}" title="${fmtDay(g.day)} · облачность ${ccText(g.cc)} · снимков: ${g.scenes.length}">` +
-                thumbHtml(g.scenes[0], lay) +
+                thumbHtml(g.scenes[0], 'sentinel2') +
                 `<span class="sn-ci"><b>${d.getUTCDate()} ${mo}</b><em>☁ ${ccText(g.cc)}</em></span><small>${wd}${g.scenes.length > 1 ? ' · сцен: ' + g.scenes.length : ''}</small></button>`;
         }).join('');
         watchPv(el);
@@ -2720,11 +2731,11 @@ function snShpZip(feats, base) {
     // «скрины» сцен выбранной даты (превью с облаками) — чтобы оценить снимок до загрузки на карту
     function renderShots() {
         const el = q(sec, 'shots'), lay = layerOf(sec), st = SENTINEL.state[lay];
-        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">Выберите дату в календаре или в списке ниже</div>'; return; }
+        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">📅 Выберите дату съёмки в календаре или в списке ниже — слой появится на карте</div>'; return; }
         const g = groups.find(x => x.day === st.date);
         const list = (g ? g.scenes : st.scenes || []).slice(0, 6);
         el.className = 'sn-shots' + (list.length === 1 ? ' one' : '');
-        el.innerHTML = list.map(s => `<figure class="sn-shot" style="--c:${ccColor(s.cc)}">${thumbHtml(s, lay)}` +
+        el.innerHTML = list.map(s => `<figure class="sn-shot" style="--c:${ccColor(s.cc)}">${thumbHtml(s, 'sentinel2')}` +
             `<figcaption><b>${esc(tileOf(s.id) || 'сцена')}</b> ${esc(s.time)} UTC<em>☁ ${ccText(s.cc)}</em></figcaption></figure>`).join('');
         watchPv(el);
     }
@@ -2753,6 +2764,11 @@ function snShpZip(feats, base) {
     // ---------- легенда (вверху раздела, под названием) ----------
     const fmtN = v => (Math.round(v * 100) / 100).toString().replace('.', ',').replace('-', '−');
     function renderLegend() {
+        renderLegend0();
+        const el = q(sec, 'leg'), L0 = LAYER_LEGENDS[layerOf(sec)];
+        if (el && L0 && L0.src) el.insertAdjacentHTML('beforeend', '<div class="sn-lg-src">' + L0.src + '</div>');
+    }
+    function renderLegend0() {
         const lay = layerOf(sec), el = q(sec, 'leg');
         if (lay === 'sentinel2') { el.innerHTML = '<span class="sn-lg-txt">Естественные цвета, как видит глаз (Red · Green · Blue)</span>'; return; }
         if (lay === 'falsecolor') {
@@ -3141,10 +3157,11 @@ function snShpZip(feats, base) {
         if (anomVis && !map.hasLayer(anomGrp)) anomGrp.addTo(map);
         const lay = layerOf(s);
         entering = true;
-        try { if (currentLayer !== lay) switchLayer(lay); } finally { entering = false; }
+        try { const s0 = SENTINEL.state[lay]; if (s0 && s0.date && currentLayer !== lay) switchLayer(lay); } finally { entering = false; }   // слой включается только после выбора даты
         const st = SENTINEL.state[lay], ref = (st && st.date) || SENTINEL.lastDay;
         month = monthStart(ref ? dayDate(ref) : new Date());
         renderAll();
+        if (!(st && st.date)) updateStatus('📅 Выберите дату снимка — слой появится на карте после выбора даты');
         load(ref ? 0 : 2);
     }
     function leave() {
@@ -3188,7 +3205,7 @@ function snShpZip(feats, base) {
             cMin.addEventListener('change', done); cMax.addEventListener('change', done);
         }
         pane.addEventListener('error', e => {   // превью не загрузилось — остаётся значок
-            if (e.target && e.target.tagName === 'IMG') { const th = e.target.parentNode; th.classList.add('err'); e.target.remove(); }
+            if (e.target && e.target.tagName === 'IMG' && !e.target.dataset.href) { const th = e.target.parentNode; th.classList.add('err'); e.target.remove(); }
         }, true);
     });
 
@@ -4848,6 +4865,7 @@ function importRosreestrXml(xmlText) {
     map.fitBounds(group.getBounds());
     updateAllLabels();
     updateObjectList();
+    try { window.gcXmlInfo = rrPopupHtml(res.geojson.features[0].properties); if (window.gcTipsRefresh) window.gcTipsRefresh(); } catch (e) { /* нет данных */ }
     const n = res.geojson.features.length;
     updateStatus('📂 Выписка Росреестра загружена: ' + res.props.cad_number + ', контуров: ' + n
         + ' (' + res.skLabel + ' → WGS84)' + (res.warnings.length ? '. Внимание: ' + res.warnings.join('; ') : ''));

@@ -1067,4 +1067,20 @@
     }
     var arts = document.querySelectorAll('.tab-art');
     Array.prototype.forEach.call(arts, function (el, k) { build(el, k === 0 ? 0 : (k * 5 + Math.floor(Math.random() * TIPS.length)) % TIPS.length); });   // на главной начинаем с анализа участка
+    // на месте слайдов подсказок — данные выписки (XML) либо легенда включённого слоя; иначе показываются слайды
+    function refreshSlot() {
+        var xml = window.gcXmlInfo, keys = window.gcLegKeys || [], html = '';
+        if (xml) html = '<div class="gls-hd"><b>Данные участка</b><button type="button" class="gls-x" data-gls-x title="Скрыть">×</button></div>' + xml;
+        else if (keys.length && typeof renderLayerLegendBlock === 'function') html = '<div class="gls-hd"><b>Легенда слоя</b></div>' + keys.map(renderLayerLegendBlock).join('');
+        Array.prototype.forEach.call(document.querySelectorAll('.tab-art.gc-tips'), function (el) {
+            var s = el.nextElementSibling;
+            if (!s || !s.classList.contains('gc-leg-slot')) {
+                s = document.createElement('div'); s.className = 'gc-leg-slot'; el.parentNode.insertBefore(s, el.nextSibling);
+                s.addEventListener('click', function (e) { if (e.target.closest('[data-gls-x]')) { window.gcXmlInfo = null; refreshSlot(); } });
+            }
+            s.style.display = html ? '' : 'none'; el.style.display = html ? 'none' : '';
+            if (html) s.innerHTML = html;
+        });
+    }
+    window.gcTipsRefresh = refreshSlot; refreshSlot();
 })();
