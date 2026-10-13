@@ -86,7 +86,7 @@
         <button type="button" class="gc-rail-btn on" data-rail="main" title="Главное"><i class="fas fa-house"></i><span>Главное</span></button>
         <button type="button" class="gc-rail-btn" data-rail="analysis" title="Анализ"><i class="fas fa-chart-line"></i><span>Анализ</span></button>
         <button type="button" class="gc-rail-btn" data-rail="images" title="Снимки"><i class="fas fa-satellite"></i><span>Снимки</span></button>
-        <button type="button" class="gc-rail-btn" data-rail="tools" title="Инструменты"><i class="fas fa-toolbox"></i><span>Инструм.</span></button>
+        <button type="button" class="gc-rail-btn" data-rail="tools" title="Инструменты"><i class="fas fa-toolbox"></i><span>Инструменты</span></button>
         <button type="button" class="gc-rail-btn" data-rail="layers" title="Слои"><i class="fas fa-layer-group"></i><span>Слои</span></button>
         <button type="button" class="gc-rail-btn" data-rail="catalog" title="Каталог данных"><i class="fas fa-store"></i><span>Каталог</span></button>
         <button type="button" class="gc-rail-btn" data-rail="weather" title="Погода"><i class="fas fa-cloud-sun"></i><span>Погода</span></button>
@@ -193,10 +193,10 @@
                     <div class="sp-group-title" style="margin-top:4px">Главное</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
-                        <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#10b981" title="Источники анализа&#10;Раздел в разработке."><i class="fas fa-database"></i><span>Источники анализа</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Новости&#10;Раздел в разработке."><i class="fas fa-newspaper"></i><span>Новости</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#64748b" title="Поддержка&#10;Раздел в разработке."><i class="fas fa-headset"></i><span>Поддержка</span></button>
+                        <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="analysis">
@@ -224,8 +224,6 @@
                         <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
                         <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
                         <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Включение и настройки 3D-режима. Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
-                        <button type="button" class="sp-tile" data-bp="measure" style="--c:#0ea5e9" title="Измерения&#10;Расстояние, площадь и периметр, радиус, азимут, координаты (ГМС, UTM), поиск по адресу и координатам, высота, экспорт GeoJSON / KML."><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#f59e0b" title="Заметки&#10;Раздел в разработке."><i class="fas fa-note-sticky"></i><span>Заметки</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="layers">
@@ -409,7 +407,8 @@
         <div class="tab-pane" data-pane="bookmarks" role="tabpanel">
             <div class="section bm">
                 <div class="section-title"><i class="fas fa-bookmark"></i> Закладки <span class="badge" id="bmCount">0</span></div>
-                <div class="an-hint" id="bmEmpty" style="margin:0">Правый клик по карте → «Сохранить закладку». Закладки хранятся в этом браузере.</div>
+                <button type="button" class="bm-add-ext" id="bmAddExtent"><i class="fas fa-vector-square"></i> Сохранить экстент в закладки</button>
+                <div class="an-hint" id="bmEmpty" style="margin:0">Правый клик по карте → «Сохранить закладку» или кнопка выше — сохранит текущий экстент. Закладки хранятся в этом браузере.</div>
                 <div class="bm-list" id="bmList"></div>
             </div>
             <div class="tab-art" data-art="bookmarks">
@@ -1050,6 +1049,32 @@
         <!-- КНОПКА «ОЧИСТИТЬ»: вверху слева на карте, убирает с карты всё нарисованное, замеры, маршрут и результаты анализов -->
         <button type="button" class="map-clear-btn" id="mapClearBtn" title="Очистить карту" aria-label="Очистить карту: убрать все объекты, рисунки, замеры, маршрут и результаты анализов"><i class="fas fa-eraser"></i></button>
 
+        <!-- ВИДЖЕТЫ «РИСОВАНИЕ» И «ИЗМЕРЕНИЯ»: вверху слева рядом с кнопкой «Очистить» -->
+        <div class="map-tl-tools"><div class="mc-group mc-row">
+            <div class="side-widget" id="drawWidget"><button class="map-btn widget-btn" id="drawMapBtn" title="Рисование"><i class="fas fa-pen-ruler"></i></button></div>
+            <div class="side-widget" id="measureWidget">
+                <button class="map-btn widget-btn" id="measureBtn" title="Измерения">
+                    <i class="fas fa-ruler-combined"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="measurePanel">
+                    <div class="widget-panel-body-horizontal">
+                        <div class="measure-chip" data-mode="distance">
+                            <i class="fas fa-ruler"></i>
+                            <span>Расстояние</span>
+                        </div>
+                        <div class="measure-chip" data-mode="area">
+                            <i class="fas fa-vector-square"></i>
+                            <span>Площадь</span>
+                        </div>
+                        <div class="measure-chip" data-mode="clear">
+                            <i class="fas fa-trash-alt"></i>
+                            <span>Очистить</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div></div>
+
         <!-- ПРАВАЯ ПАНЕЛЬ КНОПОК (ВЕРТИКАЛЬНО) -->
         <div class="map-controls-right">
             <!-- ГРУППА 1: КАРТЫ И СЛОИ (базовые карты, снимки, аналитика, слои) -->
@@ -1228,44 +1253,9 @@
                     </div>
                 </div>
             </div>
-                <!-- КНОПКА СЛОИ (дополнительные слои поверх подложки: публичная кадастровая карта) -->
-            <div class="side-widget" id="layersWidget">
-                <button class="map-btn widget-btn" id="layersBtn" title="Слои">
-                    <i class="fas fa-layer-group"></i>
-                </button>
-                <div class="widget-panel widget-panel-horizontal" id="layersPanel">
-                    <div class="widget-panel-body-horizontal grid-opts">
-                        <div class="measure-chip" id="cadToggle" title="Публичная кадастровая карта (НСПД): границы участков и кадастровые номера"><i class="fas fa-landmark"></i><span>Кадастровая карта</span></div>
-                        <label class="gr-f">Прозр. <input type="range" id="cadOpacity" min="20" max="100" step="5" value="80"></label>
-                        <span class="gr-f" id="cadStatus" style="color:#94a3b8">виден с масштаба z14</span>
-                    </div>
-                </div>
-            </div>
             </div>
             <!-- ГРУППА 2: ИНСТРУМЕНТЫ (измерения, шторка, сетка координат) -->
             <div class="mc-group">
-                <!-- КНОПКА ИЗМЕРЕНИЯ -->
-            <div class="side-widget" id="measureWidget">
-                <button class="map-btn widget-btn" id="measureBtn" title="Измерения">
-                    <i class="fas fa-ruler-combined"></i>
-                </button>
-                <div class="widget-panel widget-panel-horizontal" id="measurePanel">
-                    <div class="widget-panel-body-horizontal">
-                        <div class="measure-chip" data-mode="distance">
-                            <i class="fas fa-ruler"></i>
-                            <span>Расстояние</span>
-                        </div>
-                        <div class="measure-chip" data-mode="area">
-                            <i class="fas fa-vector-square"></i>
-                            <span>Площадь</span>
-                        </div>
-                        <div class="measure-chip" data-mode="clear">
-                            <i class="fas fa-trash-alt"></i>
-                            <span>Очистить</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
                 <!-- КНОПКА ШТОРКА (разделяет карту на две части с разными подложками) -->
             <div class="side-widget" id="swipeWidget">
                 <button class="map-btn widget-btn" id="swipeBtn" title="Шторка">

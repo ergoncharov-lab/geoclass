@@ -2,7 +2,7 @@
 # Запуск:  python serve_site.py   (из папки сайта или откуда угодно), затем откройте http://localhost:8000
 # Прокси ускорен: постоянные соединения с S3 (без нового TLS-рукопожатия на каждый запрос)
 # и кэш ответов на диске (папка .s3cache рядом со скриптом) — повторно открытые снимки грузятся мгновенно.
-import hashlib, http.client, http.server, json, mimetypes, os, sys, threading, urllib.parse
+import hashlib, http.client, http.server, json, mimetypes, os, ssl, sys, threading, time, urllib.parse, urllib.request
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 UPSTREAM_HOST = 'sentinel-cogs.s3.us-west-2.amazonaws.com'
@@ -98,7 +98,48 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.proxy()
         if self.path.startswith('/isric?'):
             return self.isric()
+        if self.path.startswith('/ucache?'):
+            return self.ucache()
         return super().do_GET()
+
+    def ucache(self):
+        """Кэширующий прокси плиток пользовательских слоёв (WMS / XYZ / ArcGIS): картинки хранятся на диске 7 суток.
+        Заодно работает с серверами с самоподписанным сертификатом."""
+        u = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('u', [''])[0]
+        pu = urllib.parse.urlparse(u)
+        if pu.scheme not in ('http', 'https') or not pu.hostname or pu.hostname in ('localhost', '127.0.0.1', '::1'):
+            self.send_error(403, 'forbidden')
+            return
+        key = 'u|' + u
+        hit = cache_get(key, None)
+        if hit and time.time() - os.path.getmtime(cache_path(key, None) + '.json') > 7 * 86400:
+            hit = None
+        if hit:
+            status, headers, data = hit
+        else:
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                req = urllib.request.Request(u, headers={'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'})
+                with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
+                    data = r.read()
+                    status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
+            except Exception as e:
+                print('UCACHE error:', u[:120], e)
+                self.send_error(502, 'upstream unreachable: %s' % e)
+                return
+            if status == 200 and headers.get('content-type', '').startswith('image/'):
+                cache_put(key, None, status, headers, data)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', headers.get('content-type', 'application/octet-stream'))
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'public, max-age=86400')
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def isric(self):
         """Прокси к WCS ISRIC SoilGrids (раздел «Хим. анализ»): обходит CORS, GeoTIFF кэшируются на диске."""

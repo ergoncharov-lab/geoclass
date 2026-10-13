@@ -1413,3 +1413,20 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 
 /* старая статичная картинка и текст не показываются, пока site.js не собрал слайды подсказок */
 .tab-art:not(.gc-tips) { display: none; }
+
+/* подписи левого меню: мельче, чтобы «Инструменты» и «Закладки» помещались */
+.gc-rail-btn span { font-size: 9px; letter-spacing: -.1px; text-overflow: clip; white-space: nowrap; }
+/* кнопка «Сохранить экстент в закладки» */
+.bm-add-ext { width: 100%; margin: 0 0 10px; padding: 9px 10px; border: 0; border-radius: 10px; background: #0f172a; color: #fff; font: 600 13px inherit; font-family: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.bm-add-ext:hover { background: #1e293b; }
+/* виджеты «Рисование» и «Измерения»: вверху слева, правее кнопки «Очистить» */
+.map-tl-tools { position: absolute; left: 62px; top: 12px; z-index: 1000; }
+#mainPanel.hidden ~ .map-container .map-tl-tools { top: 84px; }
+.map-tl-tools .mc-group .widget-panel { right: auto; left: 0; top: calc(100% + 10px); transform: none; animation: none; }
+.map-tl-tools .mc-group.mc-row > .side-widget > .widget-btn { border-radius: 0; }
+.map-tl-tools .mc-group.mc-row > :first-child > .widget-btn { border-radius: 11px 0 0 11px; }
+.map-tl-tools .mc-group.mc-row > :last-child > .widget-btn { border-radius: 0 11px 11px 0; }
+@media (max-width: 900px) {
+    #map-section .map-tl-tools, #mainPanel.hidden ~ .map-container .map-tl-tools { left: 60px; top: 10px; }
+    .app-container[data-sheet="full"] .map-tl-tools { opacity: 0; pointer-events: none; }
+}

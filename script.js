@@ -10262,6 +10262,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             setStatus('Сборка карты…');
             const cv = document.createElement('canvas');
             const r = await compose(cv, o, Lo, ppm, (d, n) => { setStatus(`Загрузка тайлов: ${d}/${n}`); if (window.AnLoader) AnLoader.progress(d / n * 85, `Загрузка тайлов: ${d}/${n}`); });
+            if (window.AnLoader && AnLoader.cancelled(al)) throw new Error('отменено пользователем');
             const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})/, '$1_');
             const base = 'geoclass_karta_' + stamp;
             setStatus('Кодирование файла…'); if (window.AnLoader) AnLoader.progress(90, 'Кодирование файла…');
@@ -10680,6 +10681,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             let pdone = 0;
             await Promise.all(need.map(k => { const [x, y] = k.split(',').map(Number); return pfTile(z, x, y).then(a => { data[k] = a; if (window.AnLoader) AnLoader.progress(++pdone / need.length * 100, 'Загрузка высот: ' + pdone + '/' + need.length); }); }));
         } finally { if (window.AnLoader) AnLoader.end(al); }
+        if (window.AnLoader && AnLoader.cancelled(al)) { $('pfEmpty').textContent = 'Загрузка отменена'; updateStatus('⏹ Загрузка отменена'); return; }
         if (my !== pf.seq) return;
 
         const raw = [];
@@ -11083,6 +11085,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         for (let x = R.x0; x <= R.x1; x++) for (let y = R.y0; y <= R.y1; y++)
             jobs.push(pfTile(z, x, y).then(a => { data[x + ',' + y] = a; $('hyEmpty').textContent = 'Загрузка высот: ' + (++done) + '/' + total + '…'; if (window.AnLoader) AnLoader.progress(done / total * 55, 'Загрузка высот: ' + done + '/' + total); }));
         await Promise.all(jobs);
+        if (window.AnLoader && AnLoader.cancelledNow()) return hyFail('загрузка отменена');
         if (my !== hy.seq) return;
 
         const polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;

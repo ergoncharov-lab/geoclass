@@ -866,15 +866,16 @@
         var t = document.querySelector('.panel-tab[data-tab="bookmarks"]'); if (t) t.click();
         if (window.gcRailMark) window.gcRailMark('bookmarks');
     }
-    window.gcBookmarkAdd = function (ll) {
+    window.gcBookmarkAdd = function (ll, bb) {
         var b = { id: 'b' + Date.now().toString(36), name: ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5), desc: '', lat: ll.lat, lng: ll.lng, zoom: Math.round(map.getZoom()), img: '', auto: true, ts: Date.now() };
+        if (bb) b.bb = bb;
         items.unshift(b); save(); render(); openPane();
         fetch('https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&accept-language=ru&lat=' + ll.lat + '&lon=' + ll.lng)
             .then(function (r) { return r.json(); }).then(function (d) {
                 if (d && d.display_name && b.auto && items.indexOf(b) >= 0) { b.name = d.display_name.split(', ').slice(0, 2).join(', '); save(); patch(b); }
             }).catch(function () { /* название останется координатами */ });
         shot(ll).then(function (img) { if (items.indexOf(b) < 0) return; b.img = img; save(); patch(b); });
-        if (typeof updateStatus === 'function') updateStatus('🔖 Закладка сохранена');
+        if (typeof updateStatus === 'function') updateStatus(bb ? '🔖 Экстент сохранён в закладки' : '🔖 Закладка сохранена');
     };
     function dropPin() { if (pin) { map.removeLayer(pin); pin = null; } }
     listEl.addEventListener('input', function (e) {
@@ -889,12 +890,18 @@
         var b = byId(e.target); if (!b) return;
         if (go) {
             var ll = L.latLng(b.lat, b.lng); dropPin();
+            if (b.bb) { map.flyToBounds([[b.bb[0], b.bb[1]], [b.bb[2], b.bb[3]]], { duration: .6 }); return; }
             pin = L.marker(ll, { icon: L.divIcon({ html: '<i class="fas fa-bookmark bm-pin"></i>', className: 'custom-marker', iconSize: [22, 26], iconAnchor: [11, 24] }) }).addTo(map);
             pin.bindTooltip(b.name || 'Закладка'); pin.on('click', dropPin);
             map.flyTo(ll, Math.max(b.zoom || 15, 12), { duration: .6 });
         } else {
             items = items.filter(function (x) { return x !== b; }); save(); render(); dropPin();
         }
+    });
+    var extBtn = document.getElementById('bmAddExtent');
+    if (extBtn) extBtn.addEventListener('click', function () {
+        var bd = map.getBounds();
+        window.gcBookmarkAdd(map.getCenter(), [bd.getSouth(), bd.getWest(), bd.getNorth(), bd.getEast()]);
     });
     load(); render();
 })();
@@ -1005,7 +1012,6 @@
         { ic: 'fa-chart-pie', c: '#10b981', t: 'Анализ участка', d: 'Паспорт участка по одному контуру: рельеф, почва, климат, логистика и индекс пригодности.', h: 'Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте участок и запустите анализ.', tab: 'analysis', m: 'Главный инструмент сайта: один контур превращается в подробный отчёт — «паспорт участка» с графиками, расшифровкой каждого блока и итоговыми выводами. Готовые отчёты хранятся во вкладке «Мои отчёты».', f: ['Рельеф: уклоны, перепад высот, гипсометрия', 'Почва (SoilGrids) и климат за 10 лет, ГТК, безморозный период', 'Логистика, форма участка и индекс пригодности 0–100'], hot: true },
         { ic: 'fa-file-lines', c: '#f97316', t: 'Мои отчёты', d: 'Готовые паспорта участков хранятся в одном месте, к ним можно вернуться в любой момент.', h: 'Нажмите на отчёт — паспорт участка раскроется во всю карту.', tab: 'reports', m: 'Каждый выполненный анализ — отдельный отчёт. Откройте его, и паспорт участка раскроется с графиками и выводами; у каждого блока есть кнопка «Расшифровка», которая объясняет показатели простыми словами.', f: ['Паспорт раскрывается во всю карту', 'У блоков есть «Расшифровка» показателей', 'Все отчёты по вашим участкам в одном списке'] },
         { ic: 'fa-pen-ruler', c: '#3b82f6', t: 'Рисование', d: 'Фигуры, линии, значки и текст прямо на карте. Готовую фигуру можно править и экспортировать.', h: 'Выберите инструмент — рядом появятся его параметры.', bp: 'draw', m: 'Универсальный чертёж поверх карты: отметьте границы полей, подпишите объекты, поставьте значки. Нарисованные фигуры можно выбирать, двигать, править вершины и сохранять в файл.', f: ['Полигоны, прямоугольники, круги, линии, значки, текст', 'Выбор кликом, правка вершин, перемещение', 'Импорт и экспорт контуров (KML, GeoJSON)'] },
-        { ic: 'fa-ruler-combined', c: '#0ea5e9', t: 'Измерения', d: 'Расстояние, площадь и периметр, радиус, азимут, координаты (ГМС, UTM), экспорт GeoJSON и KML.', h: 'Выберите режим и кликайте по карте. Enter — завершить, Backspace — убрать точку.', bp: 'measure', m: 'Быстрые замеры без отдельных программ. Итог виден сразу, историю измерений можно сохранить, а единицы длины и площади переключаются под вашу привычку.', f: ['Расстояние, площадь с периметром, радиус, азимут', 'Координаты: ГМС, UTM, высота', 'Своя система единиц, экспорт GeoJSON и KML'] },
         { ic: 'fa-mountain', c: '#14b8a6', t: 'Профиль рельефа', d: 'График высот по линии и гипсометрия по площади: перепад, длина, уклоны (данные Terrarium DEM).', h: 'Проведите линию или обведите полигон. Двойной клик по последней точке — завершить.', bp: 'profile', m: 'Показывает, как меняется высота вдоль линии или по всей площади участка. Помогает оценить эрозионные риски, стока воды и пригодность склонов для техники.', f: ['Профиль по линии: длина, перепад, уклоны', 'Гипсометрия по площади участка', 'Высоты из тайлов Terrarium DEM'] },
         { ic: 'fa-route', c: '#ef4444', t: 'Логистика', d: 'Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap и расстояния до ближайших.', h: 'Нарисуйте точку или участок и задайте размер буфера.', bp: 'logistics', m: 'Оценка окружения: насколько участок удобен для подъезда и водоснабжения. Считает, что попадает в заданный буфер, и показывает расстояния до ближайших объектов.', f: ['Буфер вокруг точки или участка', 'Дороги и водоёмы OpenStreetMap в буфере', 'Расстояния до ближайших объектов'] },
         { ic: 'fa-flask', c: '#a855f7', t: 'Почвенный анализ', d: 'pH, углерод, азот, глина, песок и другие показатели по фигуре, зоны на карте (SoilGrids, 250 м).', h: 'Нарисуйте фигуру, выберите показатель и глубину, нажмите «Рассчитать по фигуре».', bp: 'chem', m: 'Значения почвенных свойств внутри вашей фигуры по данным мировой карты SoilGrids. Участок можно разбить на зоны по значению показателя — основа для дифференцированного внесения.', f: ['8 показателей: pH, углерод, азот, глина, песок, ил, CEC, плотность', 'Шесть слоёв глубины от 0–5 до 100–200 см', 'Зоны внутри фигуры и слой значений на карте'] },
@@ -1021,6 +1027,16 @@
         { ic: 'fa-wind', c: '#64748b', t: 'Ветер и окна работ', d: 'Роза ветров, стрелки ветра на участке и таблица: когда опрыскивать и работать в поле.', h: 'Нарисуйте участок — стрелки появятся на карте.', bp: 'windwork', m: 'Ветер определяет, когда можно опрыскивать и где ставить лесополосы. На карте стрелки показывают текущий ветер на участке, а таблица — удачные дни недели.', f: ['Роза ветров за 10 лет', 'Анимированные стрелки ветра на участке', 'Окна для опрыскивания и полевых работ на 7 дней'] },
         { ic: 'fa-cube', c: '#6366f1', t: 'Режим 3D', d: 'Объёмный вид территории: рельеф, 3D-здания OSM, деревья и импорт моделей.', h: 'Включите 3D и наклоните карту. Вернуться — кнопка «2D».', bp: '3d', m: 'Посмотрите на территорию объёмно: рельеф с высотами, здания, деревья. Удобно для презентации участка и оценки склонов на глаз.', f: ['Рельеф и 3D-здания OSM', 'Деревья и импорт моделей', 'Возврат к плоской карте кнопкой «2D»'] },
         { ic: 'fa-file-export', c: '#8b5cf6', t: 'Экспорт карты', d: 'Сохранение текущего вида: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой.', h: 'Настройте вид и формат, затем сохраните файл.', bp: 'export', m: 'Сохраните карту так, как вы её видите: для печати, отчёта или работы в ГИС. GeoTIFF и GeoPDF сохраняют пространственную привязку.', f: ['PDF (GeoPDF), PNG, JPEG, WebP', 'GeoTIFF с пространственной привязкой', 'Сохраняется текущий вид карты'] },
+        { ic: 'fa-magnifying-glass', c: '#0ea5e9', t: 'Поиск и «Что здесь?»', d: 'Поиск адресов и координат, карточка выбранной точки: адрес, координаты, копирование.', h: 'Введите адрес в поиске панели или нажмите правой кнопкой по карте → «Что здесь?».', m: 'Найдите место по названию или координатам либо просто укажите точку на карте — карточка покажет адрес и координаты, которые можно скопировать.', f: ['Поиск по адресу и координатам', 'Правый клик → «Что здесь?»', 'Копирование координат в буфер'] },
+        { ic: 'fa-diamond-turn-right', c: '#2563eb', t: 'Маршрут', d: 'Маршрут между точками с промежуточными остановками и пошаговым описанием.', h: 'Правый клик по карте → «Маршрут отсюда» / «Маршрут сюда» или кнопка маршрута рядом с поиском.', m: 'Постройте путь на машине и другими способами; где дорог нет, маршрут достраивается прямой пунктирной линией. Расчёт выполняет OSRM.', f: ['Откуда, куда и промежуточные точки', 'Варианты и пошаговый маршрут', 'Достройка пунктиром там, где нет дорог'] },
+        { ic: 'fa-layer-group', c: '#10b981', t: 'Подложки и слои', d: 'Базовые карты, спутниковые снимки и аналитические подложки меняют основу карты.', h: 'Кнопки справа на карте: «Базовые карты», «Спутник», «Аналитика».', m: 'Выберите подходящую основу: схема, реальные снимки или готовые аналитические слои. Легенда включённого слоя появляется на панели.', f: ['Базовые карты и спутник', 'Аналитические подложки с легендой', 'Свои слои подключаются в разделе «Свои слои»'] },
+        { ic: 'fa-plug', c: '#f59e0b', t: 'Свои слои', d: 'Подключение WMS, WFS, WMTS/XYZ, ArcGIS и GeoJSON по ссылке.', h: 'Откройте раздел, выберите тип сервиса и вставьте адрес.', bp: 'userlayers', m: 'Добавьте внешние данные на карту: сервисы хранятся в браузере, плитки кэшируются локальным прокси.', f: ['WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON и KML', 'Список сервисов сохраняется в браузере', 'Включение и скрытие каждого слоя'] },
+        { ic: 'fa-left-right', c: '#6366f1', t: 'Шторка и дублирование', d: 'Сравнение двух подложек на одной карте; у каждой половины свой переключатель 3D.', h: 'Кнопка «Шторка» среди виджетов справа на карте.', m: 'Разделите карту на две части с разными подложками и двигайте разделитель: удобно сравнивать снимки разных дат или 3D и плоскую карту.', f: ['Две подложки на одной карте', 'Подвижный разделитель', '3D можно включить на каждой половине отдельно'] },
+        { ic: 'fa-border-all', c: '#1d4ed8', t: 'Сетка координат', d: 'Координатная сетка на карте: формат, шаг, цвет и подписи.', h: 'Кнопка «Сетка координат» справа на карте — настройки откроются в панели.', m: 'Сетка помогает ориентироваться и читать координаты. Формат — градусы или град-мин-сек, шаг подбирается под масштаб.', f: ['Градусы или град-мин-сек', 'Шаг, цвет и прозрачность', 'Подписи включаются отдельно'] },
+        { ic: 'fa-ruler-combined', c: '#0ea5e9', t: 'Измерения на карте', d: 'Расстояние и площадь по клику прямо на карте.', h: 'Виджет «Измерения» вверху слева рядом с кнопкой «Очистить».', m: 'Выберите режим «Расстояние» или «Площадь» и кликайте по карте: результат виден сразу. «Очистить» в виджете убирает замер.', f: ['Расстояние по ломаной линии', 'Площадь и периметр фигуры', 'Быстрая очистка замера'] },
+        { ic: 'fa-eraser', c: '#64748b', t: 'Очистить карту', d: 'Одной кнопкой убирает с карты всё лишнее.', h: 'Кнопка-ластик вверху слева на карте.', m: 'Удаляет рисунки, замеры, маршрут и результаты анализов, чтобы начать работу с чистой карты.', f: ['Рисунки и замеры', 'Маршрут и точки', 'Результаты анализов'] },
+        { ic: 'fa-file-import', c: '#14b8a6', t: 'Импорт и экспорт контуров', d: 'Загрузка и выгрузка фигур во всех блоках с рисованием.', h: 'Ищите кнопки импорта и экспорта рядом с инструментами рисования.', m: 'Один и тот же механизм работает в рисовании, анализе, NDVI, логистике и других блоках: загрузите контур из файла или сохраните нарисованное.', f: ['KML, GeoJSON и другие форматы', 'Единые кнопки во всех блоках', 'Выгрузка нарисованного в файл'] },
+        { ic: 'fa-map-location-dot', c: '#0f766e', t: 'Мини-карта', d: 'Обзорная карта в углу: показывает, где вы находитесь.', h: 'Кнопка мини-карты в нижнем углу — по умолчанию она свёрнута.', m: 'Помогает не потеряться при сильном приближении: на мини-карте видно положение основного вида.', f: ['Свёрнута по умолчанию', 'Разворачивается одной кнопкой'] },
         { ic: 'fa-database', c: '#0f766e', t: 'Каталог геоданных', d: 'Наборы данных, которые можно подключить к карте.', h: 'Выберите набор и включите слой.', tab: 'catalog', m: 'Каталог готовых наборов геоданных, которые можно подключить к карте, чтобы не искать их по разным сайтам.', f: ['Готовые наборы геоданных', 'Подключение слоя к карте'] },
         { ic: 'fa-bookmark', c: '#e11d48', t: 'Закладки', d: 'Важные места со скриншотом, названием и описанием — возвращайтесь к ним в один клик.', h: 'Откройте вкладку и добавьте закладку на нужной точке карты.', tab: 'bookmarks', m: 'Запомните важные места на карте и возвращайтесь к ним в один клик. Каждая закладка хранит снимок вида, название и ваши заметки.', f: ['Скриншот карты, название и описание', 'Координаты точки', 'Кнопка «На карте» возвращает к месту'] },
         { ic: 'fa-circle-question', c: '#0ea5e9', t: 'О карте', d: 'Описание возможностей карты и инструкции по работе с её блоками.', h: 'Откройте справку, если не знаете, с чего начать.', tab: 'help', m: 'Справка по возможностям карты и инструкции по работе с каждым блоком — подойдёт, если вы только начинаете.', f: ['Описание возможностей карты', 'Инструкции по работе с блоками'] }
@@ -1043,7 +1059,7 @@
             slide.innerHTML = '<div class="gt-hd"><div class="gt-ic"><i class="fas ' + t.ic + '"></i></div><div class="gt-t">' + t.t + '</div></div><div class="gt-d">' + t.d + '</div>' +
                 '<div class="gt-m">' + t.m + '</div><ul class="gt-f">' + t.f.map(function (x) { return '<li><i class="fas fa-check"></i>' + x + '</li>'; }).join('') + '</ul>' +
                 '<div class="gt-h"><i class="fas fa-lightbulb"></i><span>' + t.h + '</span></div>' +
-                '<button type="button" class="gt-go"' + (t.bp ? ' data-bp="' + t.bp + '"' : ' data-gt-tab="' + t.tab + '"') + '><i class="fas fa-play"></i><span>Открыть: ' + t.t + '</span></button>';
+                ((t.bp || t.tab) ? '<button type="button" class="gt-go"' + (t.bp ? ' data-bp="' + t.bp + '"' : ' data-gt-tab="' + t.tab + '"') + '><i class="fas fa-play"></i><span>Открыть: ' + t.t + '</span></button>' : '');
             cnt.textContent = (i + 1) + ' / ' + TIPS.length;
             bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = 'gtbar ' + (t.hot ? DUR_HOT : DUR) + 's linear forwards';
             busy = false;
@@ -1103,7 +1119,7 @@
     st.textContent = '.bp-ul .ul-in{flex:1;min-width:0;height:28px;border:1px solid #cbd5e1;border-radius:8px;padding:0 8px;font:inherit;font-size:12px;box-sizing:border-box;background:#fff}' +
         '.bp-ul .dw-row select{flex:1;min-width:0}.bp-ul .dw-row input[type=color]{width:42px;height:28px;border:1px solid #cbd5e1;border-radius:8px;padding:2px;background:#fff}' +
         '.ul-it{padding:8px 0;border-bottom:1px solid #edf1f5}.ul-it:last-child{border-bottom:0}.ul-top{display:flex;gap:8px;align-items:center}.ul-top input[type=checkbox]{accent-color:#0d9488}' +
-        '.ul-leg{margin-top:6px;font-size:11px;max-height:200px;overflow:auto;color:#334155}.ul-le{display:flex;gap:6px;align-items:center;margin:2px 0}.ul-le img{max-width:100%}.ul-sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none}.ul-tb td{padding:1px 8px 1px 0;vertical-align:top}.ul-grip{cursor:grab;color:#94a3b8;font-size:12px;padding:0 2px}.ul-it.ul-drag{opacity:.4}.ul-it.ul-over{box-shadow:0 -2px 0 #0d9488}.ul-mv{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:11px;padding:0 2px}.ul-mv:hover{color:#0d9488}.ul-top .ul-in{height:26px}.ul-top small{font-size:10px;font-weight:700;color:#94a3b8}.ul-del{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:17px;padding:0 4px}.ul-del:hover{color:#ef4444}' +
+        '.ul-leg{margin-top:6px;font-size:11px;max-height:200px;overflow:auto;color:#334155}.ul-le{display:flex;gap:6px;align-items:center;margin:2px 0}.ul-le img{max-width:100%}.ul-sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none}.ul-tb{width:100%}.ul-tb td{padding:2px 8px 2px 0;vertical-align:top;word-break:break-word}.ul-grip{cursor:grab;color:#94a3b8;font-size:12px;padding:0 2px}.ul-it.ul-drag{opacity:.4}.ul-it.ul-over{box-shadow:0 -2px 0 #0d9488}.ul-mv{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:11px;padding:0 2px}.ul-mv:hover{color:#0d9488}.ul-top .ul-in{height:26px}.ul-top small{font-size:10px;font-weight:700;color:#94a3b8}.ul-del{border:0;background:none;color:#94a3b8;cursor:pointer;font-size:17px;padding:0 4px}.ul-del:hover{color:#ef4444}' +
         '.ul-sub{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:#64748b}.ul-sub input[type=range]{flex:1;accent-color:#0d9488}.ul-empty{font-size:12px;color:#94a3b8}';
     document.head.appendChild(st);
 
@@ -1112,8 +1128,7 @@
             style: function () { return { color: it.color || '#0d9488', weight: 2, fillOpacity: 0.2 * it.opacity, opacity: it.opacity }; },
             pointToLayer: function (f, ll) { return L.circleMarker(ll, { radius: 5, color: it.color || '#0d9488', weight: 1, fillOpacity: 0.7 * it.opacity, opacity: it.opacity }); },
             onEachFeature: function (f, l) {
-                var p = f.properties || {}, k = Object.keys(p).slice(0, 50);
-                if (k.length) l.bindPopup('<div style="max-height:200px;overflow:auto;font-size:12px"><b>' + esc(it.name) + '</b><br>' + k.map(function (x) { return esc(x) + ': ' + esc(p[x]); }).join('<br>') + '</div>');
+                l.on('click', function (e) { if (!ppOn) return; L.DomEvent.stop(e); selectVec(g, l, f, it); });
             }
         });
         g._gcMove = function () { clearTimeout(tm); tm = setTimeout(function () { loader(g); }, 500); };
@@ -1121,17 +1136,33 @@
         g.on('remove', function () { map.off('moveend', g._gcMove); });
         return g;
     }
-    function jfetch(url, g, kml) {
+    var idbp = null, proxyOk = false;
+    function idb() { return idbp || (idbp = new Promise(function (res, rej) { try { var r = indexedDB.open('gc_ul_cache', 1); r.onupgradeneeded = function () { r.result.createObjectStore('c'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; } catch (e) { rej(e); } })); }
+    function idbGet(k) { return idb().then(function (db) { return new Promise(function (res) { var q = db.transaction('c').objectStore('c').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { res(null); }; }); }).catch(function () { return null; }); }
+    function idbSet(k, v) { idb().then(function (db) { db.transaction('c', 'readwrite').objectStore('c').put(v, k); }).catch(function () { }); }
+    function idbClear(id) { idb().then(function (db) { var s = db.transaction('c', 'readwrite').objectStore('c'); if (id) s.delete(IDBKeyRange.bound(id + '|', id + '|\uffff')); else s.clear(); }).catch(function () { }); }
+    function probe() { return fetch('/s3/ping').then(function (r) { proxyOk = r.headers.get('X-GeoClass-Proxy') === '1'; }).catch(function () { }); }   // локальный сервер кэширует плитки на диске
+    function px(l) { var f = l.getTileUrl; l.getTileUrl = function (c) { var x = f.call(this, c); return proxyOk ? '/ucache?u=' + encodeURIComponent(x) : x; }; return l; }
+    function jfetch(url, g, kml, key) {
+        var got = false, shown = false;
+        if (key) idbGet(key).then(function (d) { if (d && !got) { shown = true; g.clearLayers(); g.addData(d); applyOrder(); say('⚡ Слой показан из кэша, обновляю…'); } });
         return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return kml ? r.text() : r.json(); }).then(function (d) {
+            got = true;
             if (kml) d = toGeoJSON.kml(new DOMParser().parseFromString(d, 'text/xml'));
-            g.clearLayers(); g.addData(d); applyOrder(); say('✅ Слой загружен');
-        }).catch(function (e) { say('⚠️ Слой недоступен (' + e.message + '). Возможно, сервер не разрешает CORS', true); });
+            g.clearLayers(); g.addData(d); applyOrder(); if (key) idbSet(key, d); say('✅ Слой загружен');
+        }).catch(function (e) {
+            if (shown) say('⚠️ Нет связи с сервером — показаны сохранённые данные', true);
+            else say('⚠️ Слой недоступен (' + e.message + '). Возможно, сервер не разрешает CORS', true);
+        });
     }
-    function bbox() { var b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','); }
+    function bbox() {                                                                 // область привязана к сетке 0.05°: меньше перезапросов и больше попаданий в кэш
+        var b = map.getBounds(), q = 0.05;
+        return [Math.floor(b.getWest() / q) * q, Math.floor(b.getSouth() / q) * q, Math.ceil(b.getEast() / q) * q, Math.ceil(b.getNorth() / q) * q].map(function (n) { return n.toFixed(4); }).join(',');
+    }
     function build(it) {
         var o = { opacity: it.opacity, zIndex: 460, maxZoom: 22 }, u = it.url.trim(), base = u.split('?')[0];
-        if (it.type === 'xyz') return L.tileLayer(u, o);
-        if (it.type === 'wms') return L.tileLayer.wms(base, Object.assign(o, { layers: it.layers, format: 'image/png', transparent: true, version: '1.3.0' }));
+        if (it.type === 'xyz') return px(L.tileLayer(u, o));
+        if (it.type === 'wms') return px(L.tileLayer.wms(base, Object.assign(o, { layers: it.layers, format: 'image/png', transparent: true, version: '1.3.0' })));
         if (it.type === 'arcgis') {                                                   // динамический экспорт: работает и с некэшированными сервисами, и с адресом слоя …/MapServer/0
             var m = base.match(/^(.*\/MapServer)(?:\/(\d+))?\/*$/i);
             if (!m) throw new Error('адрес должен заканчиваться на /MapServer или /MapServer/N');
@@ -1141,14 +1172,14 @@
                     return m[1] + '/export?bbox=' + [p1.x, p1.y, p2.x, p2.y].join(',') + '&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&f=image' + (m[2] != null ? '&layers=show:' + m[2] : '');
                 }
             });
-            return new AG('', o);
+            return px(new AG('', o));
         }
-        if (it.type === 'geojson') return vecLayer(it, function (g) { jfetch(u, g, /\.kml(\?|$)/i.test(u)); });
+        if (it.type === 'geojson') return vecLayer(it, function (g) { jfetch(u, g, /\.kml(\?|$)/i.test(u), it.id + '|all'); });
         if (it.type === 'wfs') return vecLayer(it, function (g) {
-            jfetch(base + '?service=WFS&version=1.1.0&request=GetFeature&typeName=' + encodeURIComponent(it.layers) + '&outputFormat=application%2Fjson&srsName=EPSG:4326&maxFeatures=3000&bbox=' + bbox() + ',EPSG:4326', g);
+            jfetch(base + '?service=WFS&version=1.1.0&request=GetFeature&typeName=' + encodeURIComponent(it.layers) + '&outputFormat=application%2Fjson&srsName=EPSG:4326&maxFeatures=3000&bbox=' + bbox() + ',EPSG:4326', g, false, it.id + '|' + bbox());
         });
         return vecLayer(it, function (g) {
-            jfetch(base.replace(/\/+$/, '') + '/query?where=1%3D1&outFields=*&f=geojson&inSR=4326&outSR=4326&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&geometry=' + bbox(), g);
+            jfetch(base.replace(/\/+$/, '') + '/query?where=1%3D1&outFields=*&f=geojson&inSR=4326&outSR=4326&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&geometry=' + bbox(), g, false, it.id + '|' + bbox());
         });
     }
     // ---------- служебное: JSONP (ArcGIS отвечает без CORS), легенда, всплывающие окна ----------
@@ -1198,45 +1229,94 @@
         var b = map.getBounds(), sz = map.getSize(), p1 = L.CRS.EPSG3857.project(b.getSouthWest()), p2 = L.CRS.EPSG3857.project(b.getNorthEast());
         if (it.type === 'arcgis') {
             var a = ag(it);
-            if (!a) return Promise.resolve('');
+            if (!a) return Promise.resolve({ html: '', geoms: [] });
             return jsonp(a.root + '/identify?geometry=' + e.latlng.lng + ',' + e.latlng.lat + '&geometryType=esriGeometryPoint&sr=4326&layers=' + (a.layer != null ? 'all:' + a.layer : 'visible') +
-                '&tolerance=5&mapExtent=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',') + '&imageDisplay=' + sz.x + ',' + sz.y + ',96&returnGeometry=false').then(function (d) {
-                return (d.results || []).slice(0, 5).map(function (r) { return '<b>' + esc(r.layerName || it.name) + '</b>' + tbl(r.attributes); }).join('<hr>');
-            }).catch(function () { return ''; });
+                '&tolerance=5&mapExtent=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',') + '&imageDisplay=' + sz.x + ',' + sz.y + ',96&returnGeometry=true&maxAllowableOffset=' + ((b.getEast() - b.getWest()) / sz.x)).then(function (d) {
+                var rs = (d.results || []).slice(0, 5);
+                return { html: rs.map(function (r) { return '<b>' + esc(r.layerName || it.name) + '</b>' + tbl(r.attributes); }).join('<hr>'), geoms: rs.map(function (r) { return r.geometry; }).filter(Boolean) };
+            }).catch(function () { return { html: '', geoms: [] }; });
         }
         var url = it.url.split('?')[0] + '?service=WMS&version=1.3.0&request=GetFeatureInfo&layers=' + encodeURIComponent(it.layers) + '&query_layers=' + encodeURIComponent(it.layers) + '&styles=&crs=EPSG:3857&bbox=' +
             [p1.x, p1.y, p2.x, p2.y].join(',') + '&width=' + sz.x + '&height=' + sz.y + '&i=' + Math.round(e.containerPoint.x) + '&j=' + Math.round(e.containerPoint.y) + '&feature_count=5&info_format=';
         function get(fmt) { return fetch(url + encodeURIComponent(fmt)).then(function (r) { return r.text(); }); }
         return get('application/json').then(function (t) {
             var d = JSON.parse(t);
-            return (d.features || []).map(function (f) { return '<b>' + esc(it.name) + '</b>' + tbl(f.properties); }).join('<hr>');
+            return { html: (d.features || []).map(function (f) { return '<b>' + esc(it.name) + '</b>' + tbl(f.properties); }).join('<hr>'), geoms: [] };
         }).catch(function () {
-            return get('text/plain').then(function (t) { return /^\s*$|no features|nothing/i.test(t) ? '' : '<b>' + esc(it.name) + '</b><pre style="white-space:pre-wrap;margin:2px 0">' + esc(t.slice(0, 800)) + '</pre>'; }).catch(function () { return ''; });
+            return get('text/plain').then(function (t) { return { html: /^\s*$|no features|nothing/i.test(t) ? '' : '<b>' + esc(it.name) + '</b><pre style="white-space:pre-wrap;margin:2px 0">' + esc(t.slice(0, 800)) + '</pre>', geoms: [] }; }).catch(function () { return { html: '', geoms: [] }; });
         });
     }
     var ppOn = localStorage.getItem('gc_user_layers_pp') !== '0';
+    // ---------- выбранный объект: подсветка на карте и сведения в боковой панели ----------
+    var SELKEY = 'gc_user_layers_sel', HL = { color: '#f59e0b', weight: 4, opacity: 1, fillColor: '#fbbf24', fillOpacity: 0.4 }, hl = L.featureGroup().addTo(map), sel = null;
+    var info = document.createElement('div');
+    info.className = 'dw-block ul-info'; info.style.display = 'none';
+    info.innerHTML = '<div class="dw-title">Выбранный объект <button type="button" class="ul-del" id="ulInfoX" title="Снять выделение" style="float:right">×</button></div><div id="ulInfoT" style="font-size:12px"></div>';
+    pane.insertBefore(info, pane.firstChild);
+    function clearSel() {
+        if (sel) { try { sel.g.resetStyle(sel.l); } catch (x) { } sel = null; }
+        hl.clearLayers(); info.style.display = 'none'; try { localStorage.removeItem(SELKEY); } catch (x) { }
+    }
+    function saveSel(title, html, shapes) { try { var j = JSON.stringify({ title: title, html: html, shapes: shapes }); if (j.length < 400000) localStorage.setItem(SELKEY, j); } catch (x) { } }
+    function showInfo(title, html, quiet) {
+        $('ulInfoT').innerHTML = '<div style="font-weight:600;margin-bottom:4px">' + esc(title) + '</div>' + html;
+        info.style.display = '';
+        var tb = document.querySelector('.bp-tab[data-bp-tab="userlayers"]');
+        if (!quiet && tb && !tb.classList.contains('active')) tb.click();                       // раздел «Свои слои» открывается в боковой панели
+        try { info.scrollIntoView({ block: 'nearest' }); } catch (x) { }
+    }
+    function selectVec(g, l, f, it) {
+        clearSel(); sel = { g: g, l: l };
+        l.setStyle(HL); if (l.bringToFront) l.bringToFront();
+        var h = tbl(f.properties) || 'У объекта нет атрибутов';
+        showInfo(it.name, h);
+        try { saveSel(it.name, h, [{ k: 'gj', g: l.toGeoJSON().geometry }]); } catch (x) { }
+    }
+    function drawEsri(g) {
+        var o = Object.assign({ interactive: false }, HL), sw = function (r) { return r.map(function (p) { return [p[1], p[0]]; }); };
+        if (g.rings) hl.addLayer(L.polygon(g.rings.map(sw), o));
+        else if (g.paths) hl.addLayer(L.polyline(g.paths.map(sw), o));
+        else if (g.points) g.points.forEach(function (p) { hl.addLayer(L.circleMarker([p[1], p[0]], Object.assign({ radius: 7 }, o))); });
+        else if (g.x != null) hl.addLayer(L.circleMarker([g.y, g.x], Object.assign({ radius: 7 }, o)));
+    }
+    $('ulInfoX').addEventListener('click', clearSel);
+    function restoreSel() {
+        var d; try { d = JSON.parse(localStorage.getItem(SELKEY) || 'null'); } catch (x) { }
+        if (!d) return;
+        (d.shapes || []).forEach(function (sh) {
+            if (sh.k === 'esri') drawEsri(sh.g);
+            else hl.addLayer(L.geoJSON(sh.g, { style: function () { return HL; }, pointToLayer: function (f, ll) { return L.circleMarker(ll, Object.assign({ radius: 7, interactive: false }, HL)); }, interactive: false }));
+        });
+        showInfo(d.title, d.html, true);
+    }
     map.on('click', function (e) {
         if (!ppOn || (typeof m3d !== 'undefined' && m3d.active) || measureMode || currentTool || activeDrawHandler) return;
         var at = document.querySelector('.bp-tab.active'), k = at && at.getAttribute('data-bp-tab');
         if (/^(draw|measure|profile|logistics|3d|export)$/.test(k || '')) return;
         var qs = items.filter(function (it) { return it.on && (it.type === 'wms' || it.type === 'arcgis') && live[it.id] && map.hasLayer(live[it.id]); });
-        if (!qs.length) return;
+        if (!qs.length) { clearSel(); return; }
         Promise.all(qs.map(function (it) { return queryHtml(it, e); })).then(function (parts) {
-            parts = parts.filter(Boolean);
-            if (parts.length) L.popup({ maxWidth: 340 }).setLatLng(e.latlng).setContent('<div style="max-height:240px;overflow:auto;font-size:12px">' + parts.join('<hr>') + '</div>').openOn(map);
+            clearSel();
+            var ok = parts.filter(function (p) { return p.html; });
+            if (!ok.length) return;
+            ok.forEach(function (p) { p.geoms.forEach(drawEsri); });
+            var h = ok.map(function (p) { return p.html; }).join('<hr>');
+            showInfo('Информация по слою', h);
+            saveSel('Информация по слою', h, [].concat.apply([], ok.map(function (p) { return p.geoms.map(function (g) { return { k: 'esri', g: g }; }); })));
         });
     });
     function applyOrder() {                                                           // верх списка = верх на карте
         var n = items.length;
         items.forEach(function (it, i) { var l = live[it.id]; if (l && l.setZIndex) l.setZIndex(460 + n - i); });
         for (var i = n - 1; i >= 0; i--) { var l = live[items[i].id]; if (l && l.bringToFront && map.hasLayer(l)) l.bringToFront(); }
+        hl.bringToFront();
     }
     function setOn(it, on) {
         it.on = on;
         if (on) {
             if (!live[it.id]) { try { live[it.id] = build(it); } catch (e) { say('⚠️ Ошибка слоя: ' + e.message, true); it.on = false; return; } }
             live[it.id].addTo(map); applyOrder();
-        } else if (live[it.id]) map.removeLayer(live[it.id]);
+        } else if (live[it.id]) { map.removeLayer(live[it.id]); clearSel(); }
     }
     function setOp(it) {
         var l = live[it.id];
@@ -1288,13 +1368,17 @@
         if (up || dn) { var i = items.indexOf(find(up || dn)), j = up ? i - 1 : i + 1; if (j >= 0 && j < items.length) { var t = items[i]; items[i] = items[j]; items[j] = t; applyOrder(); save(); list(); } return; }
         var id = e.target.getAttribute('data-d');
         if (!id) return;
-        if (live[id]) { map.removeLayer(live[id]); delete live[id]; }
-        delete lgOpen[id]; delete lgCache[id]; items = items.filter(function (x) { return x.id !== id; }); save(); list();
+        if (live[id]) { map.removeLayer(live[id]); delete live[id]; clearSel(); }
+        idbClear(id); delete lgOpen[id]; delete lgCache[id]; items = items.filter(function (x) { return x.id !== id; }); save(); list();
     });
     var ppl = document.createElement('label');
-    ppl.className = 'dw-check'; ppl.innerHTML = '<input type="checkbox" id="ulPP"' + (ppOn ? ' checked' : '') + '> Всплывающие окна по клику на слой (WMS, ArcGIS)';
+    ppl.className = 'dw-check'; ppl.innerHTML = '<input type="checkbox" id="ulPP"' + (ppOn ? ' checked' : '') + '> Выделять объект и показывать сведения в панели по клику';
     $('ulList').parentNode.insertBefore(ppl, $('ulList'));
     $('ulPP').addEventListener('change', function () { ppOn = this.checked; try { localStorage.setItem('gc_user_layers_pp', ppOn ? '1' : '0'); } catch (x) { } });
+    var clr = document.createElement('button');
+    clr.type = 'button'; clr.className = 'ul-mv'; clr.style.cssText = 'font-size:11px;margin-top:6px'; clr.textContent = '🗑 Очистить кэш данных слоёв';
+    clr.addEventListener('click', function () { idbClear(); say('✅ Кэш векторных данных очищен'); });
+    $('ulList').parentNode.appendChild(clr);
     var dragId = null;
     $('ulList').addEventListener('mousedown', function (e) { var r = e.target.closest('.ul-it'); if (r) r.draggable = !!e.target.closest('.ul-grip'); });
     $('ulList').addEventListener('dragstart', function (e) { var r = e.target.closest('.ul-it'); if (!r) return; dragId = r.getAttribute('data-id'); r.classList.add('ul-drag'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (x) { } });
@@ -1311,5 +1395,17 @@
     });
     $('ulList').addEventListener('dragend', function () { dragId = null; list(); });
     form(); list();
-    items.forEach(function (it) { if (it.on) setOn(it, true); }); applyOrder();                     // восстановление при запуске
+    probe().then(function () { items.forEach(function (it) { if (it.on) setOn(it, true); }); applyOrder(); restoreSel(); });   // восстановление: слои, порядок и выделение                     // восстановление при запуске
+})();
+
+/* Виджет «Рисование» на карте: открывает боковую панель, вкладку «Инструменты» и блок рисования */
+(function () {
+    var b = document.getElementById('drawMapBtn'); if (!b) return;
+    b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = document.getElementById('mainPanel');
+        if (p && p.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        var t = document.querySelector('#mainPanel .sp-tile[data-bp="draw"]'); if (t) t.click();
+        if (window.gcRailMark) window.gcRailMark('tools');
+    });
 })();

@@ -153,3 +153,56 @@
         });
     }
 })();
+
+/* Сохранение нарисованного в localStorage: участки («Анализ участка», импорт) и фигуры/линии/значки/текст из «Рисования».
+   Состояние пишется после каждого изменения, поэтому «Очистить» и удаление объектов тоже сохраняются (пустое состояние). */
+(function () {
+    'use strict';
+    var KD = 'gc_draw_objects_v1', KS = 'gc_draw_sketch_v1', restoring = true;
+    var arr = function (a) { return Array.isArray(a) ? a.map(arr) : [a.lat, a.lng]; };
+    function putLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* хранилище переполнено или недоступно */ } }
+    function getLS(k) { try { var v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+    function serDrawn() {
+        return drawnItems.getLayers().map(function (l) {
+            var p = l.options || {}, o = { name: l._gcName || null, st: { color: p.color, weight: p.weight, opacity: p.opacity, fillColor: p.fillColor, fillOpacity: p.fillOpacity, dashArray: p.dashArray } };
+            if (l instanceof L.Circle) { o.t = 'c'; o.ll = [l.getLatLng().lat, l.getLatLng().lng]; o.r = l.getRadius(); }
+            else if (l instanceof L.Rectangle) { var b = l.getBounds(); o.t = 'r'; o.b = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]]; }
+            else if (l instanceof L.Polygon) { o.t = 'p'; o.pts = arr(l.getLatLngs()); }
+            else return null;
+            return o;
+        }).filter(Boolean);
+    }
+    function saveDrawn() { if (!restoring) putLS(KD, serDrawn()); }
+    function saveSketch() { if (!restoring && typeof sketchItems !== 'undefined' && typeof skSerializeLayer === 'function') putLS(KS, sketchItems.getLayers().map(skSerializeLayer)); }
+
+    // перехват точек, через которые проходят все изменения (добавление, правка, удаление, «Очистить», отмена/возврат)
+    var oul = window.updateObjectList;
+    window.updateObjectList = function () { var r = oul.apply(this, arguments); saveDrawn(); return r; };
+    if (typeof skCommit === 'function') { var osc = window.skCommit; window.skCommit = function () { var r = osc.apply(this, arguments); saveSketch(); return r; }; }
+    if (typeof skRestore === 'function') { var osr = window.skRestore; window.skRestore = function () { var r = osr.apply(this, arguments); saveSketch(); return r; }; }
+    window.addEventListener('pagehide', function () { saveDrawn(); saveSketch(); });
+
+    // восстановление при запуске
+    try {
+        getLS(KD).forEach(function (o) {
+            var l;
+            if (o.t === 'c') l = L.circle(o.ll, Object.assign({}, o.st, { radius: o.r }));
+            else if (o.t === 'r') l = L.rectangle(o.b, o.st);
+            else if (o.t === 'p') l = L.polygon(o.pts, o.st);
+            if (!l) return;
+            if (o.name) l._gcName = o.name;
+            drawnItems.addLayer(l);
+            if (l instanceof L.Circle) { l.on('move', function () { updateAllLabels(); updateObjectList(); }); l.on('resize', function () { updateAllLabels(); updateObjectList(); }); }
+            if (typeof addLabelToLayer === 'function') addLabelToLayer(l);
+        });
+        if (drawnItems.getLayers().length) { if (typeof updateAllLabels === 'function') updateAllLabels(); updateObjectList(); }
+        var sk = getLS(KS);
+        if (sk.length && typeof skBuildLayer === 'function') {
+            sketchState.restoring = true;
+            sk.forEach(function (o) { var l = skBuildLayer(o); if (l) { sketchState.seq = Math.max(sketchState.seq, o.id); skRegister(l); } });
+            sketchState.restoring = false;
+            skRenderList(); skCommit();
+        }
+    } catch (e) { console.error('Восстановление рисунков:', e); }
+    restoring = false;
+})();
