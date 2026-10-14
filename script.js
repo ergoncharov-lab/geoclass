@@ -272,7 +272,9 @@ const SN_RAMPS = {
     ndvic: { min: 0.2, max: 0.9, stops: [[0, 165, 0, 38], [0.2, 215, 48, 39], [0.35, 244, 109, 67], [0.45, 253, 174, 97], [0.55, 254, 224, 139], [0.65, 217, 239, 139], [0.75, 166, 217, 106], [0.88, 26, 152, 80], [1, 0, 104, 55]] },
     water: { min: -0.6, max: 0.6, stops: [[0, 140, 81, 10], [0.4, 246, 232, 195], [0.5, 199, 234, 229], [0.7, 90, 180, 172], [1, 1, 102, 94]] }
 };
+const snBaseKey = k => typeof k === 'string' ? k.split('~')[0] : k;   // «ndvi~1» → «ndvi» (копии слоя для сравнения дат)
 function snRamp(key) {
+    key = snBaseKey(key);
     const R = SN_RAMPS[key === 'ndvi_c' ? 'ndvic' : (key === 'ndvi' || key === 'nbr') ? 'ndvi' : 'water'];
     if (!R.lut) {
         R.lut = new Uint8Array(256 * 3);
@@ -337,8 +339,8 @@ function snPoolFail(e) {
 // Кэш готовых тайлов: в памяти (мгновенно) и в IndexedDB браузера (сохраняется между сеансами)
 function snSig(key, z, x, y) {
     const st = SENTINEL.state[key];
-    const ctr = key === 'ndvi_c' ? ':' + SENTINEL.contrast.min + '_' + SENTINEL.contrast.max : '';
-    return key + ctr + '|' + st.scenes.map(s => s.id).join(',') + '|' + z + '/' + x + '/' + y;
+    const ctr = snBaseKey(key) === 'ndvi_c' ? ':' + SENTINEL.contrast.min + '_' + SENTINEL.contrast.max : '';
+    return snBaseKey(key) + ctr + '|' + st.scenes.map(s => s.id).join(',') + '|' + z + '/' + x + '/' + y;
 }
 function snMemGet(sig) {
     const m = SENTINEL.tileMem, v = m.get(sig);
@@ -630,7 +632,7 @@ async function snLoadScene(key, item, lon, lat) {
 // шаг 2: дорисовывает в буфер out (256×256 RGBA) пиксели одной загруженной сцены
 function snPaintScene(key, S, out) {
     const names = SN_ASSETS[key], item = S.item, p = item.properties || {}, E = S.E, N = S.N, rd = S.rd;
-    const idx = SN_INDEX[key], fc = key === 'falsecolor';
+    const idx = SN_INDEX[key], fc = snBaseKey(key) === 'falsecolor';
     const ramp = idx ? snRamp(key) : null;
     const meta = snMeta(item, names);
     const span = ramp ? ramp.max - ramp.min : 1;
@@ -754,6 +756,24 @@ window.snTest = async function (key) {
     return rows;
 };
 
+// вырезает тайл по фигуре (полигон / мультиполигон GeoJSON): пиксели вне фигуры становятся прозрачными
+function snMaskTile(map, c, coords, gj) {
+    const m = document.createElement('canvas');
+    m.width = m.height = 256;
+    const mc = m.getContext('2d'), x0 = coords.x * 256, y0 = coords.y * 256;
+    const polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+    mc.beginPath();
+    polys.forEach(poly => poly.forEach(ring => {
+        ring.forEach((pt, i) => { const q = map.project([pt[1], pt[0]], coords.z); if (i) mc.lineTo(q.x - x0, q.y - y0); else mc.moveTo(q.x - x0, q.y - y0); });
+        mc.closePath();
+    }));
+    mc.fill('evenodd');
+    const ctx = c.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(m, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+}
+
 const SentinelLayer = L.GridLayer.extend({
     initialize: function (key, options) {
         this._snKey = key;
@@ -761,9 +781,10 @@ const SentinelLayer = L.GridLayer.extend({
         this.on('load', () => {
             const st = SENTINEL.state[this._snKey];
             if (st && st.date && this._map) updateStatus('🛰️ Снимок Sentinel-2 загружен');
-            if (window.snLoadingSet) window.snLoadingSet('tiles', false);
+            if (window.snLoadingSet) window.snLoadingSet('tiles', false, this);
         });
-        this.on('loading', () => { if (window.snLoadingSet) window.snLoadingSet('tiles', true); });
+        this.on('loading', () => { if (window.snLoadingSet) window.snLoadingSet('tiles', true, this); });
+        this.on('remove', () => { if (window.snLoadingSet) window.snLoadingSet('tiles', false, this); });
         // тайл, ушедший с экрана, больше не рассчитывается
         this.on('tileunload', e => { if (e.tile) e.tile._snDead = true; });
     },
@@ -777,11 +798,13 @@ const SentinelLayer = L.GridLayer.extend({
         }
         const c = document.createElement('canvas');
         c.width = c.height = 256;
-        const key = this._snKey, dead = () => c._snDead;
+        const key = this._snKey, dead = () => c._snDead, clip = this._clip, map = this._map;
+        // слой-вырез (_clip): тайлы вне фигуры не грузятся, внутри — обрезаются по контуру
+        if (clip && !this._tileCoordsToBounds(coords).intersects(clip.bounds)) { setTimeout(() => done(null, c), 0); return c; }
         // готовые тайлы берутся из кэша сразу, минуя очередь загрузки
         snFromCache(key, coords.z, coords.x, coords.y, c)
             .then(hit => hit || snRun(() => snRenderTile(key, coords.z, coords.x, coords.y, c, dead, true), dead))
-            .catch(snWarn).then(() => done(null, c));
+            .catch(snWarn).then(() => { if (clip && map && !c._snDead) { try { snMaskTile(map, c, coords, clip.gj); } catch (e) { snWarn(e); } } done(null, c); });
         return c;
     }
 });
@@ -2347,16 +2370,52 @@ function snShpZip(feats, base) {
     let searching = 0, lastCalc = null, ctrT = 0;
     let sec = null, month = null, groups = [], seq = 0, timer = 0, note = '', entering = false, busy = false, abort = false;
     const stacCache = {};
-    // надпись «Загрузка снимков» на боковой панели: пока идёт поиск снимков или рисуются тайлы (другая подложка не показывается)
+    let pick = false;      // после рисования фигуры нужно выбрать последнюю дату без облачности
+    let clipKey = null;    // слой-вырез, отличный от варианта раздела (обычный снимок после расчёта зон NDVI)
+    const clipLay = {};    // слои-вырезы «Снимков» (снимок только внутри фигуры), по ключу подложки
+    // надпись «Загрузка снимков» — на карте, внутри нарисованной фигуры (снимок вырезан по ней); без фигуры / на весь экстент — по центру карты.
+    // Своя надпись у каждого загружающегося слоя (в сравнении — у каждой половины карты)
     const lo = document.createElement('div');
     lo.className = 'sn-loading'; lo.hidden = true;
+    lo.style.cssText = 'position:absolute;transform:translate(-50%,-50%);z-index:900;pointer-events:none;';
     lo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Загрузка снимков…</span>';
-    const lf = { search: false, tiles: false };
-    window.snLoadingSet = (k, v) => {
-        lf[k] = v; const on = !!(sec && (lf.search || lf.tiles));
-        if (on && ui[sec] && lo.parentNode !== ui[sec].pane) ui[sec].pane.insertBefore(lo, ui[sec].pane.firstChild);   // надпись — на боковой панели раздела
-        lo.hidden = !on;
+    const lf = { search: false }, lt = new Set();   // lt — слои Sentinel, у которых сейчас рисуются тайлы
+    const dropLo = l => { if (l._snLo) { l._snLo.remove(); l._snLo = null; } };
+    function loPut(el, m, clipped) {
+        const cont = m.getContainer();
+        if (el.parentNode !== cont) cont.appendChild(el);
+        let x = null, y = null, small = false;
+        if (clipped && shapeGJ) {
+            const b = turf.bbox(shapeGJ), sz = m.getSize();
+            const p1 = m.latLngToContainerPoint([b[3], b[0]]), p2 = m.latLngToContainerPoint([b[1], b[2]]);
+            const x0 = Math.max(0, Math.min(p1.x, p2.x)), x1 = Math.min(sz.x, Math.max(p1.x, p2.x));
+            const y0 = Math.max(0, Math.min(p1.y, p2.y)), y1 = Math.min(sz.y, Math.max(p1.y, p2.y));
+            if (x1 > x0 && y1 > y0) { x = (x0 + x1) / 2; y = (y0 + y1) / 2; small = (x1 - x0) < 190 || (y1 - y0) < 60; }
+        }
+        el.classList.toggle('sm', small);
+        el.style.left = x != null ? x + 'px' : '50%'; el.style.top = y != null ? y + 'px' : '50%';
+        el.hidden = false;
+    }
+    function placeLo() {
+        lt.forEach(l => { if (l._snLo) l._snLo.hidden = !sec; });
+        if (!sec) { lo.hidden = true; return; }
+        if (lf.search && !lt.size) loPut(lo, map, true); else lo.hidden = true;
+        lt.forEach(l => {
+            if (!l._map) return;
+            if (!l._snLo) l._snLo = lo.cloneNode(true);
+            if (!l._map._snLoHook) { const m = l._map; m._snLoHook = 1; m.on('move zoomend resize', () => { if (sec && lt.size) placeLo(); }); }
+            loPut(l._snLo, l._map, !!l._clip);
+        });
+    }
+    window.snLoadingSet = (k, v, layer) => {
+        if (k === 'tiles') {
+            if (!layer) { if (!v) { lt.forEach(dropLo); lt.clear(); } }
+            else if (!v) { lt.delete(layer); dropLo(layer); }
+            else lt.add(layer);
+        } else lf[k] = v;
+        placeLo();
     };
+    map.on('move zoomend resize', () => { if (sec && (lf.search || lt.size)) placeLo(); });
     const setSearch = d => { searching = Math.max(0, searching + d); window.snLoadingSet('search', searching > 0); };
     const grp = L.featureGroup();
     let shape = null, shapeGJ = null, handler = null, tool = null, editing = false, shapeTimer = 0;
@@ -2396,17 +2455,20 @@ function snShpZip(feats, base) {
             '<button type="button" class="dw-act" data-sn-act="auto"><i class="fas fa-wand-magic-sparkles"></i><span>Авто по области</span></button></div>';
         const zset = s !== 'ndvi' ? '' :
             '<div class="sn-zset"><div class="sn-zt-t">Зоны внесения и аномалии</div>' +
-            '<div class="m3-hint">При расчёте дополнительно строятся зоны для дифференцированного внесения удобрений и точки с аномальными значениями NDVI — они появятся на карте внутри фигуры.</div>' +
+            '<div class="m3-hint">После рисования фигуры автоматически считаются только данные и статистика NDVI. Зоны для дифференцированного внесения и точки аномалий строятся по кнопке ниже.</div>' +
             '<div class="dw-row"><label>Число зон</label><input type="number" data-sn="zN" min="2" max="10" step="1" value="3"></div>' +
             '<div class="dw-row"><label>Разбиение</label><select data-sn="zM"><option value="q" selected>Равные по площади</option><option value="e">Равные интервалы NDVI</option></select></div>' +
             '<div class="dw-row"><label>Норма, кг/га</label><input type="number" data-sn="zBase" min="0" step="1" value="100"></div>' +
             '<div class="dw-row"><label>Нормы по зонам</label><select data-sn="zS"><option value="eq" selected>Одинаковые (правка вручную)</option><option value="low">Больше там, где NDVI ниже (±20%)</option><option value="high">Больше там, где NDVI выше (±20%)</option></select></div>' +
+            '<button type="button" class="dw-act ex-go" data-sn-act="zones"><i class="fas fa-layer-group"></i><span>Разбить на зоны и найти аномалии</span></button>' +
             '<div class="dw-row"><label>Порог аномалий, σ</label><input type="number" data-sn="aS" min="1.5" max="8" step="0.5" value="3"></div></div>';
+        const cmpTpl = '<div class="dw-block sn-cmpblock"><div class="dw-title">Сравнение снимков</div>' +
+            '<div class="m3-hint">Карта разделится на две части (как «Шторка» в режиме дублирования), внизу появится панель: под каждым снимком — его дата, календарь выбора и статистика. Снимок 2 по умолчанию на месяц раньше.</div>' +
+            '<button type="button" class="dw-act ex-go" data-sn-act="cmp"><i class="fas fa-code-compare"></i><span>Сравнить снимки</span></button></div>';
         const calc = !isIdx ? '' :
             '<div class="dw-block sn-calc"><div class="dw-title">Калькулятор · ' + d.name + '</div>' +
-            '<div class="m3-hint">Статистика индекса по пикселям внутри нарисованной фигуры (10 м) на выбранную дату: среднее, разброс, классы и площади.</div>' +
+            '<div class="m3-hint">Статистика индекса по пикселям внутри нарисованной фигуры (10 м) на выбранную дату: среднее, разброс, классы и площади. Считается автоматически после рисования фигуры и при смене даты.</div>' +
             zset +
-            '<button type="button" class="dw-act" data-sn-act="calc"><i class="fas fa-calculator"></i><span>Рассчитать по фигуре</span></button>' +
             '<div data-sn="calcOut"></div><div data-sn="zoneOut"></div><div data-sn="anomOut"></div></div>';
         return '' +
             '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div><div class="sn-leg" data-sn="leg"></div></div>' +
@@ -2433,6 +2495,7 @@ function snShpZip(feats, base) {
             contrast +
             '<div class="dw-block sn-shotblock"><div class="dw-title">Скрин выбранной даты</div><div class="sn-shots" data-sn="shots"></div><div class="sn-foot" data-sn="foot"></div></div>' +
             '<div class="dw-block sn-listblock"><div class="dw-title">Снимки за месяц <span class="badge" data-sn="count">0</span></div><div class="sn-cards" data-sn="cards"></div></div>' +
+            cmpTpl +
             calc +
             '<div class="dw-block sn-dl"><div class="dw-title">Скачать GeoTIFF</div>' + fmt +
             '<div class="m3-hint" data-sn="dlInfo"></div>' +
@@ -2502,14 +2565,39 @@ function snShpZip(feats, base) {
                 gcShape(layer, { name: 'oblast', onChange: (l, fin) => { if (fin) shapeChanged(); else { shapeGJ = layerToGJ(l); renderShapeInfo(); } }, onDelete: () => act('del') });
             }
         }
-        shapeChanged();
+        shapeChanged(true);
     }
-    function shapeChanged() {
+    function shapeChanged(fresh) {
         shapeGJ = shape ? layerToGJ(shape) : null;
         clearCalc();
         renderShapeInfo(); renderDl();
+        if (cmp.on) { cmpInit(true); if (fresh) cmpCenter(); }   // шторка: снимки и статистика — для новой фигуры
+        // после рисования фигуры снимок (в спектре раздела) последней даты без облачности грузится только внутри неё
+        // (если включена подложка Sentinel из виджета карты — она остаётся на весь экстент)
+        if (fresh && sec && shapeGJ && currentLayer !== layerOf(sec)) { pick = true; clipKey = null; month = monthStart(new Date()); hideClip(); }
+        else { if (!shapeGJ) pick = false; syncClip(); scheduleCalc(); }
         clearTimeout(shapeTimer);
-        shapeTimer = setTimeout(() => { if (sec) load(0); }, 500);   // список дат — для новой области
+        shapeTimer = setTimeout(() => { if (sec) load(pick ? 3 : 0); }, 500);   // список дат — для новой области
+    }
+    function hideClip() { Object.keys(clipLay).forEach(k => { if (map.hasLayer(clipLay[k])) map.removeLayer(clipLay[k]); }); }
+    // слой снимка (в спектре текущего раздела), вырезанный по фигуре, поверх текущей подложки
+    function syncClip(force) {
+        if (!shapeGJ || cmp.on) { hideClip(); return; }   // при включённой шторке сравнения обычный вырез скрыт
+        if (!sec) return;   // раздел закрыт — то, что уже нарисовано, остаётся
+        const lay = clipKey || layerOf(sec), st = SENTINEL.state[lay];
+        const want = !!(st && st.date && currentLayer !== lay);
+        Object.keys(LAYER_SEC).forEach(k => {
+            let l = clipLay[k];
+            if (!(want && k === lay)) { if (l && map.hasLayer(l)) map.removeLayer(l); return; }
+            if (!l) {
+                l = clipLay[k] = new SentinelLayer(k, { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, zIndex: 5 });
+                SENTINEL.live.push(l);
+            }
+            if (!force && l._clip && l._clip.gj === shapeGJ && map.hasLayer(l)) return;
+            const b = turf.bbox(shapeGJ);
+            l._clip = { gj: shapeGJ, bounds: L.latLngBounds([b[1], b[0]], [b[3], b[2]]) };
+            if (map.hasLayer(l)) l.redraw(); else l.addTo(map);
+        });
     }
     gcShapeIO.sn = {
         name: 'oblast',
@@ -2619,7 +2707,12 @@ function snShpZip(feats, base) {
         }
         if (my !== seq) return;
         const lay = layerOf(sec), st = SENTINEL.state[lay], max = +q(sec, 'cc').value;
-        if (st && st.date && groups.some(g => g.day === st.date)) {
+        if (pick) {   // последняя дата с облачностью не выше порога; если в месяце такой нет — шагаем на месяц назад
+            const g = groups.find(x => x.cc != null && x.cc <= max);
+            if (g) { select(g.day); return; }
+            if (retries > 0) { month = new Date(Date.UTC(y, m - 1, 1)); load(retries - 1); return; }
+            pick = false; note = 'За последние месяцы нет снимков с облачностью ≤ ' + max + '% — выберите дату вручную';
+        } else if (st && st.date && groups.some(g => g.day === st.date)) {
             select(st.date, true);   // та же дата в новой области — обновим список сцен
         } else if (!(st && st.date)) {
             // дата не выбирается автоматически: слой включится только после выбора даты пользователем
@@ -2639,10 +2732,15 @@ function snShpZip(feats, base) {
         if (!same) clearCalc();
         st.date = day; st.scenes = g.scenes; st.scene = g.scenes[0]; st.cc = g.cc;
         SENTINEL.lastDay = day;
-        if (currentLayer !== lay) { entering = true; try { switchLayer(lay); } finally { entering = false; } }
-        if (!same) sentinelApply(lay);
+        pick = false; clipKey = null;
+        // снимок рисуется только внутри фигуры поверх текущей подложки; включённая из виджета подложка Sentinel — на весь экстент
+        const clipped = currentLayer !== lay;
+        if (!clipped && currentLayer !== lay) { entering = true; try { switchLayer(lay); } finally { entering = false; } }
+        if (clipped) { if (!same) snPrewarm(lay); syncClip(!same); } else if (!same) sentinelApply(lay);
         renderAll();
-        if (!quiet) updateStatus(`🛰️ Sentinel-2: ${fmtDay(day)}, облачность ${ccText(g.cc)}`);
+        scheduleCalc();
+        if (clipped && !shapeGJ) updateStatus(`📅 Выбрана дата ${fmtDay(day)} — нарисуйте фигуру: снимок загрузится только внутри неё`);
+        else if (!quiet) updateStatus(`🛰️ Sentinel-2: ${fmtDay(day)}, облачность ${ccText(g.cc)}` + (clipped ? ' · загрузка внутри фигуры…' : ''));
     }
 
     // ---------- отрисовка ----------
@@ -2731,7 +2829,7 @@ function snShpZip(feats, base) {
     // «скрины» сцен выбранной даты (превью с облаками) — чтобы оценить снимок до загрузки на карту
     function renderShots() {
         const el = q(sec, 'shots'), lay = layerOf(sec), st = SENTINEL.state[lay];
-        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">📅 Выберите дату съёмки в календаре или в списке ниже — слой появится на карте</div>'; return; }
+        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">📅 Выберите дату съёмки в календаре или в списке ниже — ' + 'снимок загрузится внутри нарисованной фигуры' + '</div>'; return; }
         const g = groups.find(x => x.day === st.date);
         const list = (g ? g.scenes : st.scenes || []).slice(0, 6);
         el.className = 'sn-shots' + (list.length === 1 ? ' one' : '');
@@ -2788,7 +2886,7 @@ function snShpZip(feats, base) {
         a.value = c.min; b.value = c.max;
         q(sec, 'cMinV').textContent = fmtN(c.min); q(sec, 'cMaxV').textContent = fmtN(c.max);
     }
-    function ctrApply() { sentinelApply('ndvi_c'); }
+    function ctrApply() { sentinelApply('ndvi_c'); if (cmp.on && cmp.base === 'ndvi_c') [1, 2].forEach(i => cmp.L[i] && cmp.L[i].redraw()); }
     function renderHead() {
         if (!sec) return;
         const lay = layerOf(sec);
@@ -2851,7 +2949,19 @@ function snShpZip(feats, base) {
             '<div class="m3-hint">Без данных (вне снимка): ' + ((res.total - res.valid) / res.total * 100).toFixed(1).replace('.', ',') + ' % площади фигуры. Облака и тени не исключены — для надёжных цифр берите дату с малой облачностью.</div>' +
             '<button type="button" class="dw-act" data-sn-act="csv"><i class="fas fa-file-csv"></i><span>Скачать результаты (CSV)</span></button></div>';
     }
-    async function calc() {
+    // автоматический расчёт статистики: после рисования фигуры / выбора даты / смены варианта (разделы-индексы)
+    let calcT = 0, calcAgain = false;
+    function scheduleCalc() {
+        clearTimeout(calcT);
+        calcT = setTimeout(() => {
+            if (!sec || pick || SEC[sec].kind !== 'idx' || !shapeGJ) return;
+            const lay = layerOf(sec), st = SENTINEL.state[lay];
+            if (!st || !st.date || (lastCalc && lastCalc.lay === lay && lastCalc.date === st.date)) return;
+            if (busy) { calcAgain = true; return; }
+            calc(true);
+        }, 400);
+    }
+    async function calc(auto) {
         if (busy) return;
         const lay = layerOf(sec), base = lay === 'ndvi_c' ? 'ndvi' : lay, st = SENTINEL.state[lay];
         if (!shapeGJ) { updateStatus('⚠️ Сначала нарисуйте фигуру в разделе', true); return; }
@@ -2864,9 +2974,9 @@ function snShpZip(feats, base) {
             await snDelay(30);
             const res = snCalcStats(r, base);
             const name = SEC[sec].vars.find(v => v.l === base) ? SEC[sec].vars.find(v => v.l === base).t : SEC[sec].name;
-            lastCalc = { res: res, date: st.date, name: name };
+            lastCalc = { res: res, date: st.date, name: name, lay: lay };
             renderCalc(res, st.date, name);
-            if (base === 'ndvi') { lastRaster = { r: r, date: st.date }; showProg(1, 'Зоны и аномалии…'); await buildZones(); buildAnoms(); if (zoneRes) showTrueColor(); }
+            if (base === 'ndvi') { lastRaster = { r: r, date: st.date }; }   // зоны и аномалии — только по кнопке
             updateStatus(`✅ ${name}: среднее ${f3(res.mean)}, площадь ${fHa(res.ha)} га`);
         } catch (e) {
             console.warn('Sentinel: калькулятор', e);
@@ -2875,6 +2985,7 @@ function snShpZip(feats, base) {
             busy = false;
             if (sec) q(sec, 'prog').hidden = true;
             renderDl();
+            if (calcAgain) { calcAgain = false; scheduleCalc(); }
         }
     }
     function csv() {
@@ -2969,9 +3080,8 @@ function snShpZip(feats, base) {
         const st = SENTINEL.state.sentinel2 || (SENTINEL.state.sentinel2 = {});
         const same = st.date === src.date && st.scenes && st.scenes.map(s => s.id).join() === src.scenes.map(s => s.id).join();
         st.date = src.date; st.scenes = src.scenes; st.scene = src.scene; st.cc = src.cc;
-        entering = true;
-        try { if (currentLayer !== 'sentinel2') switchLayer('sentinel2'); } finally { entering = false; }
-        if (!same) sentinelApply('sentinel2');
+        if (currentLayer === 'sentinel2') { if (!same) sentinelApply('sentinel2'); }
+        else { clipKey = 'sentinel2'; if (!same) snPrewarm('sentinel2'); syncClip(!same); }   // обычный снимок — тоже только внутри фигуры
         raiseOverlays();
         updateStatus('🛰️ Подложка переключена на обычный снимок Sentinel-2 — зоны и точки хорошо видны. Выбор даты вернёт NDVI');
     }
@@ -3034,9 +3144,9 @@ function snShpZip(feats, base) {
     function onChange(e) {
         const n = e.target.getAttribute && e.target.getAttribute('data-sn');
         if (!n) return;
-        if (n === 'zN' || n === 'zM') { if (lastRaster) buildZones(); }
+        if (n === 'zN' || n === 'zM') { if (zoneRes && lastRaster) buildZones(); }   // пересчёт — только если зоны уже построены
         else if (n === 'zS' || n === 'zBase') { if (zoneRes) { applyRates(); renderZones(); } }
-        else if (n === 'aS') { if (lastRaster) buildAnoms(); }
+        else if (n === 'aS') { if (lastRaster && (zoneRes || anomRes)) buildAnoms(); }   // пересчёт — только после первого построения
         else if (n === 'zvis') { zoneVis = e.target.checked; if (zoneVis) zoneGrp.addTo(map); else map.removeLayer(zoneGrp); }
         else if (n === 'avis') { anomVis = e.target.checked; if (anomVis) anomGrp.addTo(map); else map.removeLayer(anomGrp); }
     }
@@ -3104,6 +3214,7 @@ function snShpZip(feats, base) {
             busy = false;
             if (sec) q(sec, 'prog').hidden = true;
             renderDl();
+            if (calcAgain) { calcAgain = false; scheduleCalc(); }
         }
     }
 
@@ -3131,6 +3242,8 @@ function snShpZip(feats, base) {
         else if (a === 'auto') autoRange();
         else if (a === 'csv') csv();
         else if (a === 'zgj' || a === 'zkml' || a === 'zshp') zoneDownload(a);
+        else if (a === 'zones') makeZones();
+        else if (a === 'cmp') cmpToggle(!cmp.on);
         else if (a === 'agj') anomDownload();
         else if (a === 'dl') exportTiff();
         else if (a === 'stop') abort = true;
@@ -3151,29 +3264,315 @@ function snShpZip(feats, base) {
     }
     function enter(s) {
         if (!ui[s]) return;
+        cmpOff();
         sec = s;
         if (!map.hasLayer(grp)) grp.addTo(map);
         if (zoneVis && !map.hasLayer(zoneGrp)) zoneGrp.addTo(map);
         if (anomVis && !map.hasLayer(anomGrp)) anomGrp.addTo(map);
         const lay = layerOf(s);
-        entering = true;
-        try { const s0 = SENTINEL.state[lay]; if (s0 && s0.date && currentLayer !== lay) switchLayer(lay); } finally { entering = false; }   // слой включается только после выбора даты
+        clipKey = null;   // подложка не меняется — снимок рисуется внутри фигуры
         const st = SENTINEL.state[lay], ref = (st && st.date) || SENTINEL.lastDay;
         month = monthStart(ref ? dayDate(ref) : new Date());
+        if (shapeGJ && currentLayer !== lay && !(st && st.date)) { pick = true; month = monthStart(new Date()); }
+        else syncClip();
         renderAll();
-        if (!(st && st.date)) updateStatus('📅 Выберите дату снимка — слой появится на карте после выбора даты');
-        load(ref ? 0 : 2);
+        if (!(st && st.date)) updateStatus(pick ? '🛰️ Ищем последнюю дату без облачности для фигуры…' : '📅 Нарисуйте фигуру — снимок загрузится только внутри неё (дату можно выбрать в календаре)');
+        load(pick ? 3 : ref ? 0 : 2);
+        scheduleCalc();
     }
     function leave() {
         if (!sec && !map.hasLayer(grp)) return;
+        cmpOff();
         cancelTool(); setEditing(false);
-        sec = null; searching = 0;
+        sec = null; searching = 0; pick = false;
         window.snLoadingSet('search', false); window.snLoadingSet('tiles', false);
         if (map.hasLayer(grp)) map.removeLayer(grp);
         if (map.hasLayer(zoneGrp)) map.removeLayer(zoneGrp);
         if (map.hasLayer(anomGrp)) map.removeLayer(anomGrp);
     }
 
+
+    // ---------- зоны внесения — по кнопке ----------
+    async function makeZones() {
+        if (busy) { updateStatus('⚠️ Дождитесь окончания расчёта', true); return; }
+        if (!lastRaster || !shapeGJ) { updateStatus('⚠️ Сначала нарисуйте фигуру и дождитесь расчёта статистики NDVI', true); return; }
+        updateStatus('🧩 Делим контур на зоны…');
+        await buildZones();
+        buildAnoms();
+        if (zoneRes) showTrueColor();
+    }
+
+    // ---------- сравнение двух снимков: шторка на карте + сравнительная статистика ----------
+    const cmp = { on: false, sec: null, base: '', k: {}, L: {}, ol: null, tok: 0, stT: { 1: 0, 2: 0 }, bar: null, res: {}, sel: {}, mon: {}, grp: {}, calT: { 1: 0, 2: 0 } };
+    const isoDay = d => d.toISOString().slice(0, 10);
+    const shiftDay = (s, n) => isoDay(new Date(dayDate(s).getTime() + n * 864e5));
+    const cmpQ = n => cmp.bar ? cmp.bar.querySelector('[data-sn="' + n + '"]') : null;
+    function cmpKey(i) {   // копия слоя со своей датой (общие таблицы каналов / шкал)
+        const b = cmp.base, k = b + '~' + i;
+        SN_ASSETS[k] = SN_ASSETS[b]; if (SN_INDEX[b]) SN_INDEX[k] = SN_INDEX[b];
+        return k;
+    }
+    // сцены в окне ±span суток от даты (сгруппированные по дням)
+    async function stacAround(bbox, day, span) {
+        const from = shiftDay(day, -span), to = isoDay(new Date(Math.min(Date.now(), dayDate(day).getTime() + span * 864e5)));
+        const ck = bbox.join(',') + '|r' + from + '|' + to, hit = stacCache[ck];
+        if (hit && Date.now() - hit.t < 600000) return hit.groups;
+        await snProxyAvailable();
+        const r = await fetch(SENTINEL.stacUrl + '/search', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox: bbox, limit: 200, datetime: from + 'T00:00:00Z/' + to + 'T23:59:59Z',
+                fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover', 'assets.thumbnail'] } })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const g = groupScenes((await r.json()).features || []);
+        stacCache[ck] = { t: Date.now(), groups: g };
+        return g;
+    }
+    // ближайшая к дате съёмка (предпочтительно с облачностью не выше порога)
+    async function cmpNearest(day) {
+        const bbox = searchBBox();
+        if (!bbox) throw new Error('приблизьте карту (масштаб 7 и крупнее) или нарисуйте область');
+        const max = +q(cmp.sec, 'cc').value, dist = g => Math.abs(dayDate(g.day) - dayDate(day));
+        for (const span of [15, 45]) {
+            const gs = await stacAround(bbox, day, span);
+            if (!gs.length) continue;
+            const ok = gs.filter(g => g.cc != null && g.cc <= max), list = ok.length ? ok : gs;
+            list.sort((a, b) => dist(a) - dist(b) || (a.cc == null ? 101 : a.cc) - (b.cc == null ? 101 : b.cc));
+            return { g: list[0], clear: !!ok.length };
+        }
+        throw new Error('рядом с этой датой снимков не найдено');
+    }
+    function cmpClipOf(l) {
+        if (shapeGJ) { const b = turf.bbox(shapeGJ); l._clip = { gj: shapeGJ, bounds: L.latLngBounds([b[1], b[0]], [b[3], b[2]]) }; } else l._clip = null;
+    }
+    // слой половины карты: снимок (внутри фигуры — поверх обычной подложки) + контур фигуры справа
+    function cmpMakeLayer(i) {
+        const l = cmp.L[i] = new SentinelLayer(cmp.k[i], { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, zIndex: 5 });
+        cmpClipOf(l);
+        const parts = [];
+        if (shapeGJ) { const ub = (LAYER_SEC[currentLayer] || !layerFactories[currentLayer]) ? 'esri_sat' : currentLayer; if (layerFactories[ub]) parts.push(layerFactories[ub]()); }
+        parts.push(l);
+        if (i === 2 && shapeGJ) { cmp.ol = L.geoJSON(shapeGJ, { style: { color: '#ec4899', weight: 2, fill: false }, interactive: false }); parts.push(cmp.ol); }
+        return L.layerGroup(parts);
+    }
+    const cmpLabel = i => { const s = SENTINEL.state[cmp.k[i]]; return 'Снимок ' + i + (s && s.date ? ' · ' + fmtDay(s.date) + ' · ☁ ' + ccText(s.cc) : ' · подбор даты…'); };
+    function cmpBtnUi(s, on) {
+        if (!s || !ui[s]) return;
+        const b = ui[s].pane.querySelector('[data-sn-act="cmp"]');
+        if (b) { b.classList.toggle('on', on); b.querySelector('span').textContent = on ? 'Закрыть сравнение' : 'Сравнить снимки'; }
+    }
+    // нижняя панель: под каждой половиной карты три ряда — ключевые показатели, график, календарь выбора снимка
+    function cmpBarMake() {
+        const bar = cmp.bar = document.createElement('div');
+        bar.className = 'sn-cmp-bar';
+        const nav = (i, n) => '<button type="button" class="cb-nav" data-cb-nav="' + n + '" data-cb-i="' + i + '"><i class="fas fa-chevron-' + (n < 0 ? 'left' : 'right') + '"></i></button>';
+        const col = i => '<div class="cb-col"><div class="cb-hd"><b>Снимок ' + i + '</b><button type="button" class="cb-date" data-cb-open="' + i + '" title="Выбрать дату снимка"><i class="fas fa-calendar-days"></i><span data-sn="cmpD' + i + '">выбрать дату</span><i class="fas fa-chevron-down"></i></button><span data-sn="cmpI' + i + '"></span><button type="button" class="cb-ref" data-cb-ref="' + i + '" title="Обновить данные снимка: пересчитать статистику и календарь"><i class="fas fa-rotate"></i></button></div><div class="cb-out" data-sn="cmpOut' + i + '"></div>' +
+            '<div class="cb-pop" data-cb-pop="' + i + '" hidden><div class="cb-pophd">' + nav(i, -1) + '<span class="cb-mon" data-sn="cmpM' + i + '"></span>' + nav(i, 1) + '</div>' +
+            '<div class="cb-wd"><span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span></div><div class="cb-days" data-sn="cmpC' + i + '"></div></div></div>';
+        bar.innerHTML = '<div class="sn-cmp-top"><b>Сравнение снимков</b><span data-sn="cmpSum"></span><button type="button" data-cmp-close title="Закрыть сравнение"><i class="fas fa-xmark"></i></button></div>' +
+            '<div class="sn-cmp-cols">' + col(1) + col(2) + '</div>';
+        mapStageEl.parentNode.insertBefore(bar, mapStageEl.nextSibling);
+        bar.addEventListener('click', e => {
+            if (e.target.closest('[data-cmp-close]')) { cmpOff(); return; }
+            const rf = e.target.closest('[data-cb-ref]');
+            if (rf) { cmpRefresh(+rf.dataset.cbRef, rf); return; }
+            const op = e.target.closest('[data-cb-open]');
+            if (op) { const p = bar.querySelector('[data-cb-pop="' + op.dataset.cbOpen + '"]'), was = !p.hidden; cmpPopsClose(); p.hidden = was; return; }
+            const nv = e.target.closest('[data-cb-nav]');
+            if (nv) { if (!nv.disabled) cmpMonth(+nv.dataset.cbI, +nv.dataset.cbNav); return; }
+            const d = e.target.closest('[data-cb-day]');
+            if (d) { cmpPopsClose(); cmpSetDate(+d.dataset.cbI, d.dataset.cbDay); }
+        });
+        if (!cmp.docB) { cmp.docB = true; document.addEventListener('click', e => { if (cmp.bar && !e.target.closest('.cb-pop, .cb-date')) cmpPopsClose(); }); }
+    }
+    // обновление данных одной стороны: заново запрашиваем каталог, перерисовываем снимок и пересчитываем статистику
+    async function cmpRefresh(i, btn) {
+        if (!cmp.on || btn.classList.contains('spin')) return;
+        btn.classList.add('spin');
+        try {
+            Object.keys(stacCache).forEach(k => { delete stacCache[k]; });
+            cmp.res[i] = null;
+            if (cmp.L[i]) { cmpClipOf(cmp.L[i]); cmp.L[i].redraw(); }
+            cmpCalLoad(i);
+            await cmpStatOne(i); cmpSum();
+        } finally { btn.classList.remove('spin'); }
+    }
+    function cmpPopsClose() { if (cmp.bar) cmp.bar.querySelectorAll('.cb-pop').forEach(p => { p.hidden = true; }); }
+    // календарь снимка i: месяц со сценами каталога (цветная отметка — облачность)
+    function cmpMonth(i, delta) {
+        const m = cmp.mon[i], n = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + delta, 1)), t = new Date();
+        if (n.getUTCFullYear() * 12 + n.getUTCMonth() > t.getUTCFullYear() * 12 + t.getUTCMonth()) return;
+        cmp.mon[i] = n; cmpCalLoad(i);
+    }
+    async function cmpCalLoad(i) {
+        const el = cmpQ('cmpC' + i), lab = cmpQ('cmpM' + i);
+        if (!el || !lab || !cmp.mon[i]) return;
+        const mo = cmp.mon[i], y = mo.getUTCFullYear(), m = mo.getUTCMonth(), t = new Date(), tok = ++cmp.calT[i];
+        lab.textContent = mo.toLocaleDateString('ru-RU', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+        const nx = cmp.bar.querySelector('[data-cb-nav="1"][data-cb-i="' + i + '"]');
+        if (nx) nx.disabled = y * 12 + m >= t.getUTCFullYear() * 12 + t.getUTCMonth();
+        el.classList.add('busy');
+        let gs = [];
+        try { gs = await stacAround(searchBBox(), y + '-' + p2(m + 1) + '-16', 16); } catch (e) { gs = []; }
+        if (tok !== cmp.calT[i] || !cmp.on) return;
+        cmp.grp[i] = gs; cmpCalDraw(i);
+    }
+    function cmpCalDraw(i) {
+        const el = cmpQ('cmpC' + i), mo = cmp.mon[i];
+        if (!el || !mo) return;
+        el.classList.remove('busy');
+        const y = mo.getUTCFullYear(), m = mo.getUTCMonth(), dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        const max = +q(cmp.sec, 'cc').value, sel = cmp.sel[i], today = isoDay(new Date()), by = {};
+        (cmp.grp[i] || []).forEach(g => { by[g.day] = g; });
+        let h = '';
+        for (let k = (mo.getUTCDay() + 6) % 7; k > 0; k--) h += '<span class="cb-d empty"></span>';
+        for (let d = 1; d <= dim; d++) {
+            const day = y + '-' + p2(m + 1) + '-' + p2(d), g = by[day];
+            if (!g || day > today) { h += '<span class="cb-d off">' + d + '</span>'; continue; }
+            const over = g.cc != null && g.cc > max;
+            h += '<button type="button" class="cb-d has' + (day === sel ? ' sel' : '') + (over ? ' dim' : '') + '" data-cb-i="' + i + '" data-cb-day="' + day + '" style="--c:' + ccColor(g.cc) + '" title="' + fmtDay(day) + ' · облачность ' + ccText(g.cc) + ' · снимков: ' + g.scenes.length + '">' + d + '<i></i></button>';
+        }
+        el.innerHTML = h;
+    }
+    function cmpBarDrop() { if (cmp.bar) { cmp.bar.remove(); cmp.bar = null; } }
+    // фигура — в центр (половины карты делят экран пополам, панель снизу уменьшает карту)
+    function cmpCenter() {
+        if (!shapeGJ) return;
+        const go = () => {
+            if (!cmp.on || !shapeGJ) return;
+            map.invalidateSize({ animate: false });
+            const b = turf.bbox(shapeGJ);
+            map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [28, 28], animate: false, maxZoom: 18 });
+        };
+        setTimeout(go, 350); setTimeout(go, 900);
+    }
+    // выбор ближайшей доступной съёмки для снимка i и перерисовка его половины
+    async function cmpPick(i, day, tok) {
+        const info = cmpQ('cmpI' + i);
+        if (!info) return false;
+        info.textContent = 'Ищем снимок…';
+        let r;
+        try { r = await cmpNearest(day); } catch (e) {
+            if (tok !== cmp.tok) return false;
+            info.textContent = 'Не найден: ' + e.message; return false;
+        }
+        if (tok !== cmp.tok) return false;
+        const g = r.g, k = cmp.k[i];
+        SENTINEL.state[k] = { date: g.day, scenes: g.scenes, scene: g.scenes[0], cc: g.cc };
+        snPrewarm(k);
+        cmp.sel[i] = g.day; cmp.mon[i] = new Date(Date.UTC(+g.day.slice(0, 4), +g.day.slice(5, 7) - 1, 1)); cmpCalLoad(i);
+        { const bd = cmpQ('cmpD' + i); if (bd) bd.textContent = fmtDay(g.day); }
+        info.textContent = 'облачность ' + ccText(g.cc) + ' · сцен: ' + g.scenes.length + (r.clear ? '' : ' · выше порога облачности');
+        if (cmp.L[i]) { cmpClipOf(cmp.L[i]); cmp.L[i].redraw(); }
+        updateSwipeLabels();
+        return true;
+    }
+    async function cmpInit(keep) {
+        if (!cmp.on || !cmp.sec || !cmp.bar) return;
+        const tok = ++cmp.tok, st = SENTINEL.state[cmp.base];
+        hideClip();
+        cmp.stT[1]++; cmp.stT[2]++; cmp.res = {};
+        if (cmp.ol) { cmp.ol.clearLayers(); if (shapeGJ) cmp.ol.addData(shapeGJ); }
+        ['cmpOut1', 'cmpOut2', 'cmpSum'].forEach(n => { const o = cmpQ(n); if (o) o.innerHTML = ''; });
+        const t1 = keep && cmp.sel[1] ? cmp.sel[1] : ((st && st.date) || isoDay(new Date()));
+        if (!(await cmpPick(1, t1, tok)) || tok !== cmp.tok) return;
+        const t2 = keep && cmp.sel[2] ? cmp.sel[2] : shiftDay(SENTINEL.state[cmp.k[1]].date, -30);   // по умолчанию — на месяц раньше
+        await cmpPick(2, t2, tok);
+        if (tok !== cmp.tok) return;
+        await cmpStatOne(1); await cmpStatOne(2); cmpSum();
+    }
+    function cmpToggle(on) {
+        if (!on) { cmpOff(); return; }
+        if (!sec || cmp.on) return;
+        if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('⚠️ Сравнение недоступно в режиме 3D — выключите 3D', true); return; }
+        if (swipeState.active) deactivateSwipe();
+        cmp.on = true; cmp.sec = sec; cmp.base = layerOf(sec); cmp.L = {}; cmp.ol = null; cmp.res = {}; cmp.sel = {}; cmp.mon = {}; cmp.grp = {};
+        [1, 2].forEach(i => { cmp.k[i] = cmpKey(i); });
+        swipeState.custom = { left: () => cmpMakeLayer(1), right: () => cmpMakeLayer(2), layerKey: cmp.base, label: side => cmpLabel(side === 'left' ? 1 : 2) };
+        mapStageEl.classList.add('swipe-cmp');
+        cmpBarMake();
+        activateSwipe(); setSwipeMode('dual');   // карта делится на две части — как «Шторка» с включённым дублированием
+        cmpBtnUi(sec, true);
+        cmpCenter();
+        updateStatus('↔️ Сравнение снимков: подбираем две даты…');
+        cmpInit(false);
+    }
+    async function cmpSetDate(i, v) {
+        if (!cmp.on || !v) return;
+        const tok = ++cmp.tok;
+        cmp.stT[i]++; cmp.res[i] = null;
+        const o = cmpQ('cmpOut' + i); if (o) o.innerHTML = '';
+        if (!(await cmpPick(i, v, tok)) || tok !== cmp.tok) return;
+        await cmpStatOne(i); cmpSum();
+    }
+    function cmpOff() {
+        if (!cmp.on && !swipeState.custom) return;
+        const s = cmp.sec, was = cmp.on, had = !!swipeState.custom;
+        cmp.on = false; cmp.tok++; cmp.stT[1]++; cmp.stT[2]++; cmp.L = {}; cmp.ol = null; cmp.res = {};
+        swipeState.custom = null;
+        mapStageEl.classList.remove('swipe-cmp');
+        cmpBarDrop();
+        if (had && swipeState.active) deactivateSwipe();   // основная карта возвращает прежнюю подложку
+        cmpBtnUi(s, false);
+        if (was && sec) syncClip(true);
+    }
+    // шторку закрыли кнопкой виджета «Шторка» — сравнение завершается
+    window.snCmpEnded = function () {
+        if (!cmp.on) return;
+        const s = cmp.sec; cmp.on = false; cmp.tok++; cmp.stT[1]++; cmp.stT[2]++; cmp.L = {}; cmp.ol = null; cmp.res = {};
+        mapStageEl.classList.remove('swipe-cmp');
+        cmpBarDrop();
+        cmpBtnUi(s, false);
+        if (sec) syncClip(true);
+    };
+    // статистика одного снимка — под ним
+    function cmpBlock(res) {
+        const st = (l, v) => '<div class="cb-k"><span>' + l + '</span><b>' + v + '</b></div>', hmax = Math.max.apply(null, res.hist);
+        const cls = res.classes.slice(0, 6).map(c => '<div class="cb-c"><i style="background:' + c.color + '"></i><span>' + esc(c.name) + '</span><b>' + (c.n / res.valid * 100).toFixed(1).replace('.', ',') + ' %</b></div>').join('');
+        return '<div class="cb-kpi">' + st('Среднее', f3(res.mean)) + st('Медиана', f3(res.median)) + st('Минимум', f3(res.min)) + st('Максимум', f3(res.max)) +
+            st('Ст. откл.', f3(res.std)) + st('Неоднор.', res.cv.toFixed(1).replace('.', ',') + ' %') + st('P10–P90', f3(res.p10) + '–' + f3(res.p90)) + st('Площадь', fHa(res.ha) + ' га') + '</div>' +
+            '<div class="cb-chart"><div class="cb-hw"><div class="sn-hist">' + res.hist.map(h => '<i style="height:' + Math.max(2, Math.round(h / hmax * 100)) + '%"></i>').join('') + '</div>' +
+            '<div class="cb-ax"><span>' + fmtN(res.rmin) + '</span><span>гистограмма</span><span>' + fmtN(res.rmax) + '</span></div></div>' + (cls ? '<div class="cb-cls">' + cls + '</div>' : '') + '</div>';
+    }
+    async function cmpStatOne(i) {
+        if (!cmp.on) return;
+        const tok = ++cmp.stT[i], out = cmpQ('cmpOut' + i), s = SENTINEL.state[cmp.k[i]];
+        if (!out) return;
+        cmp.res[i] = null;
+        if (!s || !s.date) { out.innerHTML = ''; return; }
+        if (SEC[cmp.sec].kind !== 'idx') {
+            out.innerHTML = '<div class="cb-kpi cb-kpi-2"><div class="cb-k"><span>Облачность</span><b>' + ccText(s.cc) + '</b></div><div class="cb-k"><span>Сцен за день</span><b>' + s.scenes.length + '</b></div></div>';
+            return;
+        }
+        if (!shapeGJ) { out.innerHTML = '<div class="m3-hint">Нарисуйте фигуру в начале раздела — по ней считается статистика индекса.</div>'; return; }
+        if (estimate().px > SN_EXPORT_MAX_PX) { out.innerHTML = '<div class="m3-hint">Область слишком большая для расчёта — уменьшите фигуру.</div>'; return; }
+        const base = cmp.base === 'ndvi_c' ? 'ndvi' : cmp.base;
+        out.innerHTML = '<div class="m3-hint">Считаем статистику…</div>';
+        const el = out.firstElementChild;
+        try {
+            const r = await snExportGeoTiff({ key: base, st: s, gj: shapeGJ, raw: true,
+                onProgress: (f, t) => { if (tok === cmp.stT[i] && el) el.textContent = (t || 'Расчёт') + ' ' + Math.round(clamp(f, 0, 1) * 100) + '%'; },
+                isAborted: () => tok !== cmp.stT[i] || !cmp.on });
+            if (tok !== cmp.stT[i]) return;
+            await snDelay(20);
+            const res = snCalcStats(r, base);
+            if (tok !== cmp.stT[i]) return;
+            cmp.res[i] = res;
+            out.innerHTML = cmpBlock(res);
+        } catch (e) {
+            if (tok !== cmp.stT[i]) return;
+            out.innerHTML = '<div class="m3-hint">Не удалось рассчитать: ' + esc(e.message) + '</div>';
+        }
+    }
+    // сводка изменения между снимками (вверху панели)
+    function cmpSum() {
+        const o = cmpQ('cmpSum'), a = cmp.res[1], b = cmp.res[2], s1 = SENTINEL.state[cmp.k[1]], s2 = SENTINEL.state[cmp.k[2]];
+        if (!o) return;
+        if (!a || !b || !s1 || !s2) { o.textContent = ''; return; }
+        const d = a.mean - b.mean, rel = Math.abs(b.mean) > 1e-6 ? d / Math.abs(b.mean) * 100 : 0;
+        const days = Math.abs(Math.round((dayDate(s1.date) - dayDate(s2.date)) / 864e5));
+        o.innerHTML = 'Среднее ' + (d >= 0 ? 'выросло' : 'снизилось') + ' на <b>' + f3(Math.abs(d)) + '</b> (' + Math.abs(rel).toFixed(1).replace('.', ',') + ' %) — снимок 1 относительно снимка 2, интервал ' + days + ' дн.';
+    }
     Object.keys(SEC).forEach(s => {
         const pane = document.querySelector('[data-bp-pane="' + s + '"]');
         if (!pane) return;
@@ -5496,22 +5895,38 @@ const searchResults = document.getElementById('searchResults');
 const searchBtn = document.getElementById('searchBtn');
 let searchTimeout = null;
 
+// точка отсчёта для поиска: местоположение, определённое сайтом (GPS/IP); если его нет — центр карты
+function searchRef() {
+    if (window.userLoc) return { lat: window.userLoc.lat, lng: window.userLoc.lng };
+    const c = map.getCenter();
+    return { lat: c.lat, lng: c.lng };
+}
+function searchDistKm(la1, lo1, la2, lo2) {
+    const r = Math.PI / 180, x = (lo2 - lo1) * r * Math.cos((la1 + la2) / 2 * r), y = (la2 - la1) * r;
+    return Math.sqrt(x * x + y * y) * 6371;
+}
+function searchDistText(km) { return km < 1 ? Math.round(km * 1000 / 10) * 10 + ' м' : km < 20 ? km.toFixed(1).replace('.', ',') + ' км' : Math.round(km) + ' км'; }
+let searchSeq = 0;
+
 async function searchAddress(query) {
     if (query.length < 2) return [];
-    try {
-        const resp = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=8&addressdetails=1&accept-language=ru&countrycodes=ru`
-        );
-        const data = await resp.json();
-        return data.map(item => ({
-            name: item.display_name.split(',')[0] || item.display_name,
-            address: item.display_name,
-            lat: parseFloat(item.lat),
-            lon: parseFloat(item.lon)
-        }));
-    } catch {
-        return [];
-    }
+    const ref = searchRef(), q = encodeURIComponent(query);
+    const base = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&addressdetails=1&accept-language=ru&countrycodes=ru&dedupe=1`;
+    const vb = (dLat, dLng) => `&viewbox=${(ref.lng - dLng).toFixed(4)},${(ref.lat + dLat).toFixed(4)},${(ref.lng + dLng).toFixed(4)},${(ref.lat - dLat).toFixed(4)}`;
+    const get = url => fetch(url).then(r => r.json()).then(d => Array.isArray(d) ? d : []).catch(() => []);
+    // два запроса: строго рядом с пользователем (~130 км) и по стране с приоритетом области вокруг него
+    const [near, wide] = await Promise.all([get(base + vb(1.2, 2) + '&bounded=1&limit=10'), get(base + vb(6, 10) + '&limit=15')]);
+    const seen = new Set(), out = [];
+    near.concat(wide).forEach(item => {
+        const key = item.place_id || item.osm_type + item.osm_id;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const lat = parseFloat(item.lat), lon = parseFloat(item.lon), d = searchDistKm(ref.lat, ref.lng, lat, lon);
+        out.push({ name: item.display_name.split(',')[0] || item.display_name, address: item.display_name, lat: lat, lon: lon, dist: d, near: near.indexOf(item) >= 0 });
+    });
+    // сначала найденное поблизости (по возрастанию расстояния), затем остальное тоже от ближнего к дальнему
+    const byD = (x, y) => x.dist - y.dist, n1 = out.filter(x => x.near).sort(byD), n2 = out.filter(x => !x.near).sort(byD);
+    return n1.concat(n2).slice(0, 10);
 }
 
 let lastSearchItems = [];
@@ -5526,7 +5941,7 @@ function showSearchResults(items) {
     searchResults.innerHTML = items.map((r, i) => `
         <div class="search-result-item" onclick="selectSearchResult(${i})">
             <div class="result-name">${escapeHtml(r.name)}</div>
-            <div class="result-address">${escapeHtml(r.address)}</div>
+            <div class="result-address">${r.dist != null ? '<b>' + searchDistText(r.dist) + '</b> · ' : ''}${escapeHtml(r.address)}</div>
         </div>
     `).join('');
     searchResults.classList.add('active');
@@ -5560,16 +5975,16 @@ searchInput.addEventListener('input', function() {
         return;
     }
     searchTimeout = setTimeout(async () => {
-        const items = await searchAddress(query);
-        showSearchResults(items);
+        const my = ++searchSeq, items = await searchAddress(query);
+        if (my === searchSeq) showSearchResults(items);
     }, 300);
 });
 
 searchBtn.addEventListener('click', async function() {
     const query = searchInput.value.trim();
     if (query.length < 2) return;
-    const items = await searchAddress(query);
-    showSearchResults(items);
+    const my = ++searchSeq, items = await searchAddress(query);
+    if (my === searchSeq) showSearchResults(items);
 });
 
 searchInput.addEventListener('keydown', function(e) {
@@ -6269,7 +6684,7 @@ function updateSwipeLabels() {
     ['left', 'right'].forEach(side => {
         const els = swipeState.sideEls[side], s = swipeState.sides[side];
         if (!els || !s) return;
-        els.label.textContent = LAYER_NAMES[s.layerKey] || s.layerKey || '';
+        els.label.textContent = swipeState.custom ? swipeState.custom.label(side) : (LAYER_NAMES[s.layerKey] || s.layerKey || '');
     });
 }
 
@@ -6299,12 +6714,13 @@ function rememberSwipeLayer(side, key) {
 
 function setSwipeLayer(side, key) {
     const s = swipeState.sides[side];
-    if (!s || !layerFactories[key]) return;
+    const cust = swipeState.custom, fac = cust ? cust[side] : layerFactories[key];   // custom — сравнение снимков Sentinel
+    if (!s || !fac) return;
     if (s.layer) s.map.removeLayer(s.layer);
-    s.layer = layerFactories[key]().addTo(s.map);
-    s.layerKey = key;
+    s.layer = fac().addTo(s.map);
+    s.layerKey = cust ? cust.layerKey : key;
     rememberSwipeLayer(side, key);
-    if (side === 'left') {
+    if (side === 'left' && !swipeState.custom) {
         // подложка левой половины становится «текущей» подложкой карты
         currentLayer = key;
         currentTileLayer = baseLayers[key];
@@ -6559,6 +6975,7 @@ function activateSwipe() {
 
 function deactivateSwipe() {
     if (!swipeState.active) return;
+    if (swipeState.custom) { swipeState.custom = null; if (window.snCmpEnded) window.snCmpEnded(); }
     swipeState.active = false;
     cancelAnimationFrame(swipeState.raf);
     closeSwipeLists();

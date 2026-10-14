@@ -332,18 +332,18 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         }));
     }
     // ---------- статусы загрузки блоков (в шапке паспорта) ----------
-    var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', addr: 'Адрес' };
+    var STL = { cls: 'Классификация', sat: 'Снимки', dyn: 'Динамика NDVI', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', addr: 'Адрес' };
     function stInit() {
         var top = document.querySelector('#passportPane .pp-top'); if (!top) return;
         var h = document.getElementById('ppSt');
         if (!h) { h = document.createElement('div'); h.id = 'ppSt'; h.className = 'pp-st'; top.insertBefore(h, document.getElementById('ppRefresh')); }
         h.innerHTML = Object.keys(STL).map(function (k) { return '<span class="pp-stc load" data-st="' + k + '"></span>'; }).join('');
-        Object.keys(STL).forEach(function (k) { stSet(k, k === 'cls' || k === 'sat' ? 'off' : 'load'); });
+        Object.keys(STL).forEach(function (k) { stSet(k, k === 'cls' || k === 'sat' || k === 'dyn' ? 'off' : 'load'); });
     }
     function stSet(k, st, msg) {
         var el = document.querySelector('#ppSt [data-st="' + k + '"]'); if (!el) return;
-        el.className = 'pp-stc ' + st; el.style.cursor = st === 'err' ? 'pointer' : ''; el.title = (st === 'err' ? (msg || 'Ошибка') + ' — нажмите, чтобы обновить только этот раздел' : '') || msg || (st === 'off' ? (k === 'sat' ? 'Дата снимка не выбрана: выберите её на вкладке «Анализ» и запустите анализ' : 'Блок пока не работает: данные будут подключены позже') : st === 'load' ? 'Загружается…' : st === 'ok' ? 'Данные получены' : 'Ошибка');
-        el.innerHTML = '<i class="fas fa-' + (st === 'load' ? 'spinner fa-spin' : st === 'off' ? 'circle-pause' : st === 'ok' ? 'circle-check' : 'triangle-exclamation') + '"></i>' + STL[k] + (st === 'off' ? (k === 'sat' ? ' · нет даты' : ' · не подключено') : st === 'load' ? ' · загрузка' : st === 'err' ? ' · ошибка <i class="fas fa-rotate-right"></i>' : '');
+        el.className = 'pp-stc ' + st; el.style.cursor = st === 'err' ? 'pointer' : ''; el.title = (st === 'err' ? (msg || 'Ошибка') + ' — нажмите, чтобы обновить только этот раздел' : '') || msg || (st === 'off' ? (k === 'dyn' ? 'Динамика NDVI не рассчитана: задайте период в блоке «Динамика NDVI за сезон» и нажмите «Рассчитать динамику»' : k === 'sat' ? 'Дата снимка не выбрана: выберите её на вкладке «Анализ» и запустите анализ' : 'Блок пока не работает: данные будут подключены позже') : st === 'load' ? 'Загружается…' : st === 'ok' ? 'Данные получены' : 'Ошибка');
+        el.innerHTML = '<i class="fas fa-' + (st === 'load' ? 'spinner fa-spin' : st === 'off' ? 'circle-pause' : st === 'ok' ? 'circle-check' : 'triangle-exclamation') + '"></i>' + STL[k] + (st === 'off' ? (k === 'sat' ? ' · нет даты' : k === 'dyn' ? ' · не запущено' : ' · не подключено') : st === 'load' ? ' · загрузка' : st === 'err' ? ' · ошибка <i class="fas fa-rotate-right"></i>' : '');
     }
     function address(c, tok) {
         fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }).then(function (j) {
@@ -557,6 +557,167 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                     map: mapBox(s.k, calHtml(s.k) + '<button type="button" class="pp-btn" data-sat-tif="' + s.k + '" disabled title="' + (sat ? 'GeoTIFF станет доступен после расчёта' : 'Нет даты снимка') + '"><i class="fas fa-download"></i> GeoTIFF</button>')
                 });
             }).join(''));
+    }
+
+    // ---------- 3б. динамика NDVI за сезон: от посева до уборки урожая ----------
+    var DYN_CROPS = [['Яровая пшеница', '04-25', '08-15', 0], ['Озимая пшеница', '09-10', '07-25', 1], ['Яровой ячмень', '04-25', '08-05', 0], ['Горох', '04-25', '08-01', 0], ['Кукуруза на зерно', '05-05', '10-10', 0], ['Подсолнечник', '05-01', '09-25', 0], ['Соя', '05-15', '09-25', 0], ['Яровой рапс', '05-01', '08-25', 0], ['Сахарная свёкла', '04-25', '10-05', 0], ['Картофель', '05-10', '09-15', 0]];
+    var DYN_MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'], dynRunId = 0, dynCache = {};
+    function dN(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000); }
+    function dAdd(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
+    function dShiftY(d, n) { return (+d.slice(0, 4) + n) + (d.slice(5) === '02-29' ? '-02-28' : d.slice(4)); }
+    function dynPeriod(i, y) { var c = DYN_CROPS[i]; return [(c[3] ? y - 1 : y) + '-' + c[1], y + '-' + c[2]]; }
+    function dynSec() {
+        var y = new Date().getFullYear(), p = dynPeriod(0, y);
+        var opt = DYN_CROPS.map(function (c, i) { return '<option value="' + i + '">' + c[0] + '</option>'; }).join('') + '<option value="' + DYN_CROPS.length + '">Свои даты</option>';
+        var ctl = '<div class="pp-dyn-ctl"><label>Культура<select data-dyn-crop>' + opt + '</select></label>' +
+            '<label>Год уборки<input type="number" data-dyn-year min="2017" max="' + y + '" value="' + y + '" style="width:84px"></label>' +
+            '<label>Посев<input type="date" data-dyn-from value="' + p[0] + '"></label><label>Уборка<input type="date" data-dyn-to value="' + p[1] + '"></label>' +
+            '<label>Шаг, дней<select data-dyn-step><option>7</option><option selected>10</option><option>14</option></select></label>' +
+            '<label>Облачность не выше, %<input type="number" data-dyn-cc value="25" min="0" max="100" style="width:84px"></label>' +
+            '<label class="chk"><input type="checkbox" data-dyn-prev checked> сравнить с прошлым годом</label>' +
+            '<button type="button" class="pp-btn" data-dyn-run style="background:#0f172a;color:#fff"><i class="fas fa-chart-line"></i> Рассчитать динамику</button></div>';
+        return sec('3б', 'chart-line', 'Динамика NDVI за сезон', 'Сравнение снимков от посева до уборки урожая и анализ вегетации', CC.sat,
+            blk({
+                t: 'Динамика NDVI: посев — уборка', i: 'seedling', c: '#16a34a',
+                info: ['Ход среднего NDVI по участку на безоблачных снимках Sentinel-2 за период от посева до уборки, с коридором P10–P90 (разброс внутри поля) и, по желанию, кривой прошлого года по тем же датам.',
+                    'Показывает, как развивалась культура: когда начался рост, каким был максимум, были ли просадки (засуха, заморозки, болезни), как рано началось усыхание — и сравнивает сезон с предыдущим.',
+                    'В каждое окно (шаг 7–14 дней) выбирается снимок с наименьшей облачностью не выше заданного порога; по пикселям внутри контура считаются среднее, σ, P10 и P90 NDVI. Старт вегетации — пересечение NDVI 0,3, спад — пересечение 0,5 после пика; накопленный NDVI — сумма значений по суткам (линейная интерполяция между снимками, разрывы более 45 дней не интерполируются; для озимых зимний покой исключён). Облака и тени не маскируются — единичные просадки проверяйте по снимку.'],
+                body: ctl + '<div id="ppDynOut" class="pp-note">Задайте культуру и сроки и нажмите «Рассчитать динамику». Расчёт идёт по снимкам по очереди и может занять несколько минут; повторно открытые снимки берутся из кэша.</div>'
+            }));
+    }
+    function dynFill() {
+        var r = body.querySelector('.pp-dyn-ctl'); if (!r) return;
+        var ci = +r.querySelector('[data-dyn-crop]').value; if (ci >= DYN_CROPS.length) return;
+        var p = dynPeriod(ci, +r.querySelector('[data-dyn-year]').value || new Date().getFullYear());
+        r.querySelector('[data-dyn-from]').value = p[0]; r.querySelector('[data-dyn-to]').value = p[1];
+    }
+    body.addEventListener('change', function (e) { if (e.target.closest('[data-dyn-crop],[data-dyn-year]')) dynFill(); });
+    body.addEventListener('click', function (e) { if (e.target.closest('[data-dyn-run]')) dynRun(seq); });
+    async function dynStac(bb, from, to) {
+        var url = (typeof SENTINEL !== 'undefined' && SENTINEL.stacUrl) || 'https://earth-search.aws.element84.com/v1';
+        var r = await fetch(url + '/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox: bb, limit: 1000, datetime: from + 'T00:00:00Z/' + to + 'T23:59:59Z', fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover'] } }) });
+        if (!r.ok) throw new Error('каталог снимков: HTTP ' + r.status);
+        var by = {}; ((await r.json()).features || []).forEach(function (f) { var p = f.properties || {}; if (!p.datetime) return; var d = p.datetime.slice(0, 10), cc = p['eo:cloud_cover'] != null ? Math.round(p['eo:cloud_cover']) : null; (by[d] = by[d] || { day: d, scenes: [] }).scenes.push({ id: f.id, cc: cc }); });
+        return Object.keys(by).sort().map(function (d) { var g = by[d], v = g.scenes.filter(function (z) { return z.cc != null; }); g.cc = v.length ? Math.round(v.reduce(function (q, z) { return q + z.cc; }, 0) / v.length) : null; return g; });
+    }
+    async function dynOne(g, bbk, abort) {
+        var key = bbk + '|' + g.day; if (dynCache[key]) return dynCache[key];
+        var r = await snExportGeoTiff({ key: 'ndvi', st: { date: g.day, scenes: g.scenes.map(function (x) { return { id: x.id }; }) }, gj: D.gj, raw: true, onProgress: function () { }, isAborted: abort });
+        if (!r || abort()) return null;
+        var v = r.values, m = r.mask, a = [], i, s = 0, tot = 0, lo = 0;
+        for (i = 0; i < v.length; i++) if (m[i]) { tot++; if (v[i] === v[i]) { a.push(v[i]); s += v[i]; if (v[i] < 0.4) lo++; } }
+        if (a.length < 5) return null;
+        a = Float32Array.from(a).sort();
+        var n = a.length, mean = s / n, sq = 0, pc = function (q) { return a[Math.min(n - 1, Math.floor(q * (n - 1)))]; };
+        for (i = 0; i < n; i++) sq += (a[i] - mean) * (a[i] - mean);
+        return (dynCache[key] = { day: g.day, cc: g.cc, mean: mean, std: Math.sqrt(sq / n), p10: pc(0.1), p90: pc(0.9), med: pc(0.5), low: lo / n * 100, cov: n / tot * 100 });
+    }
+    async function dynSeason(from, to, ci, step, cmax, out, label, abort) {
+        var t = turf.bbox(D.gj), bb = [t[0] - 0.0005, t[1] - 0.0005, t[2] + 0.0005, t[3] + 0.0005].map(function (v) { return +v.toFixed(3); }), bbk = bb.join(',');
+        out.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + esc(label) + ': поиск снимков…';
+        var groups = await dynStac(bb, from, to); if (abort()) return null;
+        var ty = +to.slice(0, 4), win = DYN_CROPS[ci] && DYN_CROPS[ci][3], sa = (ty - 1) + '-11-20', sb = ty + '-03-25', W = [], a, b, cand, best;
+        for (a = from; a <= to; a = dAdd(a, step)) {
+            b = dAdd(a, step - 1); if (b > to) b = to;
+            if (win && b > sa && a < sb) continue;
+            cand = groups.filter(function (g) { return g.day >= a && g.day <= b && g.cc != null; });
+            best = cand.sort(function (x, y) { return x.cc - y.cc; })[0];
+            W.push({ a: a, b: b, g: best && best.cc <= cmax ? best : null, any: cand.length });
+        }
+        var pts = [], k, st, fail = 0, use = W.filter(function (w) { return w.g; });
+        for (k = 0; k < use.length; k++) {
+            if (abort()) return null;
+            out.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + esc(label) + ': снимок ' + (k + 1) + ' из ' + use.length + ' (' + satDay(use[k].g.day) + ')…';
+            try { st = await dynOne(use[k].g, bbk, abort); } catch (e) { if (abort()) return null; st = null; }
+            if (st) pts.push(st); else fail++;
+        }
+        return { from: from, to: to, label: label, pts: pts.sort(function (x, y) { return x.day < y.day ? -1 : 1; }), wins: W.length, cloudy: W.filter(function (w) { return !w.g; }).length, fail: fail, step: step, cmax: cmax };
+    }
+    async function dynRun(tok) {
+        var r = body.querySelector('.pp-dyn-ctl'), out = document.getElementById('ppDynOut'); if (!r || !out || !D.gj) return;
+        var from = r.querySelector('[data-dyn-from]').value, to = r.querySelector('[data-dyn-to]').value, step = +r.querySelector('[data-dyn-step]').value, cmax = +r.querySelector('[data-dyn-cc]').value;
+        var ci = +r.querySelector('[data-dyn-crop]').value, withPrev = r.querySelector('[data-dyn-prev]').checked, today = new Date().toISOString().slice(0, 10), btn = r.querySelector('[data-dyn-run]');
+        if (to > today) to = today;
+        if (!from || !to || dN(from, to) < 30) { out.className = 'pp-note'; out.innerHTML = 'Период слишком короткий: между посевом и уборкой (или сегодняшним днём) должно быть не меньше 30 дней.'; return; }
+        var my = ++dynRunId, abort = function () { return tok !== seq || my !== dynRunId; };
+        out.className = 'pp-note'; btn.disabled = true; stSet('dyn', 'load');
+        try {
+            var cur = await dynSeason(from, to, ci, step, cmax, out, 'Сезон ' + to.slice(0, 4), abort); if (abort() || !cur) return;
+            var prev = withPrev ? await dynSeason(dShiftY(from, -1), dShiftY(to, -1), ci, step, cmax, out, 'Прошлый год', abort) : null; if (abort()) return;
+            D.dyn = { cur: cur, prev: prev };
+            if (cur.pts.length < 2) { out.innerHTML = 'Недостаточно пригодных снимков (найдено ' + cur.pts.length + ' из ' + cur.wins + ' окон; облачность выше ' + cmax + ' % в ' + cur.cloudy + '). Увеличьте порог облачности или шаг и повторите расчёт.'; stSet('dyn', 'err', 'мало пригодных снимков'); return; }
+            out.className = ''; out.innerHTML = dynShow(cur, prev); stSet('dyn', 'ok');
+        } catch (e) { if (!abort()) { out.className = 'pp-note'; out.innerHTML = 'Не удалось рассчитать динамику: ' + esc(e && e.message || e); stSet('dyn', 'err', e && e.message || 'ошибка'); } }
+        finally { btn.disabled = false; }
+    }
+    function dynInterp(P, d, gap) {
+        var i, n; if (P.length === 1) return P[0].day === d ? P[0].mean : null;
+        for (i = 0; i < P.length - 1; i++) if (d >= P[i].day && d <= P[i + 1].day) { n = dN(P[i].day, P[i + 1].day); if (n > gap) return null; return n ? P[i].mean + (P[i + 1].mean - P[i].mean) * dN(P[i].day, d) / n : P[i].mean; }
+        return null;
+    }
+    function dynMet(P) {
+        if (P.length < 2) return null;
+        var pk = P.reduce(function (m, p) { return p.mean > m.mean ? p : m; }, P[0]), ip = P.indexOf(pk), o = { pk: pk, drops: [], grow: null, start: null, end: null }, i, d, v, n = 0, integ = 0, ab = 0, tot = dN(P[0].day, P[P.length - 1].day), dd, s;
+        for (i = 0; i <= tot; i++) { v = dynInterp(P, dAdd(P[0].day, i), 45); if (v == null) continue; n++; integ += Math.max(0, v); if (v >= 0.5) ab++; }
+        o.integ = integ; o.n = n; o.above = ab; o.avg = n ? integ / n : null; o.earlyHigh = P[0].mean >= 0.3;
+        for (i = 1; i < P.length; i++) {
+            dd = dN(P[i - 1].day, P[i].day); d = P[i].mean - P[i - 1].mean;
+            if (!o.start && P[i - 1].mean < 0.3 && P[i].mean >= 0.3) o.start = dAdd(P[i - 1].day, Math.round(dd * (0.3 - P[i - 1].mean) / d));
+            if (i > ip && !o.end && P[i - 1].mean >= 0.5 && P[i].mean < 0.5) o.end = dAdd(P[i - 1].day, Math.round(dd * (P[i - 1].mean - 0.5) / (P[i - 1].mean - P[i].mean)));
+            if (dd > 0 && dd <= 30 && d > 0) { s = d / dd * 10; if (!o.grow || s > o.grow.v) o.grow = { v: s, day: P[i].day }; }
+            if (i <= ip && dd <= 21 && d < -0.12) o.drops.push({ a: P[i - 1], b: P[i], d: d });
+        }
+        return o;
+    }
+    function dynChart(cur, prev) {
+        var W = 660, H = 250, L = 40, R = 12, T = 14, B = 34, from = cur.from, tot = Math.max(1, dN(cur.from, cur.to)), pw = W - L - R, ph = H - T - B;
+        var X = function (day) { return L + Math.max(0, Math.min(1, dN(from, day) / tot)) * pw; }, Y = function (v) { return T + ph * (1 - (Math.max(-0.1, Math.min(1, v)) + 0.1) / 1.1); };
+        var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="pp-svg" role="img" aria-label="Динамика NDVI">', i, d, y, sh;
+        [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(function (v) { s += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text x="' + (L - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + nf(v, 1) + '</text>'; });
+        s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(0.5).toFixed(1) + '" y2="' + Y(0.5).toFixed(1) + '" stroke="#f59e0b" stroke-dasharray="4 4" opacity=".6"/>';
+        d = from.slice(0, 7) + '-01'; for (i = 0; i < 40; i++) { d = dAdd(d, 32).slice(0, 7) + '-01'; if (d > cur.to) break; if (d > from) s += '<line x1="' + X(d).toFixed(1) + '" x2="' + X(d).toFixed(1) + '" y1="' + (T + ph) + '" y2="' + (T + ph + 4) + '" stroke="#94a3b8"/><text x="' + X(d).toFixed(1) + '" y="' + (H - 16) + '" text-anchor="middle">' + DYN_MON[+d.slice(5, 7) - 1] + (d.slice(5, 7) === '01' ? ' ' + d.slice(2, 4) : '') + '</text>'; }
+        var groups = function (P) { var g = [], c = []; P.forEach(function (p, k) { if (k && dN(P[k - 1].day, p.day) > 45) { g.push(c); c = []; } c.push(p); }); if (c.length) g.push(c); return g; };
+        var line = function (P, sft, col, dash, r) {
+            var o = '';
+            groups(P).forEach(function (g) { if (g.length > 1) o += '<polyline fill="none" stroke="' + col + '" stroke-width="' + (dash ? 2 : 2.8) + '"' + (dash ? ' stroke-dasharray="6 4"' : '') + ' stroke-linejoin="round" points="' + g.map(function (p) { return X(sft ? dShiftY(p.day, sft) : p.day).toFixed(1) + ',' + Y(p.mean).toFixed(1); }).join(' ') + '"/>'; });
+            P.forEach(function (p) { o += '<circle cx="' + X(sft ? dShiftY(p.day, sft) : p.day).toFixed(1) + '" cy="' + Y(p.mean).toFixed(1) + '" r="' + r + '" fill="' + col + '" stroke="#fff" stroke-width="1"><title>' + satDay(p.day) + ' · NDVI ' + nf(p.mean, 2) + ' · P10–P90: ' + nf(p.p10, 2) + '–' + nf(p.p90, 2) + ' · облачность ' + (p.cc == null ? '—' : p.cc + ' %') + '</title></circle>'; });
+            return o;
+        };
+        groups(cur.pts).forEach(function (g) { if (g.length > 1) s += '<polygon fill="#16a34a" opacity=".14" points="' + g.map(function (p) { return X(p.day).toFixed(1) + ',' + Y(p.p90).toFixed(1); }).concat(g.slice().reverse().map(function (p) { return X(p.day).toFixed(1) + ',' + Y(p.p10).toFixed(1); })).join(' ') + '"/>'; });
+        if (prev && prev.pts.length) s += line(prev.pts, 1, '#94a3b8', true, 3);
+        s += line(cur.pts, 0, '#16a34a', false, 4);
+        var pk = cur.pts.reduce(function (m, p) { return p.mean > m.mean ? p : m; }, cur.pts[0]);
+        s += '<circle cx="' + X(pk.day).toFixed(1) + '" cy="' + Y(pk.mean).toFixed(1) + '" r="7" fill="none" stroke="#f97316" stroke-width="2"/><text x="' + X(pk.day).toFixed(1) + '" y="' + (Y(pk.mean) - 11).toFixed(1) + '" text-anchor="middle" style="font-weight:700;fill:#c2410c">пик ' + nf(pk.mean, 2) + '</text>';
+        s += '<text x="' + L + '" y="' + (H - 3) + '" text-anchor="start">посев ' + from.split('-').reverse().join('.') + '</text><text x="' + (W - R) + '" y="' + (H - 3) + '" text-anchor="end">уборка ' + cur.to.split('-').reverse().join('.') + '</text></svg>';
+        return s + '<div class="pp-dyn-lg"><span style="--c:#16a34a">Сезон ' + cur.to.slice(0, 4) + '</span>' + (prev && prev.pts.length ? '<span style="--c:#94a3b8" class="ds">Прошлый год (те же даты)</span>' : '') + '<span style="--c:#bbf7d0">Коридор P10–P90 внутри участка</span><span style="--c:#f59e0b" class="ds">Порог 0,5</span></div>';
+    }
+    function dynShow(cur, prev) {
+        var M = dynMet(cur.pts), MP = prev && prev.pts.length > 1 ? dynMet(prev.pts) : null, pk = M.pk, f2 = function (v) { return nf(v, 2); }, dm = function (d) { return satDay(d).replace(/ г\.?$/, ''); };
+        var ds = function (v) { return (v > 0 ? '+' : v < 0 ? '−' : '') + nf(Math.abs(v), 2); }, cv = pk.mean > 0 ? pk.std / pk.mean * 100 : 0, o = [], last = cur.pts[cur.pts.length - 1], mg = 0, k;
+        for (k = 1; k < cur.pts.length; k++) mg = Math.max(mg, dN(cur.pts[k - 1].day, cur.pts[k].day));
+        var tiles_ = tiles([['Пик NDVI', f2(pk.mean), dm(pk.day), '#16a34a'], ['Старт вегетации', M.start ? dm(M.start) : (M.earlyHigh ? 'до 1-го снимка' : '—'), 'NDVI ≥ 0,3', '#0ea5e9'], ['Спад ниже 0,5', M.end ? dm(M.end) : '—', 'после пика', '#f97316'],
+            ['Средний NDVI', f2(M.avg), 'за период', '#14b8a6'], ['Накопленный NDVI', nf(M.integ, 0), 'NDVI·сут', '#7c3aed'], ['Дней с NDVI ≥ 0,5', nf(M.above, 0), 'из ' + nf(M.n, 0), '#84cc16'], ['Макс. темп роста', M.grow ? '+' + f2(M.grow.v) : '—', 'NDVI / 10 дней', '#eab308'], ['Неоднородность на пике', nf(cv, 0) + ' %', 'σ / среднее', '#64748b']]);
+        o.push('<b>Пик вегетации.</b> NDVI ' + f2(pk.mean) + ' (' + dm(pk.day) + ', через ' + dN(cur.from, pk.day) + ' дн. после посева) — ' + (pk.mean >= 0.8 ? 'очень высокая биомасса, густой развитый посев' : pk.mean >= 0.65 ? 'хорошее развитие посева' : pk.mean >= 0.5 ? 'умеренное развитие: возможен недобор биомассы' : 'слабая вегетация: изреженный посев, угнетение культуры либо пик не попал в снимки') + '.');
+        o.push('<b>Старт роста.</b> ' + (M.start ? 'Порог NDVI 0,3 пройден около ' + dm(M.start) + ' (через ' + dN(cur.from, M.start) + ' дн. после посева).' : M.earlyHigh ? 'К первому снимку NDVI уже ≥ 0,3: начало роста раньше первого безоблачного снимка.' : 'NDVI не достиг 0,3 — активный рост по снимкам не зафиксирован.'));
+        if (M.grow) o.push('<b>Темп роста.</b> Максимум +' + f2(M.grow.v) + ' NDVI за 10 дней (к ' + dm(M.grow.day) + ') — ' + (M.grow.v >= 0.25 ? 'быстрый' : M.grow.v >= 0.12 ? 'нормальный' : 'вялый') + ' набор биомассы.');
+        M.drops.slice(0, 2).forEach(function (x) { o.push('<b>Просадка.</b> NDVI упал на ' + f2(-x.d) + ' между ' + dm(x.a.day) + ' и ' + dm(x.b.day) + ': возможны засуха, заморозки, болезни, град или дымка в кадре — сверьте со снимком и погодой.'); });
+        if (M.end) o.push('<b>Завершение вегетации.</b> NDVI опустился ниже 0,5 около ' + dm(M.end) + ' (через ' + dN(pk.day, M.end) + ' дн. после пика) — ' + (dN(pk.day, M.end) < 25 ? 'быстрое усыхание: возможны стресс или преждевременная сенесценция.' : 'плавное созревание.'));
+        else if (dN(last.day, cur.to) > 20) o.push('<b>Конец периода.</b> После ' + dm(last.day) + ' пригодных снимков нет — завершение вегетации не отслежено.');
+        o.push('<b>Однородность.</b> Вариация NDVI на пике ' + nf(cv, 0) + ' % (' + (cv < 10 ? 'однородный посев' : cv < 20 ? 'умеренная неоднородность' : 'высокая неоднородность') + '), доля площади с NDVI &lt; 0,4 — ' + nf(pk.low, 0) + ' %' + (cv >= 15 ? '. Имеет смысл зонирование (вкладка «Анализ» → NDVI) и дифференцированное внесение.' : '.'));
+        if (MP) {
+            var oc = M.start ? dN(cur.from, M.start) : null, op = MP.start ? dN(prev.from, MP.start) : null, ic = MP.integ ? (M.integ - MP.integ) / MP.integ * 100 : null, pd = dN(cur.from, pk.day) - dN(prev.from, MP.pk.day);
+            o.push('<b>К прошлому году.</b> Пик ' + f2(pk.mean) + ' против ' + f2(MP.pk.mean) + ' (' + ds(pk.mean - MP.pk.mean) + ')' + (ic != null ? ', накопленный NDVI ' + (ic >= 0 ? 'выше' : 'ниже') + ' на ' + nf(Math.abs(ic), 0) + ' %' : '') + (oc != null && op != null ? ', старт роста ' + (oc === op ? 'в те же сроки' : (oc < op ? 'раньше' : 'позже') + ' на ' + Math.abs(oc - op) + ' дн.') : '') + ', пик ' + (Math.abs(pd) < 3 ? 'в те же сроки' : (pd < 0 ? 'раньше' : 'позже') + ' на ' + Math.abs(pd) + ' дн.') + '.');
+        } else if (prev) o.push('<b>К прошлому году.</b> Для прошлого сезона не хватило пригодных снимков (найдено ' + prev.pts.length + ' из ' + prev.wins + ' окон) — сравнение невозможно; увеличьте порог облачности.');
+        o.push('<b>Надёжность.</b> Использовано снимков: ' + cur.pts.length + ' из ' + cur.wins + ' окон (шаг ' + cur.step + ' дн.); без чистого снимка (облачность выше ' + cur.cmax + ' %) окон: ' + cur.cloudy + (cur.fail ? ', не обработано: ' + cur.fail : '') + '. Максимальный разрыв между снимками — ' + mg + ' дн.' + (mg > 25 ? ' Пик или просадки могли выпасть в разрыв — выводы ориентировочные.' : ''));
+        var good = pk.mean >= 0.7 && cv < 20 && !M.drops.length, mid = pk.mean >= 0.55;
+        o.push('<b>Вывод.</b> ' + (good ? 'Сезон вегетации хороший: высокий и однородный пик без заметных просадок.' : mid ? 'Вегетация умеренная' + (M.drops.length ? ' с просадкой в период роста' : '') + (cv >= 20 ? ' и заметной неоднородностью' : '') + ': найдите причины (влага, питание, сроки посева, болезни) по зонам с низким NDVI.' : 'Вегетация слабая: проверьте густоту всходов, засорённость, обеспеченность влагой и питанием; осмотрите участок на месте.') + ' Оценка предварительная, по спутниковому индексу.');
+        var rows = cur.pts.map(function (p, i) {
+            var dp = i ? p.mean - cur.pts[i - 1].mean : null, pv = prev && prev.pts.length ? dynInterp(prev.pts, dShiftY(p.day, -1), 45) : null, cl = function (v) { return v == null ? '—' : '<span style="color:' + (v >= 0.02 ? '#16a34a' : v <= -0.02 ? '#dc2626' : '#64748b') + '">' + ds(v) + '</span>'; };
+            return '<tr><td>' + p.day.split('-').reverse().join('.') + '</td><td class="n">' + (p.cc == null ? '—' : p.cc + ' %') + '</td><td class="n"><b>' + f2(p.mean) + '</b></td><td class="n">' + f2(p.std) + '</td><td class="n">' + f2(p.p10) + '–' + f2(p.p90) + '</td><td class="n">' + cl(dp) + '</td><td class="n">' + cl(pv == null ? null : p.mean - pv) + '</td></tr>';
+        }).join('');
+        return tiles_ + '<div class="pp-chs">' + chart('Динамика NDVI: ' + cur.from.split('-').reverse().join('.') + ' — ' + cur.to.split('-').reverse().join('.'), dynChart(cur, prev), 'Точки — безоблачные снимки (наведите курсор: дата, значение, облачность). Оранжевый круг — максимум вегетации.') + '</div>' +
+            '<div class="pp-sum"><ul>' + o.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>' +
+            '<div class="pp-dyn-tw"><table class="pp-dyn-t"><thead><tr><th>Дата</th><th>Облачн.</th><th>NDVI</th><th>σ</th><th>P10–P90</th><th>Δ к пред.</th><th>Δ к прош. году</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
     // ---------- 4. почвенный анализ: карта и диаграммы по каждому показателю ----------
@@ -1048,7 +1209,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (!l) { if (t) t.textContent = 'Паспорт участка'; body.innerHTML = '<div class="pp-sec"><div class="pp-sec-b"><div class="pp-note">Нет фигуры для паспорта. Нарисуйте участок (или загрузите контур / выписку Росреестра), выделите его на карте и нажмите «Обновить по фигуре».</div></div></div>'; return; }
         var gj = forced ? forced.gj : toGJ(l); D.gj = gj;
         var head = general(l, gj);
-        body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye-slash"></i> Скрыть все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec().replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"') + weatherSec() + sumSec();
+        body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye-slash"></i> Скрыть все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + dynSec() + soilSec() + elevSec() + logSec().replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"') + weatherSec() + sumSec();
         document.getElementById('ppKpi').innerHTML = kpiHtml();
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '');
         var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
