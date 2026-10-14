@@ -123,6 +123,8 @@ const map = L.map('map', {
     touchRotate: true,
     shiftKeyRotate: true    // Shift + колесо мыши тоже вращает карту
 }).setView([55.76, 37.62], 10);
+// Ссылка «Поделиться»: ?c=широта,долгота&z=масштаб открывает карту в нужном месте
+window.gcSharedView = (function () { try { var q = new URLSearchParams(location.search), c = (q.get('c') || '').split(','), la = parseFloat(c[0]), ln = parseFloat(c[1]), z = parseInt(q.get('z'), 10); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) { map.setView([la, ln], z >= 1 && z <= 20 ? z : 12); return true; } } catch (e) { /* параметров нет */ } return false; })();
 
 // ---------- ПОДЛОЖКИ ----------
 const GOOGLE_SUBDOMAINS = ['mt0', 'mt1', 'mt2', 'mt3'];
@@ -5524,7 +5526,7 @@ function autoDetectLocation() {
             setUserLocality('Местоположение не определено', '', true);
             return;
         }
-        map.setView([d.latitude, d.longitude], AUTO_LOCATE.zoom);
+        if (!window.gcSharedView) map.setView([d.latitude, d.longitude], AUTO_LOCATE.zoom);
         window.userLoc = { lat: d.latitude, lng: d.longitude };
         if (d.city) { setUserLocality(d.city, d.region || ''); loadUserWeather(d.latitude, d.longitude); }
         else showUserLocality(d.latitude, d.longitude);
@@ -5533,7 +5535,7 @@ function autoDetectLocation() {
     if (!navigator.geolocation) { viaIp(); return; }
     navigator.geolocation.getCurrentPosition(pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude;
-        map.setView([lat, lng], AUTO_LOCATE.zoom);
+        if (!window.gcSharedView) map.setView([lat, lng], AUTO_LOCATE.zoom);
         window.userLoc = { lat: lat, lng: lng };
         showUserLocality(lat, lng);
         updateStatus('📍 Местоположение определено');
@@ -5859,7 +5861,7 @@ function isFullscreen() {
 }
 
 function toggleFullscreen() {
-    const root = document.querySelector('.map-container');   // область карты (карта + нижняя панель)
+    const root = document.querySelector('#map-section .app-container') || document.querySelector('.map-container');   // карта вместе с боковой панелью
     try {
         if (!isFullscreen()) {
             const request = root.requestFullscreen || root.webkitRequestFullscreen;

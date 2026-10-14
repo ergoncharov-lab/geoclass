@@ -42,7 +42,7 @@
       <a href="#how">Как это работает</a>
       <a href="#faq">Частые вопросы</a>
       <a href="#contacts">Контакты</a>
-      <a href="#pricing" class="s-cta"><i class="fas fa-file-lines"></i> Полный анализ</a>
+      <a href="#map-section" class="s-cta" id="siteFullAnalysis"><i class="fas fa-file-lines"></i> Полный анализ</a>
     </nav>
   </div>
 </header>
@@ -183,6 +183,7 @@
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="catalog" title="Каталог геоданных"><i class="fas fa-store"></i><span>Каталог</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="help" title="Инструкции"><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="bookmarks" title="Закладки"><i class="fas fa-bookmark"></i><span>Закладки</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="support" title="Поддержка"><i class="fas fa-headset"></i><span>Поддержка</span></button>
         </div>
 
         <!-- ВКЛАДКА 1 «ГЛАВНАЯ»: меню разделов -->
@@ -195,7 +196,7 @@
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#10b981" title="Источники анализа&#10;Раздел в разработке."><i class="fas fa-database"></i><span>Источники анализа</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Новости&#10;Раздел в разработке."><i class="fas fa-newspaper"></i><span>Новости</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#64748b" title="Поддержка&#10;Раздел в разработке."><i class="fas fa-headset"></i><span>Поддержка</span></button>
+                        <button type="button" class="sp-tile" data-goto="support" style="--c:#64748b" title="Поддержка&#10;Обратная связь, рекомендации и переход в справку."><i class="fas fa-headset"></i><span>Поддержка</span></button>
                         <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
                     </div>
                 </div>
@@ -231,7 +232,7 @@
                     <div class="sp-grid">
                         <button type="button" class="sp-tile sp-stub" style="--c:#84cc16" title="Почвы&#10;Раздел в разработке."><i class="fas fa-seedling"></i><span>Почвы</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#ef4444" title="Границы&#10;Раздел в разработке."><i class="fas fa-border-all"></i><span>Границы</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#6366f1" title="Кадастр&#10;Раздел в разработке."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
+                        <button type="button" class="sp-tile" data-bp="cadastre" style="--c:#6366f1" title="Кадастр&#10;Кадастровая карта НСПД: границы участков и кадастровые номера."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#16a34a" title="Лес&#10;Раздел в разработке."><i class="fas fa-tree"></i><span>Лес</span></button>
                         <button type="button" class="sp-tile" id="ulOpenBtn" data-bp="userlayers" style="--c:#0d9488" title="Свои слои&#10;Подключите собственный слой: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON по ссылке. Подключённые слои сохраняются в браузере и возвращаются при следующем открытии."><i class="fas fa-plus"></i><span>Свои слои</span></button>
                     </div>
@@ -411,10 +412,32 @@
                 <div class="an-hint" id="bmEmpty" style="margin:0">Правый клик по карте → «Сохранить закладку» или кнопка выше — сохранит текущий экстент. Закладки хранятся в этом браузере.</div>
                 <div class="bm-list" id="bmList"></div>
             </div>
-            <div class="tab-art" data-art="bookmarks">
-                <div class="tab-art-txt"><b>Закладки</b><p>Сохраняйте важные места и возвращайтесь к ним в один клик.</p><ul><li>Правый клик по карте → «Сохранить закладку»</li><li>К каждой закладке — скриншот и описание</li><li>Хранятся в этом браузере</li></ul></div>
-            </div>
         </div>
+
+        <!-- ВКЛАДКА «ПОДДЕРЖКА»: обратная связь, рекомендации, переход в справку -->
+        <div class="tab-pane" data-pane="support" role="tabpanel">
+            <div class="section sup">
+                <button type="button" class="sup-help" data-goto="help"><i class="fas fa-book-open"></i><span><b>Перейти в справку</b><small>Инструкции по каждому блоку карты</small></span><i class="fas fa-chevron-right"></i></button>
+                <div class="sup-card">
+                    <div class="sup-h">Написать нам</div>
+                    <div class="sup-chips" id="supType"><button type="button" class="on" data-t="Вопрос">Вопрос</button><button type="button" data-t="Ошибка">Ошибка</button><button type="button" data-t="Идея">Идея</button></div>
+                    <input type="email" id="supEmail" placeholder="Email для ответа (необязательно)" autocomplete="email">
+                    <textarea id="supMsg" maxlength="2000" placeholder="Опишите, что случилось или что хотите улучшить…"></textarea>
+                    <label class="sup-chk"><input type="checkbox" id="supCtx" checked> Приложить данные карты (центр, масштаб, ссылка на вид) — так проще разобраться</label>
+                    <div class="sup-row"><span id="supCnt">0 / 2000</span><button type="button" class="sup-send" id="supSend"><i class="fas fa-paper-plane"></i> Отправить</button></div>
+                    <div class="sup-ok" id="supOk" hidden></div>
+                </div>
+                <div class="sup-card">
+                    <div class="sup-h">Быстрые рекомендации</div>
+                    <details><summary>Снимок не загружается</summary><p>Выберите дату с малой облачностью в календаре снимков и подождите: первая загрузка идёт дольше, повторная берётся из кэша.</p></details>
+                    <details><summary>Контур не импортируется</summary><p>Проверьте формат: KML, GeoJSON, Excel или XML Росреестра. Контур должен быть замкнутым полигоном в координатах WGS-84.</p></details>
+                    <details><summary>Анализ не запускается</summary><p>Сначала нарисуйте или загрузите участок, затем выберите дату снимка Sentinel-2 и нажмите «Запустить анализ участка».</p></details>
+                    <details><summary>Карта «тормозит»</summary><p>Выключите лишние слои и 3D, уберите крупные импортированные файлы кнопкой «Очистить» вверху слева.</p></details>
+                    <details><summary>Как вернуться на то же место</summary><p>Кнопка «Поделиться» на карте даёт ссылку на текущий вид, а «Закладки» хранят важные экстенты в браузере.</p></details>
+                </div>
+                <label class="sup-chk"><input type="checkbox" id="supHints"> Показывать всплывающие подсказки на карте</label>
+            </div>
+        </div><!-- /tab-pane support -->
 
         <!-- ВКЛАДКА 5 «ИНСТРУКЦИИ» (аккордеон по блокам карты; тексты — черновик) -->
         <div class="tab-pane" data-pane="help" role="tabpanel">
@@ -487,6 +510,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="cadastre" title="Кадастр: слой НСПД"><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
           </div>
 
           <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
@@ -977,6 +1001,20 @@
               </div>
           </div>
 
+          <!-- КАДАСТР: поиск по кадастровому номеру, сведения об объекте (карточка), дерево слоёв НСПД в родных цветах -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-cad" data-bp-pane="cadastre" role="tabpanel">
+              <div class="dw-block">
+                  <div class="dw-title">Поиск по кадастровому номеру</div>
+                  <div class="dw-row"><input type="text" id="cadQuery" class="cad-in" placeholder="Например: 77:05:0001005:19"><button class="dw-act" id="cadFind" type="button" title="Найти объект в НСПД"><i class="fas fa-magnifying-glass"></i><span>Найти</span></button></div>
+                  <div class="m3-hint">Источник: НСПД (nspd.gov.ru). Клик по объекту на карте выделяет его цветом и показывает сведения. Границы — для ознакомления, не заменяют выписку ЕГРН.</div>
+              </div>
+              <div class="dw-block">
+                  <div class="dw-title">Кадастровая карта НСПД</div>
+                  <div class="cad-tree" id="cadTree"></div>
+                  <div class="m3-hint" id="cadStatus"></div>
+              </div>
+          </div>
+
           <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
           <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Загрузка раздела…</span></div></div>
@@ -1277,6 +1315,19 @@
                         <label class="gr-f">Шаг <select id="gridStep"></select></label>
                         <label class="gr-f">Цвет <input type="color" id="gridColor" value="#1d4ed8"></label>
                         <label class="gr-f"><input type="checkbox" id="gridLabels" checked> Подписи</label>
+                    </div>
+                </div>
+            </div>
+            <!-- КНОПКА «ПОДЕЛИТЬСЯ»: ссылка на сайт с центром и масштабом текущего вида -->
+            <div class="side-widget" id="shareWidget">
+                <button class="map-btn widget-btn" id="shareBtn" title="Поделиться: ссылка на текущий вид карты">
+                    <i class="fas fa-share-nodes"></i>
+                </button>
+                <div class="widget-panel widget-panel-horizontal" id="sharePanel">
+                    <div class="sh-box">
+                        <input type="text" id="shareLink" readonly aria-label="Ссылка на текущий вид карты">
+                        <button type="button" id="shareCopy"><i class="fas fa-copy"></i> Копировать</button>
+                        <button type="button" id="shareNative" hidden title="Отправить через…"><i class="fas fa-arrow-up-from-bracket"></i></button>
                     </div>
                 </div>
             </div>

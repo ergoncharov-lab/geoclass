@@ -13,6 +13,24 @@ FWD_HEADERS = ('Content-Type', 'Content-Range', 'Accept-Ranges', 'Last-Modified'
 mimetypes.add_type('text/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 local = threading.local()
+NSPD_HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+            'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8', 'Accept-Encoding': 'identity'}
+
+
+def make_opener():
+    """Исходящие запросы без проверки сертификата (НСПД использует российский корневой сертификат).
+    Если НСПД закрыт для вашего IP (зарубежный адрес/VPN) — задайте прокси в РФ: переменная окружения GEO_PROXY=http://host:port"""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    handlers = [urllib.request.HTTPSHandler(context=ctx)]
+    px = os.environ.get('GEO_PROXY')
+    if px:
+        handlers.append(urllib.request.ProxyHandler({'http': px, 'https': px}))
+    return urllib.request.build_opener(*handlers)
+
+
+OPENER = make_opener()
 
 
 def upstream_get(path, headers):
@@ -100,6 +118,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.isric()
         if self.path.startswith('/ucache?'):
             return self.ucache()
+        if self.path.startswith('/nspdcheck'):
+            return self.nspdcheck()
         return super().do_GET()
 
     def ucache(self):
@@ -111,9 +131,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(403, 'forbidden')
             return
         key = 'u|' + u
-        hit = cache_get(key, None)
-        if hit and time.time() - os.path.getmtime(cache_path(key, None) + '.json') > 7 * 86400:
-            hit = None
+        is_nspd = pu.hostname.endswith('nspd.gov.ru')
+        hit = stale = cache_get(key, None)
+        if hit:    # плитки НСПД хранятся 30 суток, ответы-атрибуты (JSON) — 3 суток, остальные слои — 7 суток
+            age = time.time() - os.path.getmtime(cache_path(key, None) + '.json')
+            is_json = 'json' in (hit[1].get('content-type') or '')
+            if age > ((3 if is_json else 30) if is_nspd else 7) * 86400:
+                hit = None
         if hit:
             status, headers, data = hit
         else:
@@ -121,25 +145,61 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
-                req = urllib.request.Request(u, headers={'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'})
-                with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
+                hdr = {'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'}
+                if is_nspd:    # НСПД отдаёт тайлы только «браузерным» запросам с их сайта
+                    hdr.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8'})
+                req = urllib.request.Request(u, headers=hdr)
+                with OPENER.open(req, timeout=60) as r:
                     data = r.read()
                     status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
             except Exception as e:
                 print('UCACHE error:', u[:120], e)
-                self.send_error(502, 'upstream unreachable: %s' % e)
-                return
-            if status == 200 and headers.get('content-type', '').startswith('image/'):
-                cache_put(key, None, status, headers, data)
+                if stale:    # НСПД недоступен — отдаём устаревшую копию из кэша, лучше чем ничего
+                    status, headers, data = stale
+                else:
+                    self.send_error(502, 'upstream unreachable: %s' % e)
+                    return
+            else:
+                ctype = headers.get('content-type', '')
+                if status == 200 and (ctype.startswith('image/') or (is_nspd and 'json' in ctype and len(data) > 2)):
+                    cache_put(key, None, status, headers, data)
         try:
             self.send_response(status)
             self.send_header('Content-Type', headers.get('content-type', 'application/octet-stream'))
             self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'public, max-age=86400')
+            self.send_header('Cache-Control', 'public, max-age=%d' % (604800 if is_nspd else 86400))
             self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def nspdcheck(self):
+        """Диагностика слоя НСПД: пробный тайл (центр Москвы) и страна IP-адреса, с которого идут запросы."""
+        res = {}
+        u = ('https://nspd.gov.ru/api/aeggis/v3/36049/wms?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=&TRANSPARENT=true'
+             '&LAYERS=36049&WIDTH=256&HEIGHT=256&CRS=EPSG:3857&BBOX=4187000,7508000,4188000,7509000')
+        try:
+            with OPENER.open(urllib.request.Request(u, headers=NSPD_HDR), timeout=25) as r:
+                data = r.read()
+                res.update(status=r.status, type=r.headers.get('Content-Type', ''), bytes=len(data))
+                if not res['type'].startswith('image/'):
+                    res['body'] = data[:300].decode('utf-8', 'replace')
+        except urllib.error.HTTPError as e:
+            res.update(status=e.code, error='HTTP %s' % e.code, body=e.read()[:300].decode('utf-8', 'replace'))
+        except Exception as e:
+            res.update(error=str(e))
+        try:
+            with OPENER.open(urllib.request.Request('https://ipwho.is/?fields=ip,country_code', headers={'User-Agent': 'geoclass-proxy'}), timeout=8) as r:
+                res['ip'] = json.loads(r.read().decode('utf-8'))
+        except Exception:
+            pass
+        print('NSPD check:', res)
+        data = json.dumps(res, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def isric(self):
         """Прокси к WCS ISRIC SoilGrids (раздел «Хим. анализ»): обходит CORS, GeoTIFF кэшируются на диске."""

@@ -146,33 +146,6 @@
             if (t) t.click();
         });
     });
-    // ---- виджет «Слои»: публичная кадастровая карта (НСПД, WMS) ----
-    // Адрес сервиса и ID слоя — в одном месте, чтобы при смене легко поправить.
-    var CADASTRE = { url: 'https://nspd.gov.ru/api/aeggis/v3/36049/wms', layers: '36049', minZoom: 14 };
-    var cadLayer = null, cadErr = 0;
-    var lBtn = document.getElementById('layersBtn'), cadT = document.getElementById('cadToggle');
-    var cadO = document.getElementById('cadOpacity'), cadS = document.getElementById('cadStatus');
-    if (lBtn && typeof togglePanel === 'function') lBtn.addEventListener('click', function (e) {
-        e.stopPropagation(); togglePanel('layersPanel', 'layersBtn');
-    });
-    function setCad(on) {
-        if (typeof map === 'undefined' || typeof L === 'undefined') return;
-        if (on && !cadLayer) {
-            cadLayer = L.tileLayer.wms(CADASTRE.url, {
-                layers: CADASTRE.layers, format: 'image/png', transparent: true, version: '1.3.0',
-                opacity: cadO.value / 100, minZoom: CADASTRE.minZoom, maxZoom: 22, zIndex: 450
-            });
-            cadLayer.on('tileerror', function () {
-                if (++cadErr === 3) cadS.textContent = 'сервис НСПД не отвечает';
-            });
-            cadLayer.on('tileload', function () { cadErr = 0; cadS.textContent = 'виден с масштаба z' + CADASTRE.minZoom; });
-        }
-        if (!cadLayer) return;
-        if (on) cadLayer.addTo(map); else map.removeLayer(cadLayer);
-        cadT.classList.toggle('active', on);
-    }
-    if (cadT) cadT.addEventListener('click', function (e) { e.stopPropagation(); setCad(!cadT.classList.contains('active')); });
-    if (cadO) cadO.addEventListener('input', function () { if (cadLayer) cadLayer.setOpacity(cadO.value / 100); });
     // кнопка «Запустить анализ участка» (заготовка)
     var run = document.getElementById('runAnalysisBtn');
     // ---- «Мои отчёты»: хранятся в localStorage, по клику открывается паспорт участка ----
@@ -1036,7 +1009,6 @@
         { ic: 'fa-ruler-combined', c: '#0ea5e9', t: 'Измерения на карте', d: 'Расстояние и площадь по клику прямо на карте.', h: 'Виджет «Измерения» вверху слева рядом с кнопкой «Очистить».', m: 'Выберите режим «Расстояние» или «Площадь» и кликайте по карте: результат виден сразу. «Очистить» в виджете убирает замер.', f: ['Расстояние по ломаной линии', 'Площадь и периметр фигуры', 'Быстрая очистка замера'] },
         { ic: 'fa-eraser', c: '#64748b', t: 'Очистить карту', d: 'Одной кнопкой убирает с карты всё лишнее.', h: 'Кнопка-ластик вверху слева на карте.', m: 'Удаляет рисунки, замеры, маршрут и результаты анализов, чтобы начать работу с чистой карты.', f: ['Рисунки и замеры', 'Маршрут и точки', 'Результаты анализов'] },
         { ic: 'fa-file-import', c: '#14b8a6', t: 'Импорт и экспорт контуров', d: 'Загрузка и выгрузка фигур во всех блоках с рисованием.', h: 'Ищите кнопки импорта и экспорта рядом с инструментами рисования.', m: 'Один и тот же механизм работает в рисовании, анализе, NDVI, логистике и других блоках: загрузите контур из файла или сохраните нарисованное.', f: ['KML, GeoJSON и другие форматы', 'Единые кнопки во всех блоках', 'Выгрузка нарисованного в файл'] },
-        { ic: 'fa-map-location-dot', c: '#0f766e', t: 'Мини-карта', d: 'Обзорная карта в углу: показывает, где вы находитесь.', h: 'Кнопка мини-карты в нижнем углу — по умолчанию она свёрнута.', m: 'Помогает не потеряться при сильном приближении: на мини-карте видно положение основного вида.', f: ['Свёрнута по умолчанию', 'Разворачивается одной кнопкой'] },
         { ic: 'fa-database', c: '#0f766e', t: 'Каталог геоданных', d: 'Наборы данных, которые можно подключить к карте.', h: 'Выберите набор и включите слой.', tab: 'catalog', m: 'Каталог готовых наборов геоданных, которые можно подключить к карте, чтобы не искать их по разным сайтам.', f: ['Готовые наборы геоданных', 'Подключение слоя к карте'] },
         { ic: 'fa-bookmark', c: '#e11d48', t: 'Закладки', d: 'Важные места со скриншотом, названием и описанием — возвращайтесь к ним в один клик.', h: 'Откройте вкладку и добавьте закладку на нужной точке карты.', tab: 'bookmarks', m: 'Запомните важные места на карте и возвращайтесь к ним в один клик. Каждая закладка хранит снимок вида, название и ваши заметки.', f: ['Скриншот карты, название и описание', 'Координаты точки', 'Кнопка «На карте» возвращает к месту'] },
         { ic: 'fa-circle-question', c: '#0ea5e9', t: 'О карте', d: 'Описание возможностей карты и инструкции по работе с её блоками.', h: 'Откройте справку, если не знаете, с чего начать.', tab: 'help', m: 'Справка по возможностям карты и инструкции по работе с каждым блоком — подойдёт, если вы только начинаете.', f: ['Описание возможностей карты', 'Инструкции по работе с блоками'] }

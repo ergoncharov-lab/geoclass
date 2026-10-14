@@ -1511,3 +1511,89 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .pp-dyn-t th { text-align: left; font-weight: 600; font-size: 11px; color: #64748b; padding: 4px 8px; border-bottom: 1px solid #d0d5dd; white-space: nowrap; }
 .pp-dyn-t td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; white-space: nowrap; }
 .pp-dyn-t th:nth-child(n+2), .pp-dyn-t td.n { text-align: right; }
+
+
+/* полноэкранный режим: на весь экран раскрывается вся карта вместе с боковой панелью */
+#map-section .app-container:fullscreen { height: 100vh; border: 0; border-radius: 0; }
+#map-section .app-container:-webkit-full-screen { height: 100vh; border: 0; border-radius: 0; }
+
+/* виджет «Поделиться» */
+.sh-box { display: flex; gap: 6px; align-items: center; }
+.sh-box input { width: 250px; height: 30px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12px; color: #334155; background: #f8fafc; }
+.sh-box button { height: 30px; min-width: 30px; border: 0; border-radius: 8px; background: #0f172a; color: #fff; font-size: 12px; padding: 0 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.sh-box button.ok { background: #059669; }
+
+/* вкладка «Поддержка» */
+.sup { display: flex; flex-direction: column; gap: 10px; }
+.sup-help { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid #bae6fd; border-radius: 12px; background: #f0f9ff; color: #0c4a6e; cursor: pointer; text-align: left; font: inherit; }
+.sup-help > i:first-child { width: 34px; height: 34px; border-radius: 10px; background: #0ea5e9; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; flex: none; }
+.sup-help span { flex: 1; display: flex; flex-direction: column; font-size: 13px; }
+.sup-help small { font-size: 11px; color: #0369a1; font-weight: 400; }
+.sup-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.sup-h { font-size: 13px; font-weight: 700; color: #0f172a; }
+.sup-chips { display: flex; gap: 6px; }
+.sup-chips button { flex: 1; height: 28px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font: inherit; font-size: 12px; color: #475569; cursor: pointer; }
+.sup-chips button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+.sup-card input[type=email], .sup-card textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 12.5px; background: #fff; resize: vertical; }
+.sup-card textarea { min-height: 92px; }
+.sup-card input:focus, .sup-card textarea:focus { outline: none; border-color: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .2); }
+.sup-chk { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: #64748b; line-height: 1.35; cursor: pointer; }
+.sup-chk input { margin-top: 2px; accent-color: #059669; }
+.sup-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+.sup-send { height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #059669; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 7px; }
+.sup-send:hover { filter: brightness(1.07); }
+.sup-ok { font-size: 12px; line-height: 1.4; color: #065f46; background: #ecfdf5; border-radius: 8px; padding: 7px 9px; }
+.sup-ok.err { color: #991b1b; background: #fef2f2; }
+.sup-card details { border-top: 1px solid #f1f5f9; padding: 6px 0; }
+.sup-card details:first-of-type { border-top: 0; }
+.sup-card summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: #1e293b; }
+.sup-card details p { margin: 5px 0 0; font-size: 12px; line-height: 1.45; color: #64748b; }
+
+/* всплывающие подсказки-выноски на элементах карты */
+.gh { position: absolute; z-index: 2500; width: 236px; padding: 11px 13px 10px; border-radius: 12px; background: #0f172a; color: #e2e8f0; box-shadow: 0 12px 30px -8px rgba(15, 23, 42, .55); font-size: 12px; line-height: 1.4; animation: ghIn .25s ease both; }
+.gh b { display: block; color: #fff; font-size: 13px; margin: 0 14px 3px 0; }
+.gh-x { position: absolute; top: 5px; right: 7px; border: 0; background: none; color: #94a3b8; font-size: 17px; line-height: 1; cursor: pointer; }
+.gh-off { display: block; margin-top: 7px; border: 0; background: none; color: #6ee7b7; font: inherit; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+.gh::after { content: ""; position: absolute; width: 12px; height: 12px; background: #0f172a; transform: rotate(45deg); }
+.gh-l::after { right: -5px; top: var(--ay, 20px); margin-top: -6px; }
+.gh-r::after { left: -5px; top: var(--ay, 20px); margin-top: -6px; }
+.gh-b::after { top: -5px; left: var(--ax, 20px); margin-left: -6px; }
+@keyframes ghIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.gh-pulse { animation: ghPulse 1.4s ease-out 4; }
+@keyframes ghPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, .7); } 100% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); } }
+
+/* кадастр НСПД: дерево слоёв, карточка объекта */
+.cad-tree { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.cad-grp { font-size: 11px; font-weight: 700; color: #475569; margin: 6px 0 2px; }
+.cad-it { display: flex; align-items: center; gap: 7px; padding: 5px 6px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+.cad-it:hover { background: #f1f5f9; }
+.cad-it input { accent-color: #6366f1; }
+.cad-sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.cad-nm { flex: 1; }
+.cad-it small { color: #94a3b8; }
+.cad-id { font-size: 10px; color: #94a3b8; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 0 5px; }
+.cad-id:hover { color: #334155; border-color: #94a3b8; }
+.cad-in { flex: 1; min-width: 0; height: 28px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12px; background: #fff; }
+.cad-pop { font-size: 12px; max-width: 320px; }
+.cad-pop b { display: block; margin: 6px 0 3px; }
+.cad-pop table { border-collapse: collapse; }
+.cad-pop td { padding: 2px 8px 2px 0; vertical-align: top; word-break: break-word; }
+.cad-pop td:first-child { width: 120px; color: #64748b; }
+.cad-pop pre { white-space: pre-wrap; font-size: 11px; max-height: 160px; overflow: auto; }
+.cad-zm { flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.cad-zm:hover { background: #e0e7ff; color: #4338ca; }
+.cad-x { float: right; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 12px; cursor: pointer; }
+.cad-x:hover { background: #f1f5f9; color: #334155; }
+.cad-wait { font-size: 12px; color: #64748b; padding: 4px 0; }
+.cad-card { border: 1px solid #e2e8f0; border-left: 4px solid var(--cc, #f59e0b); border-radius: 10px; background: #fff; padding: 9px 11px; margin-bottom: 8px; }
+.cad-kind { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: #64748b; text-transform: uppercase; }
+.cad-num { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.cad-num span { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: #0f172a; word-break: break-all; }
+.cad-cp, .cad-go, .cad-kml { flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 11px; cursor: pointer; }
+.cad-cp:hover, .cad-go:hover, .cad-kml:hover { background: #eef2ff; color: #4338ca; }
+.cad-rows { display: flex; flex-direction: column; border-top: 1px solid #f1f5f9; }
+.cad-r { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+.cad-r:last-child { border-bottom: 0; }
+.cad-r span { font-size: 10.5px; color: #94a3b8; }
+.cad-r b { font-weight: 500; color: #1e293b; word-break: break-word; }
+.cad-none { color: #94a3b8; font-size: 12px; }
