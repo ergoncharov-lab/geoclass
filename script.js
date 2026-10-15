@@ -117,11 +117,12 @@ L.drawLocal = {
 // Если плагин не загрузился, карта работает как раньше (без поворота).
 const map = L.map('map', {
     zoomControl: false,
+    attributionControl: false,   // ← вот эта строка убирает логотип Leaflet и подпись справа внизу
     rotate: true,
     bearing: 0,
-    rotateControl: false,   // свою кнопку «Стрелка севера» делаем в левой панели
+    rotateControl: false,
     touchRotate: true,
-    shiftKeyRotate: true    // Shift + колесо мыши тоже вращает карту
+    shiftKeyRotate: true
 }).setView([55.76, 37.62], 10);
 // Ссылка «Поделиться»: ?c=широта,долгота&z=масштаб открывает карту в нужном месте
 window.gcSharedView = (function () { try { var q = new URLSearchParams(location.search), c = (q.get('c') || '').split(','), la = parseFloat(c[0]), ln = parseFloat(c[1]), z = parseInt(q.get('z'), 10); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) { map.setView([la, ln], z >= 1 && z <= 20 ? z : 12); return true; } } catch (e) { /* параметров нет */ } return false; })();
@@ -241,7 +242,7 @@ function overlayLayer(base, ...overlays) {
 //  SENTINEL-2: реальные снимки по датам.
 //  Каталог (даты, облачность): AWS Earth Search. Сами снимки читаются прямо в браузере
 //  из облачных GeoTIFF (COG) на AWS S3 — без ключей и без сторонних серверов тайлов.
-//  Подложки sentinel2 / ndvi / ndwi / modified_ndwi рисуются по выбранной дате;
+//  Подложки sentinel2 / ndvi / ndmi / nbr рисуются по выбранной дате;
 //  панель выбора даты и облачности открывается при выборе такой подложки.
 // ============================================================
 const SENTINEL = {
@@ -259,13 +260,11 @@ const SENTINEL = {
 };
 
 // какие каналы нужны подложке
-const SN_ASSETS = { sentinel2: ['visual'], ndvi: ['red', 'nir'], ndwi: ['green', 'nir'], modified_ndwi: ['green', 'swir16'], ndmi: ['nir', 'swir16'], nbr: ['nir', 'swir22'],
+const SN_ASSETS = { sentinel2: ['visual'], ndvi: ['red', 'nir'], ndmi: ['nir', 'swir16'], nbr: ['nir', 'swir22'],
     falsecolor: ['nir', 'red', 'green'], ndvi_c: ['red', 'nir'] };
 const SN_INDEX = {
     ndvi: (a, b) => (b - a) / (b + a),
     ndvi_c: (a, b) => (b - a) / (b + a),   // «Контрастный NDVI»: тот же индекс, шкала растянута на выбранный диапазон
-    ndwi: (a, b) => (a - b) / (a + b),
-    modified_ndwi: (a, b) => (a - b) / (a + b),
     ndmi: (a, b) => (a - b) / (a + b),   // (NIR − SWIR1) / (NIR + SWIR1)
     nbr: (a, b) => (a - b) / (a + b)     // (NIR − SWIR2) / (NIR + SWIR2)
 };
@@ -848,7 +847,7 @@ function sentinelApply(key) {
 // ============================================================
 const SN_RES = 10;              // м/пиксель — лучшее разрешение Sentinel-2
 const SN_EXPORT_MAX_PX = 25e6;  // предел размера выгрузки (≈ 50 × 50 км при 10 м)
-const SN_FILE_TAG = { sentinel2: 'S2_TrueColor', ndvi: 'NDVI', ndwi: 'NDWI', modified_ndwi: 'MNDWI', ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'S2_FalseColor', ndvi_c: 'NDVI_contrast' };
+const SN_FILE_TAG = { sentinel2: 'S2_TrueColor', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'S2_FalseColor', ndvi_c: 'NDVI_contrast' };
 
 function snRingsOf(gj) {
     const g = gj.geometry || gj, out = [];
@@ -1173,7 +1172,7 @@ async function snAutoRange(st, bb) {
     return { min: +lo.toFixed(2), max: +hi.toFixed(2) };
 }
 
-// Превью снимка в «спектре» раздела (NDVI, NDWI… или ложные цвета): читается самый грубый уровень COG (≈340 пикс.), результат кэшируется
+// Превью снимка в «спектре» раздела (NDVI, NDMI… или ложные цвета): читается самый грубый уровень COG (≈340 пикс.), результат кэшируется
 const SN_PV = { cache: new Map(), q: [], run: 0 };
 function snPvLimit(fn) {
     return new Promise((res, rej) => { SN_PV.q.push({ fn, res, rej }); snPvPump(); });
@@ -1286,8 +1285,6 @@ const layerFactories = {
     sentinel2: () => sentinelTiles('sentinel2'),
     landsat8: () => esriTiles('&copy; Esri / Landsat'),
     ndvi: () => sentinelTiles('ndvi'),
-    ndwi: () => sentinelTiles('ndwi'),
-    modified_ndwi: () => sentinelTiles('modified_ndwi'),
     ndmi: () => sentinelTiles('ndmi'),
     nbr: () => sentinelTiles('nbr'),
     falsecolor: () => sentinelTiles('falsecolor'),
@@ -1359,8 +1356,8 @@ Object.keys(layerFactories).forEach(key => { baseLayers[key] = layerFactories[ke
 const LAYER_NAMES = {
     osm: 'OSM', google: 'Google', google_sat: 'Спутник', google_hybrid: 'Гибрид',
     '2gis': '2ГИС', opentopo: 'Topo', esri_sat: 'Esri', esri_imagery: 'Esri Imagery',
-    sentinel2: 'Sentinel-2', landsat8: 'Landsat', ndvi: 'NDVI', ndwi: 'NDWI',
-    modified_ndwi: 'MNDWI', ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'Ложные цвета', ndvi_c: 'Контрастный NDVI', esri_landcover: 'Esri Land Cover',
+    sentinel2: 'Sentinel-2', landsat8: 'Landsat', ndvi: 'NDVI',
+    ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'Ложные цвета', ndvi_c: 'Контрастный NDVI', esri_landcover: 'Esri Land Cover',
     esri_topo: 'Esri Topo', esri_natgeo: 'Esri NatGeo', esri_hillshade: 'Esri Рельеф',
     esri_terrain: 'Esri Terrain', esri_gray: 'Esri Gray',
     soil_ph: 'pH почв', soil_soc: 'Орг. углерод', soil_nitrogen: 'Азот почв',
@@ -1391,8 +1388,6 @@ const LAYER_THUMBS = {
     sentinel2:      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     landsat8:       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     ndvi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
-    ndwi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
-    modified_ndwi:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     // тот же участок мира, что и у остальных превью (z=3, x=4, y=2), но в метрах EPSG:3857
     esri_landcover: esriLandCoverUrl([0, 5009377.085, 5009377.085, 10018754.171], 72),
     esri_topo:      esriThumb('World_Topo_Map'),
@@ -1484,31 +1479,11 @@ const LAYER_LEGENDS = {
             ['#1a9850', '0,5 – 0,7 — густая растительность'],
             ['#006837', 'Больше 0,7 — плотные леса, пик вегетации']
         ]
-    },
-    ndwi: {
-        title: 'NDWI — индекс водных объектов',
-        note: 'Стандартная шкала индекса: чем синее, тем больше воды',
-        items: [
-            ['#0b3d91', 'Больше 0,3 — открытая вода'],
-            ['#4fa3e0', '0 – 0,3 — переувлажнение, заболоченность'],
-            ['#e6d5a8', '−0,3 – 0 — суша, умеренная сухость'],
-            ['#b08b4f', 'Меньше −0,3 — сухие поверхности, застройка']
-        ]
-    },
-    modified_ndwi: {
-        title: 'MNDWI — модифицированный индекс воды',
-        note: 'Стандартная шкала индекса: положительные значения — вода',
-        items: [
-            ['#0b3d91', 'Больше 0,5 — открытая вода'],
-            ['#4fa3e0', '0 – 0,5 — мелководье, влажные участки'],
-            ['#d9c9a0', '−0,5 – 0 — суша, влажная почва'],
-            ['#8f7a4f', 'Меньше −0,5 — застройка, сухая почва, растительность']
-        ]
     }
 };
 // Краткое описание источника — в каждой легенде; дополнительные легенды для снимков
 Object.assign(LAYER_LEGENDS.esri_landcover, { src: 'Источник: Esri · Impact Observatory · Microsoft — классификация снимков Sentinel-2, 10 м.' });
-['ndvi', 'ndwi', 'modified_ndwi', 'ndmi', 'nbr'].forEach(k => { LAYER_LEGENDS[k].src = 'Источник: Sentinel-2 L2A (ESA Copernicus), расчёт индекса по спектральным каналам, 10 м.'; });
+['ndvi', 'ndmi', 'nbr'].forEach(k => { LAYER_LEGENDS[k].src = 'Источник: Sentinel-2 L2A (ESA Copernicus), расчёт индекса по спектральным каналам, 10 м.'; });
 LAYER_LEGENDS.ndvi_c = Object.assign({}, LAYER_LEGENDS.ndvi, { title: 'Контрастный NDVI', note: 'Цвета растянуты на выбранный диапазон — виден разброс внутри поля' });
 LAYER_LEGENDS.sentinel2 = { title: 'Sentinel-2 — естественные цвета', note: 'Снимок, как его видит глаз (красный · зелёный · синий), 10 м', items: [], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), канал TCI.' };
 LAYER_LEGENDS.falsecolor = { title: 'Sentinel-2 — ложные цвета (CIR)', note: 'Ближний ИК · красный · зелёный → R · G · B', items: [['#e11d48', 'Красный — растительность'], ['#1e3a8a', 'Тёмно-синий — вода'], ['#94a3b8', 'Серый — застройка, голая почва']], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), каналы B08 · B04 · B03, 10 м.' };
@@ -2332,7 +2307,7 @@ function snShpZip(feats, base) {
 }
 
 // ============================================================
-//  РАЗДЕЛЫ БОКОВОЙ ПАНЕЛИ: «Снимки» · NDVI · NDWI (и MNDWI) · NDMI · NBR  (спутник Sentinel-2)
+//  РАЗДЕЛЫ БОКОВОЙ ПАНЕЛИ: «Снимки» · NDVI · NDMI · NBR · «Сравнение снимков»  (спутник Sentinel-2)
 //  Каждый раздел — это вкладка бывшей нижней панели, показанная в боковой панели (см. site.js).
 //  В разделе: инструменты рисования области (как в «Анализе участка»), календарь дат, облачность,
 //  «скрины» снимков выбранной даты и список дат с превью, скачивание GeoTIFF по нарисованной фигуре.
@@ -2343,28 +2318,27 @@ function snShpZip(feats, base) {
                  vars: [{ l: 'sentinel2', t: 'Естественные', h: 'Естественные цвета (RGB)' }, { l: 'falsecolor', t: 'Ложные цвета', h: 'Ложные цвета CIR: NIR · Red · Green' }] },
         ndvi:  { name: 'NDVI', sub: 'Индекс растительности: густота и состояние посевов', icon: 'fa-leaf', kind: 'idx',
                  vars: [{ l: 'ndvi', t: 'NDVI', h: 'Стандартная шкала NDVI' }, { l: 'ndvi_c', t: 'Контрастный NDVI', h: 'Шкала растянута на выбранный диапазон — виден разброс внутри поля' }] },
-        ndwi:  { name: 'NDWI', sub: 'Индекс воды и переувлажнения', icon: 'fa-droplet', kind: 'idx',
-                 vars: [{ l: 'ndwi', t: 'NDWI', h: 'NDWI (Green, NIR)' }, { l: 'modified_ndwi', t: 'MNDWI', h: 'MNDWI (Green, SWIR)' }] },
         ndmi:  { name: 'NDMI', sub: 'Влажность растительности: засуха и водный стресс', icon: 'fa-cloud-rain', kind: 'idx', vars: [{ l: 'ndmi', t: 'NDMI', h: '' }] },
-        nbr:   { name: 'NBR', sub: 'Гари и повреждение растительности', icon: 'fa-fire', kind: 'idx', vars: [{ l: 'nbr', t: 'NBR', h: '' }] }
+        nbr:   { name: 'NBR', sub: 'Гари и повреждение растительности', icon: 'fa-fire', kind: 'idx', vars: [{ l: 'nbr', t: 'NBR', h: '' }] },
+        // «Сравнение снимков»: два снимка выбранного слоя на разные даты рядом (шторка на карте + панель снизу); календаря и списка дат в самом разделе нет
+        change: { name: 'Сравнение снимков', sub: 'Два снимка Sentinel-2 на разные даты рядом', icon: 'fa-code-compare', kind: 'cmp',
+                  vars: [{ l: 'sentinel2', t: 'Естественные', h: 'Естественные цвета (RGB)' }, { l: 'falsecolor', t: 'Ложные цвета', h: 'Ложные цвета CIR: NIR · Red · Green' },
+                         { l: 'ndvi', t: 'NDVI', h: 'Индекс растительности' }, { l: 'ndmi', t: 'NDMI', h: 'Влажность растительности' }, { l: 'nbr', t: 'NBR', h: 'Гари и повреждение растительности' }] }
     };
-    const LAYER_SEC = { sentinel2: 'dates', falsecolor: 'dates', ndvi: 'ndvi', ndvi_c: 'ndvi', ndwi: 'ndwi', modified_ndwi: 'ndwi', ndmi: 'ndmi', nbr: 'nbr' };
+    const CMPSEC = 'change';   // ключ раздела «Сравнение снимков»
+    const LAYER_SEC = { sentinel2: 'dates', falsecolor: 'dates', ndvi: 'ndvi', ndvi_c: 'ndvi', ndmi: 'ndmi', nbr: 'nbr' };
     const LAYER_NOTE = {
         sentinel2: 'Снимок в естественных цветах (канал TCI, 10 м)',
         falsecolor: 'Ложные цвета: NIR · Red · Green → R · G · B, каналы 10 м',
         ndvi: 'NDVI = (NIR − Red) / (NIR + Red), каналы 10 м',
         ndvi_c: 'NDVI = (NIR − Red) / (NIR + Red); цвета — по выбранному диапазону контраста',
-        ndwi: 'NDWI = (Green − NIR) / (Green + NIR), каналы 10 м',
-        modified_ndwi: 'MNDWI = (Green − SWIR1) / (Green + SWIR1); SWIR (20 м) приводится к сетке 10 м',
         ndmi: 'NDMI = (NIR − SWIR1) / (NIR + SWIR1); SWIR (20 м) приводится к сетке 10 м',
         nbr: 'NBR = (NIR − SWIR2) / (NIR + SWIR2); SWIR (20 м) приводится к сетке 10 м'
     };
-    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndwi: ['суша', 'вода'], modified_ndwi: ['суша', 'вода'], ndmi: ['сухо', 'влажно'], nbr: ['гарь, голая почва', 'густая растительность'] };
+    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndmi: ['сухо', 'влажно'], nbr: ['гарь, голая почва', 'густая растительность'] };
     // классы для калькулятора: [от, до, подпись, цвет]
     const CLS = {
         ndvi: [[-9, 0.1, 'Вода, голая почва, застройка', '#c2a878'], [0.1, 0.2, 'Очень редкая растительность', '#e8d98a'], [0.2, 0.4, 'Редкая, всходы, травы', '#b5d66b'], [0.4, 0.6, 'Густая растительность, посевы', '#5cb85c'], [0.6, 9, 'Плотная, пик вегетации', '#1e7d34']],
-        ndwi: [[-9, 0, 'Суша', '#d9c9a0'], [0, 0.3, 'Переувлажнение', '#4fa3e0'], [0.3, 9, 'Открытая вода', '#0b3d91']],
-        modified_ndwi: [[-9, 0, 'Суша', '#d9c9a0'], [0, 0.5, 'Мелководье, влажные участки', '#4fa3e0'], [0.5, 9, 'Открытая вода', '#0b3d91']],
         ndmi: [[-9, -0.2, 'Сухая растительность, почва', '#8c510a'], [-0.2, 0.1, 'Низкая влажность', '#f6e8c3'], [0.1, 0.4, 'Умеренная влажность', '#5ab4ac'], [0.4, 9, 'Высокая влажность', '#01665e']],
         nbr: [[-9, 0.1, 'Гари, голая почва', '#f46d43'], [0.1, 0.3, 'Редкая растительность', '#fee08b'], [0.3, 0.5, 'Травы, кустарники, посевы', '#a6d96a'], [0.5, 9, 'Густая растительность', '#1a9850']]
     };
@@ -2433,7 +2407,7 @@ function snShpZip(feats, base) {
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const tileOf = id => ((/_(\d{2}[A-Z]{3})_/.exec(id || '')) || [])[1] || '';
-    const variant = { dates: 'sentinel2', ndvi: 'ndvi', ndwi: 'ndwi', ndmi: 'ndmi', nbr: 'nbr' };   // выбранный вариант слоя в каждом разделе
+    const variant = { dates: 'sentinel2', ndvi: 'ndvi', ndmi: 'ndmi', nbr: 'nbr', change: 'ndvi' };   // выбранный вариант слоя в каждом разделе
     const layerOf = s => variant[s];
     const q = (s, n) => ui[s].pane.querySelector('[data-sn="' + n + '"]');
     const eachPane = fn => Object.keys(ui).forEach(s => fn(s, ui[s].pane));
@@ -2443,7 +2417,37 @@ function snShpZip(feats, base) {
     };
 
     // ---------- разметка раздела ----------
+    // инструменты области на карте — одинаковы во всех разделах (рисование, редактирование, выбор фигуры, импорт и экспорт)
+    function toolsTpl() {
+        return '' +
+            '<div class="dw-block sn-tools"><div class="dw-title">Область на карте</div>' +
+            '<div class="an-draw">' +
+            '<button type="button" class="map-btn" data-sn-tool="polygon" title="Полигон"><i class="gc-pent"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-act="edit" title="Редактировать фигуру"><i class="fas fa-edit"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-act="sel" title="Взять фигуру, выбранную на карте (из «Анализа участка» или «Рисования»)"><i class="fas fa-hand-pointer"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="sn" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
+            '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="sn" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
+            '<div class="an-hint" data-sn="shapeInfo"></div></div>';
+    }
+    // раздел «Сравнение снимков»: область (рисование / импорт — как во всех разделах), слой и порог облачности, кнопка запуска
+    function tplCmp() {
+        const d = SEC[CMPSEC];
+        return '' +
+            '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div></div>' +
+            toolsTpl() +
+            '<div class="dw-block"><div class="dw-title">Что сравнивать</div>' +
+            '<div class="sn-seg sn-seg-w" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '">' + v.t + '</button>').join('') + '</div>' +
+            '<label class="sn-cc" title="Дни с облачностью выше порога затемняются в календарях под снимками">Облачность ≤ <b data-sn="ccVal">30</b>%<input type="range" data-sn="cc" min="0" max="100" step="5" value="30"></label>' +
+            '<div class="sn-key"><span style="--c:#10b981">≤10%</span><span style="--c:#84cc16">≤30%</span><span style="--c:#f59e0b">≤60%</span><span style="--c:#ef4444">&gt;60%</span></div></div>' +
+            '<div class="dw-block sn-cmpblock"><div class="dw-title">Сравнение</div>' +
+            '<div class="m3-hint">Карта разделится на две части (как «Шторка» в режиме дублирования), внизу появится панель: под каждым снимком — его дата, календарь выбора и статистика. Снимок 2 по умолчанию на месяц раньше. Статистика индексов считается по фигуре; без фигуры снимки сравниваются на видимой области карты.</div>' +
+            '<button type="button" class="dw-act ex-go" data-sn-act="cmp"><i class="fas fa-code-compare"></i><span>Сравнить снимки</span></button></div>';
+    }
     function tpl(s) {
+        if (s === CMPSEC) return tplCmp();
         const d = SEC[s], isIdx = d.kind === 'idx';
         const vars = d.vars.length > 1
             ? '<div class="sn-seg" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '">' + v.t + '</button>').join('') + '</div>' : '';
@@ -2464,9 +2468,6 @@ function snShpZip(feats, base) {
             '<div class="dw-row"><label>Нормы по зонам</label><select data-sn="zS"><option value="eq" selected>Одинаковые (правка вручную)</option><option value="low">Больше там, где NDVI ниже (±20%)</option><option value="high">Больше там, где NDVI выше (±20%)</option></select></div>' +
             '<button type="button" class="dw-act ex-go" data-sn-act="zones"><i class="fas fa-layer-group"></i><span>Разбить на зоны и найти аномалии</span></button>' +
             '<div class="dw-row"><label>Порог аномалий, σ</label><input type="number" data-sn="aS" min="1.5" max="8" step="0.5" value="3"></div></div>';
-        const cmpTpl = '<div class="dw-block sn-cmpblock"><div class="dw-title">Сравнение снимков</div>' +
-            '<div class="m3-hint">Карта разделится на две части (как «Шторка» в режиме дублирования), внизу появится панель: под каждым снимком — его дата, календарь выбора и статистика. Снимок 2 по умолчанию на месяц раньше.</div>' +
-            '<button type="button" class="dw-act ex-go" data-sn-act="cmp"><i class="fas fa-code-compare"></i><span>Сравнить снимки</span></button></div>';
         const calc = !isIdx ? '' :
             '<div class="dw-block sn-calc"><div class="dw-title">Калькулятор · ' + d.name + '</div>' +
             '<div class="m3-hint">Статистика индекса по пикселям внутри нарисованной фигуры (10 м) на выбранную дату: среднее, разброс, классы и площади. Считается автоматически после рисования фигуры и при смене даты.</div>' +
@@ -2474,17 +2475,7 @@ function snShpZip(feats, base) {
             '<div data-sn="calcOut"></div><div data-sn="zoneOut"></div><div data-sn="anomOut"></div></div>';
         return '' +
             '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div><div class="sn-leg" data-sn="leg"></div></div>' +
-            '<div class="dw-block sn-tools"><div class="dw-title">Область на карте</div>' +
-            '<div class="an-draw">' +
-            '<button type="button" class="map-btn" data-sn-tool="polygon" title="Полигон"><i class="gc-pent"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-act="edit" title="Редактировать фигуру"><i class="fas fa-edit"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-act="sel" title="Взять фигуру, выбранную на карте (из «Анализа участка» или «Рисования»)"><i class="fas fa-hand-pointer"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button>' +
-            '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="sn" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
-            '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="sn" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
-            '<div class="an-hint" data-sn="shapeInfo"></div></div>' +
+            toolsTpl() +
             '<div class="dw-block sn-calblock"><div class="dw-title">Дата съёмки</div>' + vars +
             '<div class="sn-month"><button type="button" class="sn-nav" data-sn-nav="-1" title="Предыдущий месяц"><i class="fa-solid fa-chevron-left"></i></button>' +
             '<span class="sn-month-lbl" data-sn="month"></span>' +
@@ -2497,7 +2488,6 @@ function snShpZip(feats, base) {
             contrast +
             '<div class="dw-block sn-shotblock"><div class="dw-title">Скрин выбранной даты</div><div class="sn-shots" data-sn="shots"></div><div class="sn-foot" data-sn="foot"></div></div>' +
             '<div class="dw-block sn-listblock"><div class="dw-title">Снимки за месяц <span class="badge" data-sn="count">0</span></div><div class="sn-cards" data-sn="cards"></div></div>' +
-            cmpTpl +
             calc +
             '<div class="dw-block sn-dl"><div class="dw-title">Скачать GeoTIFF</div>' + fmt +
             '<div class="m3-hint" data-sn="dlInfo"></div>' +
@@ -2574,6 +2564,7 @@ function snShpZip(feats, base) {
         clearCalc();
         renderShapeInfo(); renderDl();
         if (cmp.on) { cmpInit(true); if (fresh) cmpCenter(); }   // шторка: снимки и статистика — для новой фигуры
+        if (sec === CMPSEC) { clearTimeout(shapeTimer); return; }   // в разделе сравнения нет календаря и выреза: даты выбираются под половинами карты
         // после рисования фигуры снимок (в спектре раздела) последней даты без облачности грузится только внутри неё
         // (если включена подложка Sentinel из виджета карты — она остаётся на весь экстент)
         if (fresh && sec && shapeGJ && currentLayer !== layerOf(sec)) { pick = true; clipKey = null; month = monthStart(new Date()); hideClip(); }
@@ -2584,7 +2575,7 @@ function snShpZip(feats, base) {
     function hideClip() { Object.keys(clipLay).forEach(k => { if (map.hasLayer(clipLay[k])) map.removeLayer(clipLay[k]); }); }
     // слой снимка (в спектре текущего раздела), вырезанный по фигуре, поверх текущей подложки
     function syncClip(force) {
-        if (!shapeGJ || cmp.on) { hideClip(); return; }   // при включённой шторке сравнения обычный вырез скрыт
+        if (!shapeGJ || cmp.on || sec === CMPSEC) { hideClip(); return; }   // при включённой шторке сравнения обычный вырез скрыт
         if (!sec) return;   // раздел закрыт — то, что уже нарисовано, остаётся
         const lay = clipKey || layerOf(sec), st = SENTINEL.state[lay];
         const want = !!(st && st.date && currentLayer !== lay);
@@ -2664,6 +2655,7 @@ function snShpZip(feats, base) {
     }
     // retries — сколько раз можно шагнуть на месяц назад, если за месяц нет подходящих снимков
     async function load(retries) {
+        if (sec === CMPSEC) return;
         setSearch(1);
         try { await loadInner(retries); } finally { setSearch(-1); }
     }
@@ -2846,7 +2838,7 @@ function snShpZip(feats, base) {
         el.innerHTML = `<span><b>${fmtDay(st.date)}</b> · облачность ~${ccText(st.cc)} · сцен за день: ${st.scenes.length}</span>${src}`;
     }
     function renderDl() {
-        if (!sec) return;
+        if (!sec || sec === CMPSEC) return;
         const lay = layerOf(sec), st = SENTINEL.state[lay], est = estimate(), info = q(sec, 'dlInfo'), btn = q(sec, 'dlInfo').parentNode.querySelector('[data-sn-act="dl"]');
         let txt = '', ok = false;
         if (!shapeGJ) txt = 'Сначала нарисуйте фигуру вверху раздела — снимок будет вырезан по ней.';
@@ -3180,7 +3172,7 @@ function snShpZip(feats, base) {
     }
 
     function renderAll() {
-        if (!sec) return;
+        if (!sec || sec === CMPSEC) return;
         renderHead(); renderMonth(); renderCal(); renderCards(); renderShots(); renderFoot(); renderDl(); renderShapeInfo();
     }
 
@@ -3261,14 +3253,22 @@ function snShpZip(feats, base) {
             load(0);
         } else if ((b = t.closest('[data-sn-var]'))) {
             variant[sec] = b.dataset.snVar;
-            enter(sec);
+            if (sec === CMPSEC) { cmpVarUi(); if (cmp.on) { cmpOff(); cmpToggle(true); } }   // смена слоя перезапускает сравнение
+            else enter(sec);
         }
     }
+    const cmpVarUi = () => { if (ui[CMPSEC]) ui[CMPSEC].pane.querySelectorAll('[data-sn-var]').forEach(b => b.classList.toggle('on', b.dataset.snVar === variant[CMPSEC])); };
     function enter(s) {
         if (!ui[s]) return;
         cmpOff();
         sec = s;
         if (!map.hasLayer(grp)) grp.addTo(map);
+        if (s === CMPSEC) {   // «Сравнение снимков»: список дат и календаря нет — отменяем начатый поиск, фигура общая со всеми разделами
+            ++seq; clearTimeout(timer); clearTimeout(shapeTimer); pick = false; clipKey = null;
+            cmpVarUi(); renderShapeInfo(); q(s, 'ccVal').textContent = q(s, 'cc').value;
+            updateStatus(shapeGJ ? '↔️ Выберите слой и нажмите «Сравнить снимки»' : '✏️ Нарисуйте или импортируйте область, затем нажмите «Сравнить снимки»');
+            return;
+        }
         if (zoneVis && !map.hasLayer(zoneGrp)) zoneGrp.addTo(map);
         if (anomVis && !map.hasLayer(anomGrp)) anomGrp.addTo(map);
         const lay = layerOf(s);
@@ -3542,7 +3542,7 @@ function snShpZip(feats, base) {
         if (!out) return;
         cmp.res[i] = null;
         if (!s || !s.date) { out.innerHTML = ''; return; }
-        if (SEC[cmp.sec].kind !== 'idx') {
+        if (SEC[LAYER_SEC[cmp.base]].kind !== 'idx') {
             out.innerHTML = '<div class="cb-kpi cb-kpi-2"><div class="cb-k"><span>Облачность</span><b>' + ccText(s.cc) + '</b></div><div class="cb-k"><span>Сцен за день</span><b>' + s.scenes.length + '</b></div></div>';
             return;
         }
@@ -3586,7 +3586,8 @@ function snShpZip(feats, base) {
         cc.addEventListener('input', () => {
             SENTINEL.maxCC = +cc.value;
             eachPane((x, pn) => { const c = pn.querySelector('[data-sn="cc"]'); c.value = cc.value; pn.querySelector('[data-sn="ccVal"]').textContent = cc.value; });
-            if (sec) { renderCal(); renderCards(); }
+            if (sec === CMPSEC) { if (cmp.on) [1, 2].forEach(cmpCalDraw); }
+            else if (sec) { renderCal(); renderCards(); }
         });
         pane.addEventListener('click', onClick);
         pane.addEventListener('change', onChange);
@@ -3632,7 +3633,7 @@ function snShpZip(feats, base) {
         if (sec === s) { enter(s); return; }
         if (tab) tab.click();
     };
-    window.snOnRendererChange = function () { if (sec) renderFoot(); };
+    window.snOnRendererChange = function () { if (sec && sec !== CMPSEC) renderFoot(); };
 })();
 
 // ---------- ПЕРЕМЕННЫЕ ----------
@@ -4592,7 +4593,7 @@ document.getElementById('clearMapBtn').addEventListener('click', function() {
 map.on(L.Draw.Event.CREATED, function(event) {
     // Фигуры виджета «Рисование» обрабатываются отдельно (блок «ВИДЖЕТ РИСОВАНИЯ»)
     if (typeof skOnCreated === 'function' && skOnCreated(event)) return;
-    if (typeof snOnCreated === 'function' && snOnCreated(event)) return;   // разделы «Снимки / NDVI / NDWI / NDMI / NBR»
+    if (typeof snOnCreated === 'function' && snOnCreated(event)) return;   // разделы «Снимки / NDVI / NDMI / NBR / Сравнение снимков»
     if (typeof chOnCreated === 'function' && chOnCreated(event)) return;   // вкладка «Почвенный анализ»
     if (typeof lgOnCreated === 'function' && lgOnCreated(event)) return;   // вкладка «Логистика»
     if (typeof hyOnCreated === 'function' && hyOnCreated(event)) return;   // вкладка «Профиль» → «По площади»

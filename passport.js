@@ -185,7 +185,7 @@
         return (minis[key] = { map: m, el: el, gj: gj, title: title, leg: null });
     }
     function legSrc(key) {   // краткое описание источника под легендой
-        var s = /^soil_/.test(key) ? 'ISRIC SoilGrids, 250 м' : /^(ndvi|ndwi|ndmi|nbr|s2rgb)$/.test(key) ? 'Sentinel-2 L2A (ESA Copernicus), 10 м' : /^el[hs]$/.test(key) ? 'цифровая модель рельефа Terrarium (Mapzen / AWS)' : '';
+        var s = /^soil_/.test(key) ? 'ISRIC SoilGrids, 250 м' : /^(ndvi|ndmi|nbr|s2rgb)$/.test(key) ? 'Sentinel-2 L2A (ESA Copernicus), 10 м' : /^el[hs]$/.test(key) ? 'цифровая модель рельефа Terrarium (Mapzen / AWS)' : '';
         return s ? '<div class="pp-legsrc">Источник: ' + s + '</div>' : '';
     }
     function setLeg(key, cols, lo, hi, unit) {
@@ -506,9 +506,6 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         { k: 'ndvi', t: 'NDVI — вегетация', i: 'leaf', c: '#16a34a', l: 'NDVI',
             f: ['Нормализованный вегетационный индекс — показатель количества и «зелёности» растительной массы.', 'Выявляет неоднородность посевов и угнетённые зоны, позволяет планировать дифференцированное внесение удобрений, оценивать фазы развития и потенциал урожайности.', 'NDVI = (NIR − Red) / (NIR + Red) = (B08 − B04) / (B08 + B04) по Sentinel-2 L2A (10 м); значения от −1 до 1; статистика — по пикселям внутри контура.'],
             sc: [['> 0,7 · очень густая растительность', '#15803d'], ['0,5–0,7 · густая', '#22c55e'], ['0,3–0,5 · умеренная', '#a3e635'], ['0,1–0,3 · разреженная, всходы', '#facc15'], ['< 0,1 · голая почва, вода, застройка', '#a8a29e']] },
-        { k: 'ndwi', t: 'NDWI — вода', i: 'droplet', c: '#0284c7', l: 'NDWI',
-            f: ['Индекс открытой воды и переувлажнения поверхности.', 'Находит водоёмы и переувлажнённые западины, контролирует разливы и подтопление, помогает планировать мелиорацию.', 'NDWI = (Green − NIR) / (Green + NIR) = (B03 − B08) / (B03 + B08) (по McFeeters); значения выше 0 соответствуют открытой воде.'],
-            sc: [['> 0,2 · открытая вода', '#0369a1'], ['0–0,2 · переувлажнение, мелководье', '#38bdf8'], ['−0,3–0 · влажная почва, растительность', '#a3e635'], ['< −0,3 · сухая почва и суша', '#d6d3d1']] },
         { k: 'ndmi', t: 'NDMI — влажность растительности', i: 'cloud-rain', c: '#0ea5e9', l: 'NDMI',
             f: ['Индекс влажности растительного покрова (содержание воды в листьях).', 'Раннее выявление водного стресса и засухи — до появления видимых признаков; планирование полива и сроков уборки.', 'NDMI = (NIR − SWIR1) / (NIR + SWIR1) = (B08 − B11) / (B08 + B11); канал B11 (20 м) приводится к 10 м.'],
             sc: [['> 0,4 · высокая влагообеспеченность', '#0ea5e9'], ['0,2–0,4 · хорошая', '#4ade80'], ['0–0,2 · умеренная', '#facc15'], ['−0,2–0 · водный стресс', '#f97316'], ['< −0,2 · сильный стресс, сухая почва', '#dc2626']] },
@@ -519,7 +516,6 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     // ---------- 3. спутниковые снимки Sentinel-2: расчёт по дате, выбранной в «Анализе» ----------
     var SATCLS = {
         ndvi: [[-9, 0.1, 'Вода, голая почва, застройка', '#c2a878'], [0.1, 0.2, 'Очень редкая растительность', '#e8d98a'], [0.2, 0.4, 'Редкая, всходы, травы', '#b5d66b'], [0.4, 0.6, 'Густая растительность, посевы', '#5cb85c'], [0.6, 9, 'Плотная, пик вегетации', '#1e7d34']],
-        ndwi: [[-9, 0, 'Суша', '#d9c9a0'], [0, 0.3, 'Переувлажнение', '#4fa3e0'], [0.3, 9, 'Открытая вода', '#0b3d91']],
         ndmi: [[-9, -0.2, 'Сухая растительность, почва', '#8c510a'], [-0.2, 0.1, 'Низкая влажность', '#f6e8c3'], [0.1, 0.4, 'Умеренная влажность', '#5ab4ac'], [0.4, 9, 'Высокая влажность', '#01665e']],
         nbr: [[-9, 0.1, 'Гари, голая почва', '#f46d43'], [0.1, 0.3, 'Редкая растительность', '#fee08b'], [0.3, 0.5, 'Травы, кустарники, посевы', '#a6d96a'], [0.5, 9, 'Густая растительность', '#1a9850']]
     };
@@ -1234,24 +1230,24 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     function weatherSec() {
         var la = D.c[1], dec = 23.44, noon = function (dc) { return 90 - Math.abs(la - dc); }, N = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349], dl = N.map(function (n) { return dayLen(la, n); });
         var fh = function (h) { var m = Math.round(h * 60); return Math.floor(m / 60) + ' ч ' + (m % 60) + ' мин'; };
-        return sec(7, 'cloud-sun', 'Климат и погода', 'Климат и теплообеспеченность, солнечный режим, прогноз, ветер и заморозки', CC.clim,
-            '<div class="pp-cols"><div class="pp-colw">' + wxBlk('f') + wxBlk('w') + '</div><div class="pp-colw">' + wxBlk('c') + wxBlk('b') + '</div></div>' +
-            blk({
+        var solar = blk({
                 t: 'Солнечный режим', i: 'sun', c: '#f59e0b',
                 info: ['Продолжительность светового дня по месяцам и высота солнца над горизонтом в разные сезоны для широты участка.', 'Учитывается при выборе культур по фотопериоду (длиннодневные и короткодневные), планировании теплиц и размещении солнечных панелей.',
                     'Астрономический расчёт по широте центра участка: склонение солнца δ = 23,44° · sin(2π(284 + N) / 365), длина дня = 24/π · arccos(−tg φ · tg δ); полуденная высота солнца = 90° − |φ − δ|. От погоды не зависит.'],
                 body: '<div class="pp-solar">' + tiles([['Самый длинный день (22 июн)', fh(dayLen(la, 172)), '', '#f59e0b'], ['Самый короткий день (22 дек)', fh(dayLen(la, 355)), '', '#3b82f6'], ['Равноденствие (21 мар)', fh(dayLen(la, 80)), '', '#22c55e'], ['Солнце в полдень, 22 июн', nf(noon(dec), 0) + '°', '', '#f59e0b'], ['Солнце в полдень, 22 дек', nf(noon(-dec), 0) + '°', '', '#3b82f6']]) +
                     chart('Продолжительность дня по месяцам, ч', dayChart(dl), 'Над точками — часы светового дня (десятичные), крупно выделены максимум и минимум; при наведении — часы и минуты. Рассчитано по широте участка.') + '</div>'
-            })).replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"');
+        });
+        return sec(7, 'cloud-sun', 'Климат и погода', 'Климат и теплообеспеченность, солнечный режим, прогноз, ветер и заморозки', CC.clim,
+            '<div class="pp-cols"><div class="pp-colw">' + wxBlk('f') + wxBlk('w') + solar + '</div><div class="pp-colw">' + wxBlk('c') + wxBlk('b') + '</div></div>').replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"');
     }
 
     // ---------- 7б. погода и агроклимат: те же разделы, что на вкладках «Погода» (мост window.ppWx из script.js) ----------
-        var WXG = [   // три компактных блока: прогноз + ветер (карта ветра), заморозки (карта температур), климат + тепло
-        { id: 'w', keys: ['windwork'], t: 'Ветер и окна работ', i: 'wind', c: '#0ea5e9', map: 'wnd', mt: 'Ветер сейчас: куда дует',
+        var WXG = [   // блоки без мини-карт: прогноз, ветер, заморозки, климат + тепло
+        { id: 'w', keys: ['windwork'], t: 'Ветер и окна работ', i: 'wind', c: '#0ea5e9',
             info: ['Роза ветров и статистика ветра за 10 лет, окна для опрыскивания и полевых работ. На карте — стрелки текущего ветра на участке.', 'Помогает выбрать время обработки без сноса препарата и спланировать полевые работы.', 'Ветер за 10 лет — ERA5. Окна: опрыскивание при ветре ≤ 5 м/с без осадков и t 8…27 °C. Стрелки — текущий ветер прогноза Open-Meteo (резерв MET Norway), интерполированный по точкам внутри контура.'] },
         { id: 'f', keys: ['weather'], t: 'Прогноз погоды', i: 'cloud-sun-rain', c: '#0ea5e9',
             info: ['Текущая погода и прогноз на 7 дней в точках внутри участка: температура, влажность, облачность, ветер, осадки.', 'Помогает планировать сев, опрыскивание и полевые работы, заранее видеть заморозки, ливни и порывистый ветер.', 'Open-Meteo (резерв MET Norway): 1–9 точек сетки внутри контура, значения усреднены, в скобках минимум и максимум.'] },
-        { id: 'b', keys: ['frost'], t: 'Заморозки', i: 'snowflake', c: '#06b6d4', map: 'wfr', mt: 'Температура сейчас в точках прогноза',
+        { id: 'b', keys: ['frost'], t: 'Заморозки', i: 'snowflake', c: '#06b6d4',
             info: ['Безморозный период, даты последнего весеннего и первого осеннего заморозков, риск заморозков по датам, число дней с заморозком по месяцам. На карте — температура в точках прогноза.', 'Нужен для выбора сроков сева теплолюбивых культур и сортов с подходящей скороспелостью, оценки риска для цветения и уборки.', 'Заморозок — минимальная суточная температура ниже 0 °C (ERA5, 10 лет); риск — доля лет с заморозком позже / раньше указанной даты. Карта: прогноз Open-Meteo на текущий момент по точкам внутри контура.'] },
         { id: 'c', keys: ['climate', 'gdd'], t: 'Климат и теплообеспеченность', i: 'chart-line', c: '#6366f1',
             info: ['Климатическая норма за последние 10 полных лет: температура и осадки по месяцам, суммы активных температур, период вегетации, ГТК и пригодность культур по теплу.', 'Показывает типичный ход тепла и влаги, риск засухи, помогает подобрать культуры и группы спелости.', 'Суточные данные ERA5 через Open-Meteo Archive (ячейка ≈ 10–25 км). Σ t > 5 и > 10 °C; период вегетации — по 5-суточному скользящему среднему; ГТК Селянинова = 10 · Σ осадков / Σ t за период с t > 10 °C.'] }
@@ -1267,50 +1263,6 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (tok !== seq) return;
         D.wx = d;
         WXG.forEach(function (g) { var el = document.getElementById('ppWx_' + g.id); if (el) el.innerHTML = '<div class="pp-wxg">' + g.keys.map(function (k) { return ppWx.render(k, d); }).join('') + '</div>'; });
-        wxMap('wfr', d.fc, 'frost'); wxMap('wnd', d.fc, 'wind');
-    }
-    // карта-слой по точкам прогноза: стрелки ветра (интерполяция по участку) либо температура в точках; рисуется картинкой-наложением, поэтому попадает и в PDF
-    function wxMap(key, fc, mode) {
-        var o = minis[key]; if (!o || !fc || !fc.pts) return;
-        var gj = o.gj, bb = turf.bbox(gj), R = Math.PI / 180, px0 = (bb[2] - bb[0]) * 0.12 || 0.002, py0 = (bb[3] - bb[1]) * 0.12 || 0.002;
-        var w = bb[0] - px0, e = bb[2] + px0, s = bb[1] - py0, n = bb[3] + py0, my = function (la) { return Math.log(Math.tan(Math.PI / 4 + la * R / 2)); };
-        var W = 900, H = Math.max(240, Math.min(1500, Math.round(W * (my(n) - my(s)) / ((e - w) * R))));
-        var cv = document.createElement('canvas'); cv.width = W; cv.height = H; var g = cv.getContext('2d');
-        var X = function (lo) { return (lo - w) / (e - w) * W; }, Y = function (la) { return (my(n) - my(la)) / (my(n) - my(s)) * H; };
-        var P = fc.pts.map(function (p, i) { return { x: p[0], y: p[1], t: fc.cur.t[i], w: fc.cur.w[i], d: fc.cur.wd ? fc.cur.wd[i] : null }; });
-        var leg = document.getElementById('ppLeg_' + key), dot = function (c, t) { return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px"><i style="width:10px;height:10px;border-radius:50%;background:' + c + ';display:inline-block"></i>' + t + '</span>'; };
-        g.lineCap = 'round'; g.lineJoin = 'round';
-        if (mode === 'wind') {
-            var okD = P.every(function (q) { return q.d != null && isFinite(q.d); }), sc = function (v) { return v < 3 ? '#7dd3fc' : v < 5 ? '#38bdf8' : v < 8 ? '#facc15' : '#f97316'; };
-            var at = function (x, y) {   // вектор ветра в точке: обратное расстояние по компонентам
-                var sw = 0, su = 0, sv = 0, sp = 0; P.forEach(function (q) { var k = 1 / (Math.pow(x - q.x, 2) + Math.pow(y - q.y, 2) + 1e-12), a = (q.d || 0) * R; sw += k; su += k * q.w * Math.sin(a); sv += k * q.w * Math.cos(a); sp += k * q.w; });
-                return { u: su / sw, v: sv / sw, w: sp / sw };
-            };
-            var pl = polysOf(gj), cells = [], N = 7, i, j;
-            for (i = 0; i < N; i++) for (j = 0; j < N; j++) { var x = w + (e - w) * (j + 0.5) / N, y = s + (n - s) * (i + 0.5) / N; if (inPolys(x, y, pl)) cells.push([x, y]); }
-            if (!cells.length) { var c0 = turf.pointOnFeature(gj).geometry.coordinates; cells.push([c0[0], c0[1]]); }
-            cells.forEach(function (c) {
-                var v = at(c[0], c[1]), ang = Math.atan2(v.u, v.v) + Math.PI, L = 46 + Math.min(v.w, 12) * 7, dx = Math.sin(ang), dy = -Math.cos(ang), cx = X(c[0]), cy = Y(c[1]);
-                if (!okD) { g.fillStyle = sc(v.w); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 14, 0, 7); g.fill(); g.stroke(); return; }
-                var ax = cx - dx * L / 2, ay = cy - dy * L / 2, bx = cx + dx * L / 2, by = cy + dy * L / 2, hx = -dy, hy = dx;
-                [['rgba(0,0,0,.6)', 11], [sc(v.w), 6]].forEach(function (z) {
-                    g.strokeStyle = z[0]; g.lineWidth = z[1]; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
-                    g.beginPath(); g.moveTo(bx - dx * 20 + hx * 13, by - dy * 20 + hy * 13); g.lineTo(bx, by); g.lineTo(bx - dx * 20 - hx * 13, by - dy * 20 - hy * 13); g.stroke();
-                });
-            });
-            var av = P.reduce(function (a, q) { return a + q.w; }, 0) / P.length;
-            if (leg) leg.innerHTML = '<div style="font-size:11px;color:#475569;line-height:1.7">' + dot('#7dd3fc', '< 3 м/с') + dot('#38bdf8', '3–5') + dot('#facc15', '5–8') + dot('#f97316', '≥ 8') + '</div><div style="font-size:11px;color:#64748b">Средняя скорость сейчас ' + nf(av, 1) + ' м/с' + (okD ? '. Стрелки показывают, куда дует ветер.' : '; направление источник не передал.') + '</div>';
-        } else {
-            var tc = function (t) { return t <= -2 ? '#1d4ed8' : t < 0 ? '#3b82f6' : t <= 3 ? '#38bdf8' : t <= 10 ? '#a3e635' : '#fb923c'; };
-            g.font = '700 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-            P.forEach(function (q) {
-                var cx = X(q.x), cy = Y(q.y), tx = nf(q.t, 1) + '°'; g.fillStyle = tc(q.t); g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = 5; g.beginPath(); g.arc(cx, cy, 44, 0, 7); g.fill(); g.stroke();
-                g.strokeStyle = 'rgba(15,23,42,.8)'; g.strokeText(tx, cx, cy); g.fillStyle = '#fff'; g.fillText(tx, cx, cy);
-            });
-            var mnT = Math.min.apply(null, fc.D.tmin);
-            if (leg) leg.innerHTML = '<div style="font-size:11px;color:#475569;line-height:1.7">' + dot('#1d4ed8', '≤ −2 °C') + dot('#3b82f6', '< 0') + dot('#38bdf8', '0…3 (риск)') + dot('#a3e635', '3…10') + dot('#fb923c', '> 10') + '</div><div style="font-size:11px;color:#64748b">Температура сейчас в точках прогноза; минимум прогноза за 7 дней — ' + nf(mnT, 1) + ' °C.</div>';
-        }
-        L.imageOverlay(cv.toDataURL('image/png'), [[s, w], [n, e]], { interactive: false }).addTo(o.map);
     }
     async function climRun(gj, tok) {
         var c = D.c, el = document.getElementById('ppClBody'), y1 = new Date().getFullYear() - 1, y0 = y1 - 9, yrs = 10, ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 25000), j, r;
@@ -1348,7 +1300,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             blk({
                 t: 'Индекс пригодности участка', i: 'gauge-high', id: 'ppScore', body: SPIN,
                 info: ['Сводная ориентировочная оценка пригодности участка для сельскохозяйственного использования по шести факторам, 0–100 баллов.', 'Позволяет сравнивать участки между собой и сразу видеть слабое место — фактор, который тянет оценку вниз.',
-                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Почва: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Вегетация (по снимку выбранной даты): среднее оценок NDVI (100 при ≥ 0,6, 0 при ≤ 0,1), NDMI (100 при ≥ 0,3, 0 при ≤ −0,2), NDWI как признака переувлажнения (100 при ≤ 0, 0 при ≥ 0,3), NBR (100 при ≥ 0,5, 0 при ≤ 0,1) и однородности NDVI (100 при вариации ≤ 10 %, 0 при ≥ 50 %); оценка зависит от сезона и облачности выбранной даты. Итог — среднее по доступным факторам.']
+                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Почва: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Вегетация (по снимку выбранной даты): среднее оценок NDVI (100 при ≥ 0,6, 0 при ≤ 0,1), NDMI (100 при ≥ 0,3, 0 при ≤ −0,2), NBR (100 при ≥ 0,5, 0 при ≤ 0,1) и однородности NDVI (100 при вариации ≤ 10 %, 0 при ≥ 50 %); оценка зависит от сезона и облачности выбранной даты. Итог — среднее по доступным факторам.']
             }));
     }
     function scores() {
@@ -1358,12 +1310,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (ce) so.push(100 * cl01(ce.mean / 30));
         if (k && k.gtk != null) cm.push(k.gtk <= 1.6 ? 100 * cl01(k.gtk / 1.1) : 100 * cl01(1 - (k.gtk - 1.6) / 1.5));
         if (k && k.ff != null) cm.push(100 * cl01((k.ff - 100) / 80));
-        var sv = [], sT = D.sat || {}, sf = function (q) { return sT[q] && sT[q].stats; }, n1 = sf('ndvi'), n2 = sf('ndmi'), n3 = sf('ndwi'), n4 = sf('nbr');   // вегетация по снимку выбранной даты
+        var sv = [], sT = D.sat || {}, sf = function (q) { return sT[q] && sT[q].stats; }, n1 = sf('ndvi'), n2 = sf('ndmi'), n4 = sf('nbr');   // вегетация по снимку выбранной даты
         if (n1) { sv.push(100 * cl01((n1.mean - 0.1) / 0.5)); sv.push(100 * (1 - cl01((n1.std / Math.max(0.05, Math.abs(n1.mean)) - 0.1) / 0.4))); }
         if (n2) sv.push(100 * cl01((n2.mean + 0.2) / 0.5));
-        if (n3) sv.push(100 * (1 - cl01(n3.mean / 0.3)));
         if (n4) sv.push(100 * cl01((n4.mean - 0.1) / 0.4));
-        var svb = sv.length ? [n1 ? 'NDVI ' + nf(n1.mean, 2) : '', n2 ? 'NDMI ' + nf(n2.mean, 2) : '', n3 ? 'NDWI ' + nf(n3.mean, 2) : '', n4 ? 'NBR ' + nf(n4.mean, 2) : ''].filter(Boolean).join(', ') + (D.satSel ? ' · ' + satDay(D.satSel.day) : '') : 'нет данных — выберите дату снимка';
+        var svb = sv.length ? [n1 ? 'NDVI ' + nf(n1.mean, 2) : '', n2 ? 'NDMI ' + nf(n2.mean, 2) : '', n4 ? 'NBR ' + nf(n4.mean, 2) : ''].filter(Boolean).join(', ') + (D.satSel ? ' · ' + satDay(D.satSel.day) : '') : 'нет данных — выберите дату снимка';
         return [
             { l: 'Рельеф', v: e && e.ms != null ? 100 * (1 - cl01((e.ms - 1) / 11)) : null, b: e && e.ms != null ? 'средний уклон ' + nf(e.ms, 1) + '°' : 'нет данных' },
             { l: 'Почва', v: so.length ? avg(so) : null, b: ph || oc || ce ? [ph ? 'pH ' + nf(ph.mean, 1) : '', oc ? 'C ' + nf(oc.mean, 1) + ' г/кг' : '', ce ? 'CEC ' + nf(ce.mean, 1) : ''].filter(Boolean).join(', ') : 'нет данных' },
@@ -1418,7 +1369,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye-slash"></i> Скрыть все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec().replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"') + weatherSec() + sumSec();
         document.getElementById('ppKpi').innerHTML = kpiHtml(); packInit();
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '');
-        var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика', wfr: 'Температура в точках прогноза', wnd: 'Ветер' };
+        var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
         SOILS.forEach(function (p) { T['soil_' + p] = 'Почва'; });
         Object.keys(T).forEach(function (k) { mini(k, gj, T[k]); });
         mk3d('m3a', gj, null);

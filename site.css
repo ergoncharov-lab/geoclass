@@ -789,7 +789,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .hm-bar { height: 9px; border-radius: 5px; background: linear-gradient(90deg, #2b83ba, #abdda4, #ffffbf, #fdae61, #d7191c); }
 .hm-lab { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; font-weight: 600; color: #475569; }
 
-/* ===== SENTINEL-2: разделы боковой панели (Снимки / NDVI / NDWI / NDMI / NBR) ===== */
+/* ===== SENTINEL-2: разделы боковой панели (Снимки / NDVI / NDMI / NBR / Сравнение снимков) ===== */
 #bottomPanel .sn-hd { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 #bottomPanel .sn-hd-row { display: flex; align-items: center; gap: 12px; }
 #bottomPanel .sn-hd-row > i { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 13px; background: #fce7f3; color: #db2777; display: flex; align-items: center; justify-content: center; font-size: 18px; }
@@ -802,10 +802,12 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 #bottomPanel .sn-tools .an-hint.warn { color: #b45309; background: #fffbeb; border-radius: 10px; padding: 8px 10px; }
 #bottomPanel .sn-tools .an-hint b { color: var(--tp-ink); }
 
-/* переключатель NDWI / MNDWI */
+/* переключатель варианта слоя */
 .sn-seg { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; background: var(--tp-bg, #f1f5f9); border-radius: 14px; }
 .sn-seg button { flex: 1; height: 34px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--tp-mut, #64748b); cursor: pointer; }
 .sn-seg button.on { background: #fff; color: var(--tp-ink, #0f172a); box-shadow: 0 1px 4px rgba(15,23,42,.14); }
+.sn-seg.sn-seg-w { flex-wrap: wrap; }
+.sn-seg.sn-seg-w button { flex: 1 1 30%; padding: 0 8px; }
 
 /* календарь */
 .sn-month { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1673,6 +1675,8 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 #ppBody .pp-solar .pp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; }
 #ppBody .pp-solar .pp-tiles .pp-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 #ppBody .pp-solar .pp-ch { margin-top: 0; }
+/* «Солнечный режим» стоит в левой колонке под ветром, на ширину колонки: плитки и график — друг под другом */
+#ppBody .pp-colw .pp-solar { grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 1100px) {
     #ppBody .pp-cols, #ppBody .pp-solar { grid-template-columns: minmax(0, 1fr); }
     #ppBody .pp-cols .pp-colw .pp-map { flex: none; aspect-ratio: 16 / 10; min-height: 0; }

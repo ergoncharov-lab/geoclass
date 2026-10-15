@@ -71,7 +71,7 @@
     </aside>
     <div class="s-tiles">
       <div class="s-tile"><i class="fas fa-satellite"></i><b>Мониторинг посевов</b><span>Снимки Sentinel-2 и временные ряды NDVI</span></div>
-      <div class="s-tile"><i class="fas fa-seedling"></i><b>Почвы и влага</b><span>pH, органический углерод, NDMI, NDWI</span></div>
+      <div class="s-tile"><i class="fas fa-seedling"></i><b>Почвы и влага</b><span>pH, органический углерод, NDMI</span></div>
       <div class="s-tile"><i class="fas fa-mountain-sun"></i><b>Рельеф и логистика</b><span>Уклоны, профили, дороги и водоёмы рядом</span></div>
       <div class="s-tile"><i class="fas fa-file-lines"></i><b>Паспорт участка</b><span>Пашня, луга, лес — площади, графики и отчёт</span></div>
     </div>
@@ -215,7 +215,7 @@
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="dates" style="--c:#ec4899" title="Снимки&#10;Снимки Sentinel-2 (10 м) по датам: естественные и ложные цвета (CIR), календарь, превью с облачностью, рисование области и скачивание цветного GeoTIFF в максимальном разрешении."><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
                         <button type="button" class="sp-tile" data-bp="ndvi" style="--c:#22c55e" title="NDVI — вегетационный индекс&#10;Показывает густоту и состояние растительности: низкие значения — вода, голая почва и застройка, высокие — густые посевы и лес. Есть «Контрастный NDVI» с настраиваемой шкалой и калькулятор статистики по полигону. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-leaf"></i><span>NDVI</span></button>
-                        <button type="button" class="sp-tile" data-bp="ndwi" style="--c:#06b6d4" title="NDWI — индекс воды&#10;Выделяет водные объекты и переувлажнённые участки: высокие значения соответствуют открытой воде. Есть вариант MNDWI. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-droplet"></i><span>NDWI</span></button>
+                        <button type="button" class="sp-tile" data-bp="change" style="--c:#6366f1" title="Сравнение снимков&#10;Два снимка Sentinel-2 на разные даты рядом: карта делится на две части, внизу под каждым — дата, календарь и статистика индекса. Область — рисование или импорт фигуры (KML, GeoJSON, Excel, XML Росреестра)."><i class="fas fa-code-compare"></i><span>Сравнение снимков</span></button>
                         <button type="button" class="sp-tile" data-bp="ndmi" style="--c:#0284c7" title="NDMI — влажность растительности&#10;Оценивает содержание влаги в растениях: помогает заметить засуху и водный стресс посевов. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
                         <button type="button" class="sp-tile" data-bp="nbr" style="--c:#f59e0b" title="NBR — индекс гарей&#10;Показывает гари и повреждение растительности; сравнение «до и после» помогает оценить площадь и тяжесть пожара. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-fire"></i><span>NBR</span></button>
                     </div>
@@ -260,7 +260,7 @@
                 </div>
             </div>
             <div class="tab-art" data-art="main">
-                <div class="tab-art-txt"><b>Главная — меню разделов</b><p>Быстрый вход во все возможности карты. Выберите раздел, чтобы открыть его инструменты.</p><ul><li>Главное — отчёты, справка, источники, новости, поддержка</li><li>Анализ — участок, рельеф, логистика, почвы</li><li>Снимки — даты Sentinel-2 и индексы NDVI, NDWI, NDMI, NBR</li><li>Инструменты — рисование, измерения, 3D, экспорт</li><li>Слои, Каталог данных, Погода — данные и условия на участке</li></ul></div>
+                <div class="tab-art-txt"><b>Главная — меню разделов</b><p>Быстрый вход во все возможности карты. Выберите раздел, чтобы открыть его инструменты.</p><ul><li>Главное — отчёты, справка, источники, новости, поддержка</li><li>Анализ — участок, рельеф, логистика, почвы</li><li>Снимки — даты Sentinel-2, индексы NDVI, NDMI, NBR и сравнение снимков</li><li>Инструменты — рисование, измерения, 3D, экспорт</li><li>Слои, Каталог данных, Погода — данные и условия на участке</li></ul></div>
             </div>
         </div><!-- /tab-pane main -->
 
@@ -394,7 +394,7 @@
                 </details>
                 <details class="ct-grp"><summary><i class="fas fa-map"></i> Готовые карты</summary>
                     <div class="ct-item"><span><b>Рельеф и уклоны</b><small>Карта высот, уклонов, экспозиции</small></span><em>— ₽</em></div>
-                    <div class="ct-item"><span><b>NDVI / NDWI / NDMI</b><small>Индексы за выбранный период</small></span><em>— ₽</em></div>
+                    <div class="ct-item"><span><b>NDVI / NDMI</b><small>Индексы за выбранный период</small></span><em>— ₽</em></div>
                     <div class="ct-item"><span><b>Классификация земель</b><small>Пашня, луга, лес, вода, застройка</small></span><em>— ₽</em></div>
                     <div class="ct-item"><span><b>Почвенные карты</b><small>pH, органический углерод, гранулометрия</small></span><em>— ₽</em></div>
                 </details>
@@ -505,10 +505,9 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="windwork" title="Ветер и окна работ"><i class="fas fa-wind"></i><span>Ветер и окна работ</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="dates" title="Снимки Sentinel-2: выбор даты, область, скачивание GeoTIFF"><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
-              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — индекс водных объектов"><i class="fas fa-droplet"></i><span>NDWI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
-              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Сравнение снимков — два снимка Sentinel-2 на разные даты"><i class="fas fa-code-compare"></i><span>Сравнение снимков</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvidyn" title="Динамика NDVI за сезон: от посева до уборки урожая"><i class="fas fa-chart-line"></i><span>Динамика NDVI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
@@ -984,7 +983,7 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="ndvidyn" role="tabpanel"></div>
 
-          <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDWI / NDMI / NBR): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
+          <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDMI / NBR / Сравнение снимков): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
           <!-- ВКЛАДКА «СВОИ СЛОИ»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON (сохраняются в localStorage) -->
           <div class="bottom-panel-body bp-pane bp-draw bp-ul" data-bp-pane="userlayers" role="tabpanel">
               <div class="dw-block ul-form">
@@ -1025,9 +1024,6 @@
           <div class="bottom-panel-body bp-pane" data-bp-pane="ndvi" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-leaf"></i><div><p>NDVI</p><span>Загрузка раздела…</span></div></div>
           </div>
-          <div class="bottom-panel-body bp-pane" data-bp-pane="ndwi" role="tabpanel">
-              <div class="bp-empty"><i class="fas fa-droplet"></i><div><p>NDWI</p><span>Загрузка раздела…</span></div></div>
-          </div>
           <div class="bottom-panel-body bp-pane" data-bp-pane="ndmi" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-cloud-rain"></i><div><p>NDMI</p><span>Загрузка раздела…</span></div></div>
           </div>
@@ -1035,7 +1031,7 @@
               <div class="bp-empty"><i class="fas fa-fire"></i><div><p>NBR</p><span>Загрузка раздела…</span></div></div>
           </div>
           <div class="bottom-panel-body bp-pane" data-bp-pane="change" role="tabpanel">
-              <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Изменения</p><span>Сравнение снимков на две даты — в разработке</span></div></div>
+              <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Сравнение снимков</p><span>Загрузка раздела…</span></div></div>
           </div>
           <div class="bottom-panel-body bp-pane" data-bp-pane="catalog" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-folder-open"></i><div><p>Каталог</p><span>Каталог данных — в разработке</span></div></div>
@@ -1259,14 +1255,6 @@
                             <span>NDVI</span>
                             <div class="layer-thumb" data-thumb="ndvi"></div>
                         </div>
-                        <div class="layer-chip" data-layer="ndwi" title="NDWI — индекс водных объектов и влажности: выделяет воду и переувлажнённые участки">
-                            <span>NDWI</span>
-                            <div class="layer-thumb" data-thumb="ndwi"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="modified_ndwi" title="MNDWI — модифицированный индекс воды: чётче отделяет воду от застройки и почвы">
-                            <span>MNDWI</span>
-                            <div class="layer-thumb" data-thumb="modified_ndwi"></div>
-                        </div>
                         <div class="layer-chip" data-layer="soil_ph" title="Кислотность почвы (pH в воде), слой 0–5 см — ISRIC SoilGrids 250 м">
                             <span>pH почв</span>
                             <div class="layer-thumb" data-thumb="soil_ph"></div>
@@ -1463,7 +1451,7 @@
       <div class="s-cat-card s-glass" data-cat="ana">
         <div class="s-cat-top"><span class="s-cat-ico"><i class="fas fa-chart-line"></i></span><div><h3>Аналитические накопительные данные</h3><p>Показатели, накопленные за период, и готовые карты</p></div></div>
         <div class="s-cat-opts">
-          <button type="button" class="s-opt" data-opt="ana-ndvi"><i class="fas fa-check"></i><span><b>NDVI · NDWI · NDMI</b><small>временные ряды за сезон</small></span><em>— ₽</em></button>
+          <button type="button" class="s-opt" data-opt="ana-ndvi"><i class="fas fa-check"></i><span><b>NDVI · NDMI</b><small>временные ряды за сезон</small></span><em>— ₽</em></button>
           <button type="button" class="s-opt" data-opt="ana-land"><i class="fas fa-check"></i><span><b>Классификация земель</b><small>пашня, луга, лес, вода</small></span><em>— ₽</em></button>
           <button type="button" class="s-opt" data-opt="ana-relief"><i class="fas fa-check"></i><span><b>Рельеф и уклоны</b><small>высоты, уклоны, экспозиция</small></span><em>— ₽</em></button>
           <button type="button" class="s-opt" data-opt="ana-soil"><i class="fas fa-check"></i><span><b>Почвенные карты</b><small>pH, органический углерод</small></span><em>— ₽</em></button>
@@ -1494,7 +1482,7 @@
       <div class="s-card"><div class="s-ico"><i class="fas fa-mountain"></i></div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия полигона, уклоны.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-cube"></i></div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-route"></i></div><h3>Логистика</h3><p>Буфер вокруг участка, дороги и водоёмы OSM, расстояния до ближайших.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-chart-area"></i></div><h3>Аналитические слои</h3><p>Land Cover, NDVI, NDWI, MNDWI и почвенные карты.</p></div>
+      <div class="s-card"><div class="s-ico"><i class="fas fa-chart-area"></i></div><h3>Аналитические слои</h3><p>Land Cover, NDVI и почвенные карты.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней по экстенту карты.</p></div>
       <div class="s-card"><div class="s-ico"><i class="fas fa-file-export"></i></div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с пространственной привязкой.</p></div>
     </div>
