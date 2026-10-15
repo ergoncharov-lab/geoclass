@@ -5018,6 +5018,10 @@ function rrText(el, path) {
     path.split('/').forEach(n => { cur = cur.flatMap(e => rrKids(e, n)); });
     return cur[0] ? cur[0].textContent.trim() : '';
 }
+function rrFirst(el, paths) {
+    for (const p of paths) { const v = rrText(el, p); if (v) return v; }
+    return '';
+}
 function rrNum(s) {
     const v = parseFloat(String(s).replace(',', '.'));
     return isNaN(v) ? null : v;
@@ -5110,7 +5114,21 @@ function rrXmlToGeoJSON(xmlText) {
             const a = rrText(r, 'restrictions_encumbrances_data/period/period_info/start_date');
             const b = rrText(r, 'restrictions_encumbrances_data/period/period_info/end_date');
             return t ? t + (a || b ? ' (' + (a || '…') + ' — ' + (b || '…') + ')' : '') : '';
-        }).filter(Boolean)
+        }).filter(Boolean),
+        quarter: rrFirst(rec, ['object/common_data/quarter_cad_number', 'cad_links/quarter_cad_number']),
+        reg_date: rrFirst(rec, ['record_info/registration_date', 'object/common_data/registration_date']),
+        use_cls: rrText(rec, 'params/permitted_use/permitted_use_established/land_use/value'),
+        cost_date: rrFirst(rec, ['cost/determination_date', 'cost/date_valuation']),
+        cost_reg: rrFirst(rec, ['cost/registration_date', 'cost/date_entering']),
+        organ: rrText(root, 'details_statement/group_top_requisites/organ_registr_rights'),
+        parent_cad: rrFirst(rec, ['cad_links/parent_cad_number/cad_number', 'cad_links/parent_cad_number']),
+        prev_cad: rrAll(rec, 'previous_cad_numbers').flatMap(e => rrAll(e, 'cad_number')).map(e => e.textContent.trim()).filter(Boolean),
+        included: rrAll(rec, 'included_objects').flatMap(e => rrAll(e, 'cad_number')).map(e => e.textContent.trim()).filter(Boolean),
+        rights: rrAll(root, 'right_record').map(r => {   // только вид, номер и дата права — без сведений о правообладателях
+            const t = rrText(r, 'right_data/right_type/value'), n = rrText(r, 'right_data/right_number'), d = rrFirst(r, ['record_info/registration_date', 'right_data/right_record_info/registration_date']);
+            return t ? t + (n ? ' № ' + n : '') + (d ? ' от ' + d : '') : '';
+        }).filter(Boolean),
+        special: rrText(rec, 'special_notes')
     };
 
     // ----- геометрия: все entity_spatial, внутри — кольца spatial_element -----
@@ -12672,9 +12690,9 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
                 + blk('Риск весенних заморозков', meters(sp), 'Доля лет, когда заморозок был после указанной даты (в 10-летнем ряду). Чем выше, тем позже безопасно высевать теплолюбивые культуры.')
                 + blk('Риск осенних заморозков', meters(au), 'Доля лет, когда первый осенний заморозок наступил до указанной даты — риск для поздних культур перед уборкой.');
         },
-        windwork: (fc, K) => {
+        windwork: (fc, K, rg, pp) => {
             let mi = 0; K.rose.forEach((v, i) => { if (v > K.rose[mi]) mi = i; });
-            return waBlk(fc) + blk('Ветер (ERA5, ' + K.y0 + '–' + K.y1 + ')', grid([row('Средний макс. за сутки', f(K.wMean) + ' м/с'), row('Дней с ветром ≥ 10 м/с', f(K.wHi, 0) + ' в год'), row('Преобладающее направление', 'с ' + DIR[mi] + ' · ' + Math.round(K.rose[mi] / (K.rose.reduce((a, v) => a + v, 0) || 1) * 100) + '% дней')]))
+            return (pp ? '' : waBlk(fc)) + blk('Ветер (ERA5, ' + K.y0 + '–' + K.y1 + ')', grid([row('Средний макс. за сутки', f(K.wMean) + ' м/с'), row('Дней с ветром ≥ 10 м/с', f(K.wHi, 0) + ' в год'), row('Преобладающее направление', 'с ' + DIR[mi] + ' · ' + Math.round(K.rose[mi] / (K.rose.reduce((a, v) => a + v, 0) || 1) * 100) + '% дней')]))
                 + blk('Роза ветров', '<div style="max-width:260px;margin:0 auto">' + roseSvg(K) + '</div>', 'Длина лепестка — доля дней с ветром из этого направления; цвет: голубой — слабый (< 5 м/с), синий — умеренный, оранжевый — сильный (≥ 8 м/с в среднем за сутки). Нужна для выбора направления лесополос и сноса при опрыскивании.')
                 + blk('Окна для работ на 7 дней', windows(fc.D), 'Опрыскивание — ветер ≤ 5 м/с, без осадков, 8…27 °C. Полевые работы — осадки < 1 мм и вероятность ≤ 40 %. Заморозок — t мин < 0 °C. Ориентировочно, по прогнозу Open-Meteo.');
         }
@@ -12743,6 +12761,17 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (tab) tab.addEventListener('click', () => { st.cur = k; setTimeout(() => { if (!st.done[k]) run(k); else if (k === 'windwork' && !WA.on && st.wfc) { const c = p.querySelector('[data-wx2="anim"]'); if (!c || c.checked) waStart(st.wfc); } }, 30); });
         p.addEventListener('change', e => { if (e.target.matches('[data-wx2="anim"]')) { if (e.target.checked) waStart(st.wfc); else waStop(); } });
     });
+    // мост для паспорта участка: те же данные и разделы, что на вкладках погоды (без анимации стрелок на основной карте)
+    window.ppWx = {
+        async get(gj) {
+            const g0 = st.gj, c0 = st.ctl; let rg;
+            st.gj = gj; try { rg = region(); } finally { st.gj = g0; }
+            const ctl = new AbortController(); st.ctl = ctl;
+            try { const fc = await getFc(rg.pts), cl = await getCl(rg.c); return { fc: fc, cl: cl, rg: rg }; }
+            finally { if (st.ctl === ctl) st.ctl = c0; }
+        },
+        render(k, d) { return RENDER[k](d.fc, d.cl, d.rg, true); }
+    };
     info();
     document.addEventListener('click', e => {
         const t = e.target.closest && e.target.closest('.bp-tab, .panel-tab');

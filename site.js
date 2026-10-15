@@ -317,7 +317,7 @@
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
         bp: { userlayers: 'Свои слои', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
-              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', change: 'Изменения', catalog: 'Каталог данных' }
+              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndwi: 'NDWI', ndmi: 'NDMI', nbr: 'NBR', ndvidyn: 'Динамика NDVI', change: 'Изменения', catalog: 'Каталог данных' }
     };
     function setView(v, title) {
         panel.setAttribute('data-view', v);

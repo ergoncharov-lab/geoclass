@@ -17,20 +17,41 @@ NSPD_HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
             'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8', 'Accept-Encoding': 'identity'}
 
 
-def make_opener():
+def make_opener(px=None):
     """Исходящие запросы без проверки сертификата (НСПД использует российский корневой сертификат).
     Если НСПД закрыт для вашего IP (зарубежный адрес/VPN) — задайте прокси в РФ: переменная окружения GEO_PROXY=http://host:port"""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     handlers = [urllib.request.HTTPSHandler(context=ctx)]
-    px = os.environ.get('GEO_PROXY')
+    px = px or os.environ.get('GEO_PROXY')
     if px:
         handlers.append(urllib.request.ProxyHandler({'http': px, 'https': px}))
     return urllib.request.build_opener(*handlers)
 
 
 OPENER = make_opener()
+
+
+def win_proxy_for(url):
+    """Прокси, который Windows выбирает для адреса (учитывает PAC-скрипт из настроек системы, как это делает браузер).
+    Python сам PAC не читает, поэтому спрашиваем у системы через PowerShell. Вне Windows возвращает None."""
+    if os.name != 'nt':
+        return None
+    try:
+        import subprocess
+        cmd = "$p=[System.Net.WebRequest]::GetSystemWebProxy(); $u=[uri]'%s'; if(-not $p.IsBypassed($u)){ $p.GetProxy($u).AbsoluteUri }" % url
+        out = subprocess.run(['powershell', '-NoProfile', '-Command', cmd], capture_output=True, text=True, timeout=25, creationflags=0x08000000).stdout.strip()
+        if out and out.rstrip('/') != url.rstrip('/'):
+            return out.rstrip('/')
+    except Exception as e:
+        print('proxy autodetect error:', e)
+    return None
+
+
+# НСПД: прокси из GEO_PROXY, а если не задан — тот, что система (PAC) выбирает для nspd.gov.ru; остальные запросы идут как раньше
+NSPD_PROXY = os.environ.get('GEO_PROXY') or win_proxy_for('https://nspd.gov.ru')
+NSPD_OPENER = make_opener(NSPD_PROXY)
 
 
 def upstream_get(path, headers):
@@ -149,7 +170,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if is_nspd:    # НСПД отдаёт тайлы только «браузерным» запросам с их сайта
                     hdr.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8'})
                 req = urllib.request.Request(u, headers=hdr)
-                with OPENER.open(req, timeout=60) as r:
+                with (NSPD_OPENER if is_nspd else OPENER).open(req, timeout=20 if is_nspd else 60) as r:
                     data = r.read()
                     status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
             except Exception as e:
@@ -157,7 +178,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if stale:    # НСПД недоступен — отдаём устаревшую копию из кэша, лучше чем ничего
                     status, headers, data = stale
                 else:
-                    self.send_error(502, 'upstream unreachable: %s' % e)
+                    self.send_error(502, 'upstream unreachable', str(e))
                     return
             else:
                 ctype = headers.get('content-type', '')
@@ -179,7 +200,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         u = ('https://nspd.gov.ru/api/aeggis/v3/36049/wms?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=&TRANSPARENT=true'
              '&LAYERS=36049&WIDTH=256&HEIGHT=256&CRS=EPSG:3857&BBOX=4187000,7508000,4188000,7509000')
         try:
-            with OPENER.open(urllib.request.Request(u, headers=NSPD_HDR), timeout=25) as r:
+            with NSPD_OPENER.open(urllib.request.Request(u, headers=NSPD_HDR), timeout=25) as r:
                 data = r.read()
                 res.update(status=r.status, type=r.headers.get('Content-Type', ''), bytes=len(data))
                 if not res['type'].startswith('image/'):
@@ -189,7 +210,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             res.update(error=str(e))
         try:
-            with OPENER.open(urllib.request.Request('https://ipwho.is/?fields=ip,country_code', headers={'User-Agent': 'geoclass-proxy'}), timeout=8) as r:
+            with NSPD_OPENER.open(urllib.request.Request('https://ipwho.is/?fields=ip,country_code', headers={'User-Agent': 'geoclass-proxy'}), timeout=8) as r:
                 res['ip'] = json.loads(r.read().decode('utf-8'))
         except Exception:
             pass
@@ -220,7 +241,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
             except Exception as e:
                 print('ISRIC error:', e)
-                self.send_error(502, 'ISRIC unreachable: %s' % e)
+                self.send_error(502, 'ISRIC unreachable', str(e))
                 return
             finally:
                 conn.close()
@@ -259,7 +280,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 status, headers, data = upstream_get('/' + urllib.parse.quote(key), req_headers)
             except Exception as e:
                 print('S3 error:', key, e)
-                self.send_error(502, 'S3 unreachable: %s' % e)
+                self.send_error(502, 'S3 unreachable', str(e))
                 return
             if status in (200, 206):
                 cache_put(key, rng, status, headers, data)
@@ -281,4 +302,5 @@ if __name__ == '__main__':
     threading.Thread(target=cache_prune, daemon=True).start()
     print('Сайт: http://localhost:%d   (Ctrl+C — остановить)' % PORT)
     print('Кэш снимков: %s' % CACHE_DIR)
+    print('Прокси для НСПД: %s' % (NSPD_PROXY or 'нет (напрямую)'))
     http.server.ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()

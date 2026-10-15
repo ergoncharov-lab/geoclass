@@ -207,6 +207,7 @@
                         <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
                         <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
                         <button type="button" class="sp-tile" data-bp="chem" style="--c:#a855f7" title="Почвенный анализ&#10;Почвенные показатели (pH, углерод, азот, глина, песок и др.) по нарисованной фигуре: статистика и зоны на карте. Данные SoilGrids 250 м."><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
+                        <button type="button" class="sp-tile" data-bp="ndvidyn" style="--c:#16a34a" title="Динамика NDVI&#10;Ход NDVI по участку за сезон от посева до уборки: график с коридором P10–P90, сравнение с прошлым годом, пик, старт и спад вегетации, просадки."><i class="fas fa-chart-line"></i><span>Динамика NDVI</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="images">
@@ -508,6 +509,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Изменения — сравнение снимков на две даты"><i class="fas fa-code-compare"></i><span>Изменения</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvidyn" title="Динамика NDVI за сезон: от посева до уборки урожая"><i class="fas fa-chart-line"></i><span>Динамика NDVI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="cadastre" title="Кадастр: слой НСПД"><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
@@ -980,6 +982,7 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="gdd" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="frost" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="ndvidyn" role="tabpanel"></div>
 
           <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDWI / NDMI / NBR): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
           <!-- ВКЛАДКА «СВОИ СЛОИ»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON (сохраняются в localStorage) -->
@@ -1006,7 +1009,7 @@
               <div class="dw-block">
                   <div class="dw-title">Поиск по кадастровому номеру</div>
                   <div class="dw-row"><input type="text" id="cadQuery" class="cad-in" placeholder="Например: 77:05:0001005:19"><button class="dw-act" id="cadFind" type="button" title="Найти объект в НСПД"><i class="fas fa-magnifying-glass"></i><span>Найти</span></button></div>
-                  <div class="m3-hint">Источник: НСПД (nspd.gov.ru). Клик по объекту на карте выделяет его цветом и показывает сведения. Границы — для ознакомления, не заменяют выписку ЕГРН.</div>
+                  <div class="m3-hint">Источник: НСПД (nspd.gov.ru). Клик по объекту на карте выделяет его цветом и показывает сведения; Ctrl+клик — выбрать несколько объектов. Границы — для ознакомления, не заменяют выписку ЕГРН.</div>
               </div>
               <div class="dw-block">
                   <div class="dw-title">Кадастровая карта НСПД</div>

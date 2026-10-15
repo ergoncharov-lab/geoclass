@@ -354,7 +354,7 @@
 /* Кадастр НСПД: слои (кварталы, участки, ОКС) в родных цветах НСПД, подсветка выбранного объекта цветом,
    ключевые сведения по-русски в боковой панели, поиск по кадастровому номеру.
    Все запросы к НСПД идут через локальный прокси serve_site.py (/ucache) — плитки и ответы кэшируются на диске.
-   Выбор слоёв хранится в localStorage. */
+   Какие слои включены, не запоминается (при каждом открытии сайта все слои выключены); в localStorage хранятся только правки ID и добавленные слои. */
 (function () {
     'use strict';
     var $ = function (id) { return document.getElementById(id); };
@@ -370,7 +370,8 @@
     ];
     // ключевые атрибуты: [подпись, [возможные поля НСПД], тип форматирования]
     var FIELDS = [
-        ['Наименование', ['name'], 's'],
+        ['Наименование', ['name', 'name_by_doc'], 's'],
+        ['Вид зоны', ['type_zone', 'zone_type', 'type_boundary_value'], 's'],
         ['Вид объекта', ['land_record_type', 'build_record_type_value', 'object_type'], 's'],
         ['Назначение', ['purpose', 'building_purpose'], 's'],
         ['Адрес', ['readable_address', 'address'], 's'],
@@ -393,8 +394,8 @@
     var SKIP = /^(coordinates|crs|bbox|style|interactionId|geom_data_id|systemInfo)$/;
     var ls = function (k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { /* хранилище недоступно */ } return null; };
     var st = { on: {}, ids: {} };
-    try { var sv = JSON.parse(ls('gc_cad_state') || '{}'); if (sv && typeof sv === 'object') { st.on = sv.on || {}; st.ids = sv.v === 2 ? (sv.ids || {}) : {}; } } catch (e) { /* по умолчанию */ }
-    var save = function () { ls('gc_cad_state', JSON.stringify({ v: 2, on: st.on, ids: st.ids })); };
+    try { var sv = JSON.parse(ls('gc_cad_state') || '{}'); if (sv && typeof sv === 'object') { st.ids = sv.v === 2 ? (sv.ids || {}) : {}; } } catch (e) { /* по умолчанию */ }
+    var save = function () { ls('gc_cad_state', JSON.stringify({ v: 2, ids: st.ids })); };
     var nid = function (c) { return st.ids[c.id] || c.nspd; };
     var statusEl = $('cadStatus'), say = function (t) { statusEl.textContent = t; };
     var proxyP = fetch('/s3/ping').then(function (r) { return r.headers.get('X-GeoClass-Proxy') === '1'; }).catch(function () { return false; });
@@ -404,13 +405,23 @@
     var r3 = function (n) { return Math.round(n * 1000) / 1000; };
     var byId = function (id) { return LAYERS.filter(function (c) { return c.id === id; })[0]; };
     var rgbs = function (c) { return 'rgb(' + c.join(',') + ')'; };
+    // слои, добавленные по ID (например ЗОУИТ): список хранится в localStorage, включённость — нет
+    var CUS_COL = [[220, 38, 38], [13, 148, 136], [219, 39, 119], [101, 163, 13], [234, 88, 12], [79, 70, 229]];
+    function addCustom(o) {
+        if (!o || !/^\d+$/.test(String(o.id)) || byId('u' + o.id)) return null;
+        var c = { id: 'u' + o.id, nspd: String(o.id), name: String(o.n || ('Слой ' + o.id)).slice(0, 60), group: 'Слои НСПД, добавленные по ID', rgb: CUS_COL[LAYERS.length % CUS_COL.length], minZoom: Math.min(19, Math.max(3, +o.z || 12)), custom: true };
+        LAYERS.push(c);
+        return c;
+    }
+    var saveCustom = function () { ls('gc_cad_custom', JSON.stringify(LAYERS.filter(function (c) { return c.custom; }).map(function (c) { return { id: c.nspd, n: c.name, z: c.minZoom }; }))); };
+    try { JSON.parse(ls('gc_cad_custom') || '[]').forEach(addCustom); } catch (e) { /* список повреждён — игнорируем */ }
 
     // ---- дерево слоёв ----
     function renderTree() {
         var html = '', last = '';
         LAYERS.forEach(function (c) {
             if (c.group !== last) { last = c.group; html += '<div class="cad-grp"><i class="fas fa-folder-open"></i> ' + esc(c.group) + '</div>'; }
-            html += '<label class="cad-it"><input type="checkbox" data-id="' + c.id + '"' + (st.on[c.id] ? ' checked' : '') + '><span class="cad-sw" style="background:' + rgbs(c.rgb) + '" title="Цвет выделения объекта на карте"></span><span class="cad-nm">' + esc(c.name) + '</span><small>z' + c.minZoom + '+</small><span class="cad-id" data-id="' + c.id + '" title="Изменить ID слоя НСПД">' + esc(nid(c)) + '</span><button type="button" class="cad-zm" data-id="' + c.id + '" title="Приблизить карту до масштаба z' + c.minZoom + ', с которого виден слой"><i class="fas fa-magnifying-glass-plus"></i></button></label>';
+            html += '<label class="cad-it"><input type="checkbox" data-id="' + c.id + '"' + (st.on[c.id] ? ' checked' : '') + '><span class="cad-sw" style="background:' + rgbs(c.rgb) + '" title="Цвет выделения объекта на карте"></span><span class="cad-nm">' + esc(c.name) + '</span><small>z' + c.minZoom + '+</small><span class="cad-id" data-id="' + c.id + '" title="Изменить ID слоя НСПД">' + esc(nid(c)) + '</span>' + (c.custom ? '<button type="button" class="cad-rmv" data-id="' + c.id + '" title="Убрать слой из списка"><i class="fas fa-xmark"></i></button>' : '') + '<button type="button" class="cad-zm" data-id="' + c.id + '" title="Приблизить карту до масштаба z' + c.minZoom + ', с которого виден слой"><i class="fas fa-magnifying-glass-plus"></i></button></label>';
         });
         tree.innerHTML = html;
     }
@@ -436,7 +447,13 @@
                 live[c.id].on('tileerror', function (e) {
                     var t = e.tile;
                     if (t && !t._gcRetry) { t._gcRetry = 1; setTimeout(function () { try { t.src = e.tile.src; } catch (x) { /* плитка уже снята */ } }, 1500); return; }   // одна повторная попытка
-                    if (++errs === 4) say('НСПД не отдаёт плитки: проверьте интернет и доступ к НСПД из РФ (при необходимости задайте прокси GEO_PROXY и перезапустите serve_site.py).');
+                    if (++errs === 4) {      // причина — от самого прокси serve_site.py (то же, что http://localhost:8000/nspdcheck)
+                        say('НСПД не отдаёт плитки. Выясняю причину…');
+                        fetch('/nspdcheck').then(function (r) { return r.json(); }).then(function (d) {
+                            var cc = d.ip && d.ip.country_code ? ' IP: ' + d.ip.ip + ' (' + d.ip.country_code + ').' : '';
+                            say('НСПД не отдаёт плитки: ' + (d.error || ('ответ ' + d.status + (d.type ? ', ' + d.type : ''))) + '.' + cc + ' Если на компьютере корпоративный прокси — задайте GEO_PROXY (см. консоль serve_site.py).');
+                        }).catch(function () { say('НСПД не отдаёт плитки, а диагностика недоступна: проверьте, что serve_site.py запущен (python serve_site.py).'); });
+                    }
                 });
                 live[c.id].on('tileload', function () { errs = 0; });
             }
@@ -448,11 +465,19 @@
         var act = active(), z = map.getZoom();
         if (!act.length) { say('Отметьте слой в списке. Клик по объекту на карте покажет его сведения.'); return; }
         var far = act.filter(function (c) { return z < c.minZoom; });
-        say(far.length ? 'Приблизьте карту: ' + far.map(function (c) { return c.name + ' — с z' + c.minZoom; }).join('; ') + ' (сейчас z' + z + ').' : 'Слои включены. Клик по объекту — выделение и сведения.');
+        say(far.length ? 'Приблизьте карту: ' + far.map(function (c) { return c.name + ' — с z' + c.minZoom; }).join('; ') + ' (сейчас z' + z + ').' : 'Слои включены. Клик по объекту — сведения; Ctrl+клик — выбрать несколько.');
     }
     map.on('zoomend', hint);
     tree.addEventListener('change', function (e) { var i = e.target.closest('input[data-id]'); if (i) setLayer(byId(i.getAttribute('data-id')), i.checked); });
     tree.addEventListener('click', function (e) {
+        var rv = e.target.closest('.cad-rmv');
+        if (rv) {                                  // убрать добавленный слой
+            e.preventDefault();
+            var c1 = byId(rv.getAttribute('data-id'));
+            if (live[c1.id]) { map.removeLayer(live[c1.id]); live[c1.id] = null; }
+            LAYERS.splice(LAYERS.indexOf(c1), 1); delete st.on[c1.id]; saveCustom(); renderTree(); hint();
+            return;
+        }
         var z = e.target.closest('.cad-zm');
         if (z) {                                   // миниатюрная «Приблизить» у каждого подслоя
             e.preventDefault();
@@ -473,10 +498,11 @@
     var hl = L.featureGroup().addTo(map), bnds = [], reqN = 0;
     var info = document.createElement('div');
     info.className = 'dw-block cad-info'; info.style.display = 'none';
-    info.innerHTML = '<div class="dw-title">Выбранный объект <button type="button" class="cad-x" id="cadInfoX" title="Снять выделение"><i class="fas fa-xmark"></i></button></div><div id="cadInfoT"></div>';
+    info.innerHTML = '<div class="dw-title">Выбранный объект <span id="cadInfoN" class="cad-n"></span><button type="button" class="cad-x" id="cadInfoX" title="Снять выделение"><i class="fas fa-xmark"></i></button></div><div id="cadInfoT"></div>';
     var sb = $('cadQuery') ? $('cadQuery').closest('.dw-block') : null;
     if (sb && sb.parentNode === pane) pane.insertBefore(info, sb.nextSibling); else pane.insertBefore(info, pane.firstChild);
-    function clearSel() { hl.clearLayers(); bnds = []; sel = []; info.style.display = 'none'; }
+    function clearSel() { reqN++; hl.clearLayers(); bnds = []; sel = []; info.style.display = 'none'; }
+    ['mapClearBtn', 'clearMapBtn'].forEach(function (id) { var b = $(id); if (b) b.addEventListener('click', function () { clearSel(); hint(); }); });   // общая кнопка «Очистить» снимает выделение объектов НСПД
     function showInfo(html) {
         $('cadInfoT').innerHTML = html;
         info.style.display = '';
@@ -539,7 +565,18 @@
             if (v == null || (f[0] === 'Статус' && /^\d+$/.test(String(v)))) return;
             list.push([f[0], fmt(f[2], v)]);
         });
-        return { num: num, list: list };
+        if (!list.length) {      // у объекта нет знакомых полей (например, у слоя, добавленного по ID) — показываем первые простые значения как есть
+            Object.keys(m).forEach(function (k) {
+                var v = m[k]; if (list.length >= 8 || /id$|^id|geom|coord/i.test(k) || String(v).length > 200) return;
+                list.push([k.replace(/_/g, ' '), String(v)]);
+            });
+        }
+        var used = {}, more = []; NUMKEYS.forEach(function (k) { used[k] = 1; }); FIELDS.forEach(function (f) { f[1].forEach(function (k) { used[k] = 1; }); });
+        Object.keys(m).forEach(function (k) {   // остальные простые поля слоя — для паспорта участка
+            var v = m[k]; if (used[k] || more.length >= 30 || typeof v === 'object' || /(^|_)id$|^id|geom|coord|^(label|descr|externalKey|categoryName|options)$/i.test(k) || String(v).length > 200) return;
+            var s = fmt('s', v), lb = k.replace(/_/g, ' '); if (s && !list.some(function (x) { return x[0] === lb; })) more.push([lb, s]);
+        });
+        return { num: num, list: list, more: more };
     }
     function card(c, pr, idx) {
         var ro = rowsOf(pr), num = ro.num, rows = '';
@@ -548,9 +585,10 @@
         return '<div class="cad-card" style="--cc:' + rgbs(c.rgb) + '"><div class="cad-hd"><span class="cad-kind">' + esc((pr && pr.categoryName) || c.name) + '</span>'
             + '<div class="cad-num"><span>' + esc(num || '—') + '</span>'
             + (num ? '<button type="button" class="cad-cp" data-t="' + esc(num) + '" title="Скопировать номер"><i class="fas fa-copy"></i></button>' : '')
-            + '<button type="button" class="cad-kml" data-i="' + idx + '" title="Скачать объект в KML"><i class="fas fa-file-arrow-down"></i></button>'
-            + '<button type="button" class="cad-go" data-i="' + idx + '" title="Приблизить к объекту"><i class="fas fa-magnifying-glass-plus"></i></button></div></div>'
-            + '<div class="cad-rows">' + rows + '</div></div>';
+            + '<button type="button" class="cad-go" data-i="' + idx + '" title="Приблизить к объекту"><i class="fas fa-magnifying-glass-plus"></i></button>'
+            + (sel.length > 1 ? '<button type="button" class="cad-rm" data-i="' + idx + '" title="Убрать из выбранных"><i class="fas fa-xmark"></i></button>' : '') + '</div></div>'
+            + '<div class="cad-rows">' + rows + '</div>'
+            + '<button type="button" class="cad-dl" data-i="' + idx + '" title="Скачать этот объект в KML"><i class="fas fa-file-arrow-down"></i> Скачать KML</button></div>';
     }
     // ---- экспорт выделенного объекта в KML (WGS84) ----
     var sel = [];
@@ -567,28 +605,40 @@
         if (g.type === 'Point') return '<Point><coordinates>' + kc(c) + '</coordinates></Point>';
         return '';
     }
-    function exportKml(i) {
-        var it = sel[i]; if (!it || !it.f.geometry) { say('У объекта нет геометрии для экспорта.'); return; }
+    var hex2 = function (n) { return ('0' + n.toString(16)).slice(-2); };
+    function kstyle(c) {
+        var rgb = c.rgb, kcol = function (a) { return hex2(a) + hex2(rgb[2]) + hex2(rgb[1]) + hex2(rgb[0]); };   // KML: aabbggrr
+        return '<Style id="s_' + c.id + '"><LineStyle><color>' + kcol(255) + '</color><width>3</width></LineStyle><PolyStyle><color>' + kcol(70) + '</color></PolyStyle></Style>';
+    }
+    function placemark(it) {
+        if (!it || !it.f.geometry) return '';
         var pr = it.f.properties || it.f, ro = rowsOf(pr), g;
         try { g = kgeom(it.f.geometry); } catch (x) { g = ''; }
-        if (!g) { say('Не удалось собрать геометрию объекта для KML.'); return; }
-        var rgb = it.c.rgb, hex = function (n) { return ('0' + n.toString(16)).slice(-2); }, kcol = function (a) { return hex(a) + hex(rgb[2]) + hex(rgb[1]) + hex(rgb[0]); };   // KML: aabbggrr
+        if (!g) return '';
         var name = ro.num || it.c.name;
-        var kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>' + xe(name) + '</name>'
-            + '<Style id="s"><LineStyle><color>' + kcol(255) + '</color><width>3</width></LineStyle><PolyStyle><color>' + kcol(70) + '</color></PolyStyle></Style>'
-            + '<Placemark><name>' + xe(name) + '</name><styleUrl>#s</styleUrl>'
+        return '<Placemark><name>' + xe(name) + '</name><styleUrl>#s_' + it.c.id + '</styleUrl>'
             + '<description><![CDATA[' + ro.list.map(function (r) { return '<b>' + xe(r[0]) + ':</b> ' + xe(r[1]); }).join('<br>') + ']]></description>'
             + '<ExtendedData><Data name="Тип"><value>' + xe((pr && pr.categoryName) || it.c.name) + '</value></Data>' + ro.list.map(function (r) { return '<Data name="' + xe(r[0]) + '"><value>' + xe(r[1]) + '</value></Data>'; }).join('') + '</ExtendedData>'
-            + g + '</Placemark></Document></kml>';
+            + g + '</Placemark>';
+    }
+    // which: номер объекта в списке выбранных или 'all' — все выбранные одним файлом
+    function exportKml(which) {
+        var list = (Array.isArray(which) ? which : which === 'all' ? sel.slice() : [sel[+which]]).filter(Boolean), seen = {}, styles = '';
+        var pms = list.map(placemark).filter(Boolean);
+        if (!pms.length) { say('Не удалось собрать геометрию объекта для KML.'); return; }
+        list.forEach(function (it) { if (!seen[it.c.id]) { seen[it.c.id] = 1; styles += kstyle(it.c); } });
+        var name = list.length > 1 ? 'Кадастр: объектов ' + pms.length : (rowsOf(list[0].f.properties || list[0].f).num || list[0].c.name);
+        var kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>' + xe(name) + '</name>' + styles + pms.join('') + '</Document></kml>';
         var a = document.createElement('a'), url = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
-        a.href = url; a.download = (name.replace(/[^0-9A-Za-zА-Яа-яЁё._-]+/g, '_') || 'cadastre') + '.kml';
+        a.href = url; a.download = list.length > 1 ? 'cadastre_' + pms.length + '_objects.kml' : (name.replace(/[^0-9A-Za-zА-Яа-яЁё._-]+/g, '_') || 'cadastre') + '.kml';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
         say('KML сохранён: ' + a.download);
     }
     info.addEventListener('click', function (e) {
-        var cp = e.target.closest('.cad-cp'), go = e.target.closest('.cad-go'), kb = e.target.closest('.cad-kml');
-        if (kb) { exportKml(+kb.getAttribute('data-i')); return; }
+        var cp = e.target.closest('.cad-cp'), go = e.target.closest('.cad-go'), kb = e.target.closest('.cad-dl'), rm = e.target.closest('.cad-rm');
+        if (kb) { exportKml(kb.getAttribute('data-i')); return; }
+        if (rm) { var left = sel.filter(function (x, k) { return k !== +rm.getAttribute('data-i'); }); if (left.length) select(left); else clearSel(); return; }
         if (cp) {
             var t = cp.getAttribute('data-t'), ok = function () { cp.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(function () { cp.innerHTML = '<i class="fas fa-copy"></i>'; }, 1200); };
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, function () { });
@@ -602,8 +652,75 @@
     function select(items) {
         hl.clearLayers(); bnds = []; sel = items;
         items.slice().reverse().forEach(function (it, ri) { bnds[items.length - 1 - ri] = addGeom(it.f.geometry, it.c.rgb, it.c.id === 'q'); });   // кварталы рисуются под участками
-        showInfo(items.map(function (it, i) { return card(it.c, it.f.properties || it.f, i); }).join(''));
+        showInfo(items.map(function (it, i) { return card(it.c, it.f.properties || it.f, i); }).join('')
+            + (items.length > 1 ? '<button type="button" class="cad-dl cad-dl-all" data-i="all"><i class="fas fa-file-arrow-down"></i> Скачать все в KML (' + items.length + ')</button>' : ''));
+        $('cadInfoN').textContent = items.length > 1 ? '· ' + items.length : '';
     }
+    var keyOf = function (it) { var ro = rowsOf(it.f.properties || it.f); return it.c.id + '|' + (ro.num || it.f.id || JSON.stringify(it.f.geometry || '').length); };
+    // ---- правый клик по выделенному объекту: «Скачать KML» и «Анализ участка» ----
+    function inRing(pt, ring) {
+        var ins = false;
+        for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) ins = !ins;
+        }
+        return ins;
+    }
+    function inPoly(pt, rings) {
+        if (!rings.length || !inRing(pt, rings[0])) return false;
+        for (var k = 1; k < rings.length; k++) if (inRing(pt, rings[k])) return false;
+        return true;
+    }
+    function hitGeom(g, ll) {
+        if (!g || !g.coordinates) return false;
+        var c = cv(g.coordinates), pt = [ll.lng, ll.lat];
+        if (g.type === 'Polygon') return inPoly(pt, c);
+        if (g.type === 'MultiPolygon') return c.some(function (p) { return inPoly(pt, p); });
+        return false;
+    }
+    var ctxHit = null;     // объект под курсором при правом клике
+    var ctxSep = document.createElement('div'), ctxKml = document.createElement('div'), ctxAn = document.createElement('div'), mnu = $('mapContextMenu');
+    ctxSep.className = 'ctx-sep'; ctxKml.className = 'ctx-item'; ctxAn.className = 'ctx-item';
+    ctxKml.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в KML';
+    ctxAn.innerHTML = '<i class="gc-pent"></i> Анализ участка';
+    [ctxSep, ctxKml, ctxAn].forEach(function (el) { el.style.display = 'none'; if (mnu) mnu.appendChild(el); });
+    function ctxSync() {
+        ctxHit = null;
+        var ll = (typeof contextMenuLatLng !== 'undefined') ? contextMenuLatLng : null;
+        if (ll && sel.length) {
+            var hits = sel.filter(function (it) { try { return hitGeom(it.f.geometry, ll); } catch (x) { return false; } });
+            var rank = function (it) { return it.c.id === 'z' ? 0 : it.c.id === 'o' ? 1 : it.c.id === 'q' ? 3 : 2; };
+            hits.sort(function (a, b) { return rank(a) - rank(b); });
+            ctxHit = hits[0] || null;
+        }
+        [ctxSep, ctxKml, ctxAn].forEach(function (el) { el.style.display = ctxHit ? '' : 'none'; });
+    }
+    if (mnu && typeof window.showMapContextMenu === 'function') {
+        var osm = window.showMapContextMenu;
+        window.showMapContextMenu = function () { try { ctxSync(); } catch (x) { /* меню покажется без кадастровых пунктов */ } return osm.apply(this, arguments); };
+    }
+    var hideCtx = function () { if (typeof hideMapContextMenu === 'function') hideMapContextMenu(); };
+    ctxKml.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) exportKml([it]); });
+    // перенос границ в раздел «Анализ участка»: так же, как при загрузке контура из файла
+    function toAnalysis(it) {
+        try {
+            var ro = rowsOf(it.f.properties || it.f), g = it.f.geometry;
+            var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: ro.num, name: ro.num, source: 'НСПД', attrs: ro.list.concat(ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
+            if (typeof objectLabels !== 'undefined') { objectLabels.forEach(function (l) { if (map.hasLayer(l)) map.removeLayer(l); }); objectLabels = []; }
+            drawnItems.clearLayers();
+            if (typeof disableEditForAll === 'function') disableEditForAll();
+            var grp = L.geoJSON(gj, { style: typeof SHAPE_STYLE !== 'undefined' ? SHAPE_STYLE : undefined });
+            grp.eachLayer(function (l) { if (ro.num) l._gcName = ro.num; drawnItems.addLayer(l); });
+            map.fitBounds(grp.getBounds(), { maxZoom: 18, padding: [40, 40] });
+            if (typeof updateAllLabels === 'function') updateAllLabels();
+            if (typeof updateObjectList === 'function') updateObjectList();
+            clearSel();
+            var tb = document.querySelector('.panel-tab[data-tab="analysis"]'); if (tb) tb.click();
+            if (typeof updateStatus === 'function') updateStatus('📥 Границы участка ' + (ro.num || '') + ' из НСПД перенесены в «Анализ участка». Выберите дату снимка и запустите анализ.');
+        } catch (x) { say('Не удалось перенести границы в анализ: ' + x.message); }
+    }
+    ctxAn.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) toAnalysis(it); });
+
     function feats(t) {
         try { var j = JSON.parse(t); return { f: j.features || (j.data && j.data.features) || (j.data && j.data.type === 'Feature' ? [j.data] : []), raw: '' }; }
         catch (e) { return { f: [], raw: String(t).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() }; }
@@ -615,9 +732,12 @@
     map.on('click', function (e) {
         var z = map.getZoom(), act = active().filter(function (c) { return live[c.id] && map.hasLayer(live[c.id]) && z >= c.minZoom; });
         if (!act.length || busy()) return;
-        var my = ++reqN;
-        hl.clearLayers(); bnds = []; sel = [];
-        showInfo('<div class="cad-wait"><i class="fas fa-spinner fa-spin"></i> Запрос в НСПД…</div>');
+        var oe = e.originalEvent, multi = !!(oe && (oe.ctrlKey || oe.metaKey)), my = multi ? reqN : ++reqN;   // Ctrl+клик — добавить объект к выбранным (повторный — убрать)
+        if (multi) say('Запрос в НСПД…');
+        else {
+            hl.clearLayers(); bnds = []; sel = [];
+            showInfo('<div class="cad-wait"><i class="fas fa-spinner fa-spin"></i> Запрос в НСПД…</div>');
+        }
         // точка привязывается к пикселю карты — повторные клики рядом берут ответ из кэша
         var m = L.CRS.EPSG3857.project(e.latlng), res = 40075016.68 / (256 * Math.pow(2, z));
         var cx = (Math.floor(m.x / res) + 0.5) * res, cy = (Math.floor(m.y / res) + 0.5) * res, r = res * 50.5;
@@ -627,7 +747,7 @@
             var p = fiCache[u] ? Promise.resolve(fiCache[u]) : fetch(viaProxy(u)).then(okText).then(function (t) { fiCache[u] = t; return t; });
             return p.then(function (t) { return { c: c, p: feats(t) }; }).catch(function () { return { c: c, err: true }; });
         })).then(function (res2) {
-            if (my !== reqN) return;                // пришёл ответ на устаревший клик
+            if (!multi && my !== reqN) return;      // пришёл ответ на устаревший клик
             var items = [], errn = 0, raw = '';
             res2.forEach(function (x) {
                 if (x.err) { errn++; return; }
@@ -635,6 +755,16 @@
                 if (!x.p.f.length && x.p.raw) raw = x.p.raw;
             });
             items.sort(function (a, b) { return LAYERS.indexOf(b.c) - LAYERS.indexOf(a.c); });
+            if (multi) {
+                var add = items.filter(function (it) { return it.c.id !== 'q'; });
+                if (!add.length) add = items;          // кварталы добавляются, только если в точке нет ничего другого
+                if (!add.length) { say(errn === res2.length ? 'НСПД не ответил. Проверьте интернет и доступ к НСПД.' : 'В этой точке объектов нет.'); return; }
+                var have = sel.map(keyOf), fresh = add.filter(function (it) { return have.indexOf(keyOf(it)) < 0; });
+                if (fresh.length) select(sel.concat(fresh));
+                else { var ks = add.map(keyOf), left2 = sel.filter(function (it) { return ks.indexOf(keyOf(it)) < 0; }); if (left2.length) select(left2); else clearSel(); }
+                hint();
+                return;
+            }
             if (items.length) { select(items); return; }
             showInfo('<div class="cad-wait">' + (errn === res2.length ? 'НСПД не ответил. Проверьте интернет и доступ к НСПД.' : raw ? esc(raw.slice(0, 300)) : 'В этой точке объектов нет.') + '</div>');
         });
@@ -663,6 +793,21 @@
     $('cadFind').addEventListener('click', find);
     $('cadQuery').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') find(); });
 
+    // форма «Добавить слой по ID»: номер слоя видно в запросах nspd.gov.ru/map (DevTools → Network → .../aeggis/v3/НОМЕР/wms)
+    var addBox = document.createElement('details');
+    addBox.className = 'cad-addd';
+    addBox.innerHTML = '<summary>＋ Добавить слой НСПД по ID (ЗОУИТ и др.)</summary><div class="cad-addf"><input type="text" id="cadAddName" class="cad-in" placeholder="Название, например ЗОУИТ"><div class="cad-addr"><input type="text" id="cadAddId" class="cad-in" inputmode="numeric" placeholder="ID слоя"><input type="number" id="cadAddZ" class="cad-in" min="3" max="19" value="12" title="С какого масштаба слой виден"><button type="button" class="dw-act" id="cadAddBtn"><i class="fas fa-plus"></i><span>Добавить</span></button></div></div><div class="m3-hint">Откройте nspd.gov.ru/map, включите нужный слой, в DevTools (F12) → Network найдите запрос вида …/aeggis/v3/<b>12345</b>/wms — число и есть ID.</div>';
+    tree.parentNode.insertBefore(addBox, tree.nextSibling);
+    $('cadAddBtn').addEventListener('click', function () {
+        var id = $('cadAddId').value.replace(/\D/g, ''), nm = $('cadAddName').value.trim();
+        if (!id) { say('Укажите ID слоя — число из адреса запроса НСПД.'); return; }
+        if (byId('u' + id)) { say('Слой с таким ID уже в списке.'); return; }
+        var c = addCustom({ id: id, n: nm, z: $('cadAddZ').value });
+        saveCustom(); renderTree();
+        $('cadAddId').value = ''; $('cadAddName').value = '';
+        setLayer(c, true); renderTree();
+    });
+    $('cadAddName').addEventListener('keydown', function (e) { e.stopPropagation(); });
+    $('cadAddId').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') $('cadAddBtn').click(); });
     renderTree(); hint();
-    active().forEach(function (c) { setLayer(c, true); });
 })();
