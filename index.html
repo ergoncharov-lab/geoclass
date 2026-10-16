@@ -226,6 +226,7 @@
                         <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
                         <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
                         <button type="button" class="sp-tile sp-3d-tile" data-bp="3d" style="--c:#6366f1" title="Настройки 3D&#10;Включение и настройки 3D-режима. Объёмный вид территории: рельеф, 3D-здания OSM, деревья, импорт моделей. Вращайте и наклоняйте сцену, потянув кнопку «3D» на карте; настройте преувеличение высот и добавляйте готовые модели."><i class="fas fa-cube"></i><span>Настройки 3D</span></button>
+                        <button type="button" class="sp-tile" data-bp="agro" style="--c:#f59e0b" title="Агрокалькулятор&#10;Расчёт по площади участка (нарисованной или введённой): семена, удобрения, средства защиты, топливо и машинное время, прочие затраты, выручка, прибыль и себестоимость. Таблица чувствительности и экспорт сметы в CSV."><i class="fas fa-calculator"></i><span>Агрокалькулятор</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="layers">
@@ -495,6 +496,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="3d" title="Настройки 3D режима (включите 3D кнопкой «3D» на карте)"><i class="fas fa-cube"></i><span>3D</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="export" title="Экспорт карты: форматы, размеры, привязка"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="measure" title="Измерения: расстояние, площадь, координаты, геокодирование"><i class="fas fa-ruler-combined"></i><span>Измерения</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="agro" title="Агрокалькулятор: семена, удобрения, СЗР, топливо, экономика по площади участка"><i class="fas fa-calculator"></i><span>Агрокалькулятор</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="chem" title="Почвенный анализ почвы: статистика и зоны"><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="profile" title="Профиль рельефа: график высот и показатели по линии"><i class="fas fa-mountain"></i><span>Профиль</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="logistics" title="Логистический анализ: буфер, дороги и водоёмы OSM, расстояния до ближайших"><i class="fas fa-route"></i><span>Логистика</span></button>
@@ -982,6 +984,7 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="frost" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="shape" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-ag" data-bp-pane="agro" role="tabpanel"></div>
 
           <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDMI / NBR / Сравнение снимков): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
           <!-- ВКЛАДКА «СВОИ СЛОИ»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON (сохраняются в localStorage) -->
@@ -1619,5 +1622,6 @@
 <script src="passport.js"></script>
 <script src="site.js"></script>
 <script src="ux-extras.js"></script>
+<script src="agrocalc.js"></script>
 </body>
 </html>

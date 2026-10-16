@@ -1761,3 +1761,32 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .cad-dls .cad-dl { flex: 1 1 0; width: auto; min-width: 0; margin-top: 0; padding: 6px 4px; }
 .cad-dls-all { margin-top: 2px; }
 .cad-dlt { margin-top: 4px; font-size: 11px; font-weight: 600; color: #64748b; }
+
+/* ===== Агрокалькулятор (нижняя панель → Инструменты) ===== */
+.bp-ag details.dw-block > summary { cursor: pointer; list-style: none; }
+.bp-ag details.dw-block > summary::-webkit-details-marker { display: none; }
+.bp-ag details.dw-block > summary::after { content: "▾"; float: right; color: #94a3b8; }
+.bp-ag details.dw-block:not([open]) > summary::after { content: "▸"; }
+.bp-ag .ag-u { min-width: 52px; font-size: 11px; color: #64748b; }
+.ag-r { display: grid; grid-template-columns: var(--g); gap: 4px; align-items: center; margin-top: 4px; }
+.ag-r input[type="number"], .ag-r input[type="text"], .ag-r select { width: 100%; min-width: 0; font: inherit; font-size: 12px; padding: 5px 6px; border: 1px solid #dbe3ea; border-radius: 8px; background: #f8fafc; }
+.ag-r input:focus, .ag-r select:focus { outline: 0; border-color: #2563eb; background: #fff; }
+.ag-h { margin-top: 8px; font-size: 10px; font-weight: 600; color: #94a3b8; }
+.ag-x { border: 0; border-radius: 6px; background: #f1f5f9; color: #64748b; cursor: pointer; line-height: 1; padding: 4px 0; }
+.ag-x:hover { background: #fee2e2; color: #dc2626; }
+.ag-add { margin-top: 8px; padding: 6px 10px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff; color: #475569; font-size: 12px; cursor: pointer; }
+.ag-add:hover { background: #f1f5f9; }
+.ag-go { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px; padding: 10px 14px; border: none; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.ag-go:hover { background: #000; }
+.ag-go.ag-lt { background: #e2e8f0; color: #334155; }
+.ag-go.ag-lt:hover { background: #cbd5e1; }
+.ag-bar { display: grid; grid-template-columns: 150px 1fr 40px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+.ag-bar div { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+.ag-bar i { display: block; height: 100%; border-radius: 4px; }
+.ag-bar b { text-align: right; }
+.ag-t { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ag-t th { text-align: left; font-weight: 600; font-size: 11px; color: #64748b; padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+.ag-t td { padding: 4px 6px; border-bottom: 1px solid #eef2f7; }
+.ag-t th:nth-child(n+3), .ag-t td.n { text-align: right; }
+.ag-t tr.t td { font-weight: 800; border-top: 2px solid #cbd5e1; }
+.pp-dyn-tw { overflow-x: auto; }

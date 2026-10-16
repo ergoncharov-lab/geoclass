@@ -3991,6 +3991,7 @@ function deactivateAllTools() {
     if (typeof snCancelTool === 'function') snCancelTool();   // инструмент разделов со снимками
 if (typeof chCancelTool === 'function') chCancelTool();   // вкладка «Почвенный анализ»
     if (typeof shpCancelTool === 'function') shpCancelTool();   // раздел «Границы и форма»
+    if (typeof agCancelTool === 'function') agCancelTool();   // агрокалькулятор
     if (typeof wxCancelTool === 'function') wxCancelTool();   // разделы «Погода»
     if (activeDrawHandler) {
         activeDrawHandler.disable();
@@ -4596,6 +4597,7 @@ map.on(L.Draw.Event.CREATED, function(event) {
     if (typeof snOnCreated === 'function' && snOnCreated(event)) return;   // разделы «Снимки / NDVI / NDMI / NBR / Сравнение снимков»
     if (typeof chOnCreated === 'function' && chOnCreated(event)) return;   // вкладка «Почвенный анализ»
     if (typeof shpOnCreated === 'function' && shpOnCreated(event)) return;   // раздел «Границы и форма»
+    if (typeof agOnCreated === 'function' && agOnCreated(event)) return;   // агрокалькулятор
     if (typeof lgOnCreated === 'function' && lgOnCreated(event)) return;   // вкладка «Логистика»
     if (typeof hyOnCreated === 'function' && hyOnCreated(event)) return;   // вкладка «Профиль» → «По площади»
     if (typeof wxOnCreated === 'function' && wxOnCreated(event)) return;   // разделы «Погода»
