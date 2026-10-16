@@ -909,7 +909,7 @@
         return el;
     }
     var hdWx = ctxGroup('fa-cloud-sun-rain', 'Погода и климат', [ctxWx, mkItem('fa-chart-line', 'Климат участка', 'climate', 'Климат участка'), mkItem('fa-seedling', 'Тепло и вегетация', 'gdd', 'Тепло и вегетация'), mkItem('fa-snowflake', 'Заморозки', 'frost', 'Заморозки'), mkItem('fa-wind', 'Ветер и окна работ', 'windwork', 'Ветер и окна работ')]);
-    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-fire', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков'), mkItem('fa-chart-line', 'Динамика NDVI', 'ndvidyn', 'Динамика NDVI')]);
+    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-fire', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков'), mkItem('fa-draw-polygon', 'Границы и форма', 'shape', 'Границы и форма')]);
     var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
     var hdDl = ctxGroup('fa-file-arrow-down', 'Скачать границы', [ctxKml, ctxGj, ctxShp, ctxDxf]);
     var ctxAll = [ctxSep, ctxAn, hdTr, hdTr._sub, hdDl, hdDl._sub];
@@ -940,8 +940,8 @@
         try {
             var ro = rowsOf(it.f.properties || it.f), g = it.f.geometry;
             var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: ro.num, name: ro.num, source: 'НСПД', attrs: ro.list.concat(ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
-            if (bp && bp !== 'ndvidyn') {   // как загрузка файла в разделе: gcShapeIO[...].put ставит фигуру и запускает расчёт раздела
-                var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', change: 'sn' }[bp];
+            if (bp) {   // как загрузка файла в разделе: gcShapeIO[...].put ставит фигуру и запускает расчёт раздела
+                var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', change: 'sn', shape: 'shp' }[bp];
                 var io = typeof gcShapeIO !== 'undefined' ? gcShapeIO[KEY] : null;
                 if (!io || !io.put) { say('Раздел «' + title + '» недоступен для переноса.'); return; }
                 var tb0 = document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]'); if (tb0) tb0.click();
@@ -967,7 +967,6 @@
             clearSel();
             var tb = bp ? document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]') : document.querySelector('.panel-tab[data-tab="analysis"]'); if (tb) tb.click();
             if (typeof updateStatus === 'function') updateStatus('📥 Границы участка ' + (ro.num || '') + ' из НСПД перенесены в «' + (title || 'Анализ участка') + '».' + (bp ? '' : ' Выберите дату снимка и запустите анализ.'));
-            if (bp === 'ndvidyn') setTimeout(function () { var rb = document.querySelector('[data-bp-pane="ndvidyn"] [data-dyn-run]'); if (rb) rb.click(); }, 200);   // динамика NDVI берёт последнюю нарисованную фигуру
         } catch (x) { say('Не удалось перенести границы в анализ: ' + x.message); }
     }
     ctxAn.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) toAnalysis(it); });

@@ -207,7 +207,7 @@
                         <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
                         <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
                         <button type="button" class="sp-tile" data-bp="chem" style="--c:#a855f7" title="Почвенный анализ&#10;Почвенные показатели (pH, углерод, азот, глина, песок и др.) по нарисованной фигуре: статистика и зоны на карте. Данные SoilGrids 250 м."><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
-                        <button type="button" class="sp-tile" data-bp="ndvidyn" style="--c:#16a34a" title="Динамика NDVI&#10;Ход NDVI по участку за сезон от посева до уборки: график с коридором P10–P90, сравнение с прошлым годом, пик, старт и спад вегетации, просадки."><i class="fas fa-chart-line"></i><span>Динамика NDVI</span></button>
+                        <button type="button" class="sp-tile" data-bp="shape" style="--c:#6366f1" title="Границы и форма&#10;Площадь, периметр, габариты и компактность контура, координаты вершин и адрес участка — тот же анализ, что в блоке «Общая информация» паспорта."><i class="fas fa-draw-polygon"></i><span>Границы и форма</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="images">
@@ -508,7 +508,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — гари и повреждение растительности"><i class="fas fa-fire"></i><span>NBR</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Сравнение снимков — два снимка Sentinel-2 на разные даты"><i class="fas fa-code-compare"></i><span>Сравнение снимков</span></button>
-              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvidyn" title="Динамика NDVI за сезон: от посева до уборки урожая"><i class="fas fa-chart-line"></i><span>Динамика NDVI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="shape" title="Границы и форма участка: размеры, компактность, координаты вершин, адрес"><i class="fas fa-draw-polygon"></i><span>Границы и форма</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="cadastre" title="Кадастр: слой НСПД"><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
@@ -981,7 +981,7 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="gdd" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="frost" role="tabpanel"></div>
           <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="windwork" role="tabpanel"></div>
-          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="ndvidyn" role="tabpanel"></div>
+          <div class="bottom-panel-body bp-pane bp-draw bp-wx" data-bp-pane="shape" role="tabpanel"></div>
 
           <!-- РАЗДЕЛЫ СО СПУТНИКОВЫМИ СНИМКАМИ (Снимки / NDVI / NDMI / NBR / Сравнение снимков): содержимое — календарь, рисование области, скачивание GeoTIFF — строит script.js -->
           <!-- ВКЛАДКА «СВОИ СЛОИ»: подключение пользовательских WMS / WFS / WMTS(XYZ) / ArcGIS / GeoJSON (сохраняются в localStorage) -->

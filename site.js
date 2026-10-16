@@ -317,7 +317,7 @@
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
         bp: { userlayers: 'Свои слои', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
-              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', ndvidyn: 'Динамика NDVI', change: 'Сравнение снимков', catalog: 'Каталог данных' }
+              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', shape: 'Границы и форма', change: 'Сравнение снимков', catalog: 'Каталог данных' }
     };
     function setView(v, title) {
         panel.setAttribute('data-view', v);
@@ -672,6 +672,7 @@
         press('pfClear'); press('hyClearBtn'); press('lgClear');
         safe(function () { if (window.wxClearAll) window.wxClearAll(); });   // погода: фигура и результаты
         safe(function () { if (window.chClearAll) window.chClearAll(); });   // почвенный анализ: фигура, статистика, графики и зоны
+        safe(function () { if (window.shpClearAll) window.shpClearAll(); });   // границы и форма: фигура и результаты
         safe(function () { if (window.mxClearAll) window.mxClearAll(); });   // вкладка «Измерения»
         safe(function () { if (window.snClearAll) window.snClearAll(); });   // фигура, зоны и аномальные точки разделов NDVI / NDMI…
         safe(function () { if (window.gcProfileClear) window.gcProfileClear(); });   // профиль и гипсометрия: линия, полигон, тепловая карта   // профиль рельефа, гипсометрия, логистика (объект, буфер, дороги, водоёмы)

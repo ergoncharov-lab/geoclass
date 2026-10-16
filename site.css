@@ -1501,18 +1501,6 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 @media (max-width: 760px) { .cb-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); } .sn-cmp-bar { height: min(260px, 46vh); } }
 .sn-st-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 760px) { .sn-st-4 { grid-template-columns: 1fr 1fr; } }
-.pp-dyn-ctl { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin-bottom: 10px; }
-.pp-dyn-ctl label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #64748b; }
-.pp-dyn-ctl label.chk { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: #334155; padding-bottom: 8px; }
-.pp-dyn-ctl select, .pp-dyn-ctl input[type="number"], .pp-dyn-ctl input[type="date"] { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; color: #0f172a; }
-.pp-dyn-lg { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 11.5px; color: #475569; }
-.pp-dyn-lg span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; }
-.pp-dyn-lg span.ds::before { border-top-style: dashed; }
-.pp-dyn-tw { overflow-x: auto; margin-top: 10px; }
-.pp-dyn-t { width: 100%; border-collapse: collapse; font-size: 12px; }
-.pp-dyn-t th { text-align: left; font-weight: 600; font-size: 11px; color: #64748b; padding: 4px 8px; border-bottom: 1px solid #d0d5dd; white-space: nowrap; }
-.pp-dyn-t td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; white-space: nowrap; }
-.pp-dyn-t th:nth-child(n+2), .pp-dyn-t td.n { text-align: right; }
 
 
 /* полноэкранный режим: на весь экран раскрывается вся карта вместе с боковой панелью */
