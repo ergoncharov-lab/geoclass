@@ -1238,7 +1238,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                     chart('Продолжительность дня по месяцам, ч', dayChart(dl), 'Над точками — часы светового дня (десятичные), крупно выделены максимум и минимум; при наведении — часы и минуты. Рассчитано по широте участка.') + '</div>'
         });
         return sec(7, 'cloud-sun', 'Климат и погода', 'Климат и теплообеспеченность, солнечный режим, прогноз, ветер и заморозки', CC.clim,
-            '<div class="pp-cols"><div class="pp-colw">' + wxBlk('f') + wxBlk('w') + solar + '</div><div class="pp-colw">' + wxBlk('c') + wxBlk('b') + '</div></div>').replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"');
+            '<div class="pp-wxs">' + wxBlk('f') + wxBlk('w') + wxBlk('c') + wxBlk('b') + solar + '</div>').replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"');
     }
 
     // ---------- 7б. погода и агроклимат: те же разделы, что на вкладках «Погода» (мост window.ppWx из script.js) ----------
@@ -1262,7 +1262,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         catch (e) { if (tok !== seq) return; WXG.forEach(function (g) { var el = document.getElementById('ppWx_' + g.id); if (el) el.innerHTML = '<div class="pp-note">Не удалось получить данные погоды: ' + esc(e && e.message || e) + '</div>'; }); throw e; }
         if (tok !== seq) return;
         D.wx = d;
-        WXG.forEach(function (g) { var el = document.getElementById('ppWx_' + g.id); if (el) el.innerHTML = '<div class="pp-wxg">' + g.keys.map(function (k) { return ppWx.render(k, d); }).join('') + '</div>'; });
+        WXG.forEach(function (g) { var el = document.getElementById('ppWx_' + g.id); if (el) el.innerHTML = '<div class="pp-wxg pp-wxg-' + g.id + '">' + g.keys.map(function (k) { return ppWx.render(k, d); }).join('') + '</div>'; });
     }
     async function climRun(gj, tok) {
         var c = D.c, el = document.getElementById('ppClBody'), y1 = new Date().getFullYear() - 1, y0 = y1 - 9, yrs = 10, ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 25000), j, r;
@@ -1412,5 +1412,81 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (c && retry) retry(c.getAttribute('data-st'));
     });
     var bR = document.getElementById('ppRefresh'); if (bR) bR.addEventListener('click', render);
-    var bP = document.getElementById('ppPrint'); if (bP) bP.addEventListener('click', function () { window.print(); });
+    // ---------- «Весь паспорт в PDF»: печатается ровно то, что видно на сайте ----------
+    // Паспорт на время печати переносится в отдельный контейнер той же ширины, размер страницы = размер паспорта на экране
+    // (одна длинная страница), цвета и фон сохраняются, свёрнутые/развёрнутые блоки остаются как на экране. В окне печати — «Сохранить как PDF».
+    // Медиазапросы по ширине в режиме печати считаются по ширине бумаги, а не экрана, и сломали бы раскладку:
+    // на время печати фиксируем, какие из них сработали на экране (сработавшие — «всегда», остальные — «никогда»).
+    function freezeMedia() {
+        var saved = [];
+        Array.prototype.forEach.call(document.styleSheets, function (ss) {
+            var rules; try { rules = ss.cssRules; } catch (e) { return; }   // чужие таблицы стилей (CDN) недоступны
+            (function walk(list) {
+                Array.prototype.forEach.call(list, function (r) {
+                    if (r.media && r.conditionText !== undefined && !/print/.test(r.media.mediaText)) {
+                        var txt = r.media.mediaText;
+                        if (/width|height|aspect-ratio|orientation|screen/.test(txt)) {
+                            try { var on = window.matchMedia(txt).matches; saved.push([r, txt]); r.media.mediaText = on ? 'all' : 'not all'; } catch (e) { /* пропуск */ }
+                        }
+                    }
+                    if (r.cssRules && !r.media) walk(r.cssRules);
+                });
+            })(rules);
+        });
+        return function () { saved.forEach(function (s) { try { s[0].media.mediaText = s[1]; } catch (e) { /* правило удалено */ } }); };
+    }
+    function ppPdf() {
+        var pane = document.getElementById('passportPane');
+        if (!pane || !pane.parentNode || document.getElementById('ppPrintHost')) return;
+        var unfreeze = freezeMedia();
+        var W = Math.round(pane.getBoundingClientRect().width), top = pane.scrollTop, done = false;
+        var ph = document.createComment('pp-print'), host = document.createElement('div'), pg = document.createElement('style');
+        host.id = 'ppPrintHost'; host.className = 'passport-open'; host.style.width = W + 'px';
+        pane.parentNode.insertBefore(ph, pane); host.appendChild(pane); document.body.appendChild(host);
+        document.documentElement.classList.add('pp-printing');
+        pg.id = 'ppPrintPage'; document.head.appendChild(pg);
+        function undo() {
+            if (done) return; done = true;
+            window.removeEventListener('afterprint', undo);
+            if (ph.parentNode) { ph.parentNode.insertBefore(pane, ph); ph.parentNode.removeChild(ph); }
+            if (host.parentNode) host.parentNode.removeChild(host);
+            if (pg.parentNode) pg.parentNode.removeChild(pg);
+            unfreeze();
+            document.documentElement.classList.remove('pp-printing', 'pp-onepage');
+            pane.scrollTop = top;
+            Object.keys(minis).forEach(function (k) { try { minis[k].map.invalidateSize(); } catch (e) { /* карта удалена */ } });
+        }
+        window.addEventListener('afterprint', undo);
+        setTimeout(undo, 600000);   // страховка: браузер не прислал afterprint
+        setTimeout(function () {
+            Object.keys(minis).forEach(function (k) { try { minis[k].map.invalidateSize(); } catch (e) { /* карта удалена */ } });
+            setTimeout(function () {
+                var H0 = Math.ceil(Math.max(pane.scrollHeight, host.scrollHeight) * 1.06) + 160, H = Math.min(H0, 19000);   // с запасом: при печати колонки раскладываются чуть выше, чем на экране
+                  // предел размера страницы в PDF — около 200 дюймов
+                if (H0 <= 19000) document.documentElement.classList.add('pp-onepage');   // всё помещается на одной странице — блоки не переносим
+                pg.textContent = '@page{size:' + W + 'px ' + H + 'px;margin:0}';
+                if (typeof updateStatus === 'function') updateStatus('🖨️ В окне печати выберите «Сохранить как PDF» — паспорт сохранится в том же виде, что на сайте');
+                try { window.print(); } catch (e) { undo(); }
+            }, 350);
+        }, 120);
+    }
+    var bP = document.getElementById('ppPrint'); if (bP) bP.addEventListener('click', ppPdf);
+
+    // ---------- типографика: число с единицей, день с месяцем, однобуквенные предлоги и тире не разрываются переносом строки ----------
+    var NB = '\u00A0', RE_UNIT = /(\d) (?=(?:°C|°|мм|см|км|м\/с|м²|м|га|дн\.|дн|ч|мин|г\/кг|кг|лет|т|ц|мг|л|₽)(?![A-Za-zА-Яа-яЁё°²]))/g,
+        RE_MON = /(\d{1,2}) (?=(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря))/g,
+        RE_DASH = / ([—–]) /g, RE_PREP = /(^|[\s(«])([ВвКкСсУуОоИиАа]) (?=\S)/g;
+    function nbFix() {
+        var w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, { acceptNode: function (n) {
+            var p = n.parentNode;
+            return p && !/^(SCRIPT|STYLE|TEXTAREA|TITLE)$/i.test(p.nodeName) && !(p.closest && p.closest('svg, .leaflet-container')) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        } }), n, v, r;
+        while ((n = w.nextNode())) {
+            v = n.nodeValue; if (v.length < 3) continue;
+            r = v.replace(RE_UNIT, '$1' + NB).replace(RE_MON, '$1' + NB).replace(RE_DASH, NB + '$1 ').replace(RE_PREP, '$1$2' + NB);
+            if (r !== v) n.nodeValue = r;
+        }
+    }
+    var nbT = 0;
+    new MutationObserver(function () { clearTimeout(nbT); nbT = setTimeout(nbFix, 150); }).observe(body, { childList: true, subtree: true });
 })();

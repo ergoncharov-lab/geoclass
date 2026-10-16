@@ -752,7 +752,8 @@
     }
     box.addEventListener('wheel', function (e) { e.preventDefault(); }, { passive: false });   // панель под заставкой не прокручивается
     window.addEventListener('resize', function () { if (shown) fit(); });
-    btn.addEventListener('click', function () { if (cur && cur.cancel) { btn.disabled = true; cur.cancel(); } });
+    var gone = {};   // расчёты, отменённые пользователем
+    btn.addEventListener('click', function () { if (cur && cur.cancel) { cur.stop = true; gone[cur.id] = 1; btn.disabled = true; cur.cancel(); } });
 
     window.AnLoader = {
         start: function (title, text, opt) {
@@ -770,6 +771,8 @@
             if (text) tText.textContent = text;
             setPct(pct);
         },
+        cancelled: function (id) { return !!gone[id]; },   // этот расчёт отменён
+        cancelledNow: function () { return !!(cur && cur.stop); },   // текущий расчёт отменён
         end: function (id) {
             if (!cur || (id != null && id !== cur.id)) return;   // уже идёт другой расчёт — его заставку не трогаем
             cur = null; clearTimeout(showT);

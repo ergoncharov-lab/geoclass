@@ -117,12 +117,11 @@ L.drawLocal = {
 // Если плагин не загрузился, карта работает как раньше (без поворота).
 const map = L.map('map', {
     zoomControl: false,
-    attributionControl: false,   // ← вот эта строка убирает логотип Leaflet и подпись справа внизу
     rotate: true,
     bearing: 0,
-    rotateControl: false,
+    rotateControl: false,   // свою кнопку «Стрелка севера» делаем в левой панели
     touchRotate: true,
-    shiftKeyRotate: true
+    shiftKeyRotate: true    // Shift + колесо мыши тоже вращает карту
 }).setView([55.76, 37.62], 10);
 // Ссылка «Поделиться»: ?c=широта,долгота&z=масштаб открывает карту в нужном месте
 window.gcSharedView = (function () { try { var q = new URLSearchParams(location.search), c = (q.get('c') || '').split(','), la = parseFloat(c[0]), ln = parseFloat(c[1]), z = parseInt(q.get('z'), 10); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) { map.setView([la, ln], z >= 1 && z <= 20 ? z : 12); return true; } } catch (e) { /* параметров нет */ } return false; })();
@@ -12476,32 +12475,47 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     }
 
     // ---------- графики (SVG: подстраиваются под ширину панели) ----------
-    function weekSvg(D) {
-        const W = 360, H = 262, PL = 6, n = D.t.length, pw = W - PL * 2, X = i => PL + (i + 0.5) / n * pw;
-        const lo = mn(D.tmin), hi = mx(D.tmax), span = Math.max(hi - lo, 4), Y = v => 38 + (hi - v) / span * 62;
-        const pMax = Math.max(4, Math.ceil(mx(D.pr))), YP = v => 192 - v / pMax * 48;
+    // прогноз на 7 дней — две диаграммы рядом: температура и осадки (на узкой панели встают друг под другом)
+    function weekAxis(D, X, y0, withPp) {
         let s = '';
-        for (let i = 0; i < n; i += 2) s += '<rect x="' + (PL + i / n * pw).toFixed(1) + '" y="0" width="' + (pw / n).toFixed(1) + '" height="205" fill="#94a3b8" opacity=".10"/>';
-        s += T(PL + 2, 12, 'ТЕМПЕРАТУРА, °C', '#64748b', 9.5, 'start', 700) + T(PL + 2, 134, 'ОСАДКИ, мм', '#64748b', 9.5, 'start', 700);
+        D.t.forEach((t, i) => {
+            const dt = new Date(t + 'T00:00:00'); let w = dt.toLocaleDateString('ru-RU', { weekday: 'short' }); w = w.charAt(0).toUpperCase() + w.slice(1);
+            s += T(X(i), y0, i ? w : 'Сег.', i ? '#475569' : '#0f172a', 11, 'middle', i ? 600 : 800)
+                + T(X(i), y0 + 14, dt.getDate() + '.' + String(dt.getMonth() + 1).padStart(2, '0'), '#94a3b8', 10);
+            if (withPp) s += T(X(i), y0 + 28, Math.round(D.pp[i]) + '%', '#2563eb', 9.5, 'middle', 600);
+        });
+        return s;
+    }
+    function weekTempSvg(D) {
+        const W = 360, H = 176, PL = 6, n = D.t.length, pw = W - PL * 2, X = i => PL + (i + 0.5) / n * pw;
+        const lo = mn(D.tmin), hi = mx(D.tmax), span = Math.max(hi - lo, 4), Y = v => 40 + (hi - v) / span * 66;
+        let s = '';
+        for (let i = 0; i < n; i += 2) s += '<rect x="' + (PL + i / n * pw).toFixed(1) + '" y="0" width="' + (pw / n).toFixed(1) + '" height="124" fill="#94a3b8" opacity=".10"/>';
+        if (lo < 0 && hi > 0) s += '<line x1="' + PL + '" x2="' + (W - PL) + '" y1="' + Y(0).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '" stroke="#94a3b8" stroke-dasharray="4 4"/>' + T(W - PL - 2, Y(0) - 3, '0°', '#94a3b8', 9, 'end');
         const line = (arr, c) => '<polyline fill="none" stroke="' + c + '" stroke-width="2.4" stroke-linejoin="round" points="' + arr.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ') + '"/>'
             + arr.map((v, i) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(v).toFixed(1) + '" r="3.6" fill="#fff" stroke="' + c + '" stroke-width="2"/>').join('');
         s += line(D.tmax, '#ef4444') + line(D.tmin, '#38bdf8');
-        D.tmax.forEach((v, i) => { s += T(X(i), Y(v) - 8, Math.round(v) + '°', '#dc2626', 10.5, 'middle', 700); });
-        D.tmin.forEach((v, i) => { s += T(X(i), Y(v) + 17, Math.round(v) + '°', '#0284c7', 10.5, 'middle', 700); });
-        const bw = Math.min(24, pw / n * 0.5);
+        D.tmax.forEach((v, i) => { s += T(X(i), Y(v) - 9, Math.round(v) + '°', '#dc2626', 10.5, 'middle', 700); });
+        D.tmin.forEach((v, i) => { s += T(X(i), Y(v) + 18, Math.round(v) + '°', '#0284c7', 10.5, 'middle', 700); });
+        return svg(W, H, s + weekAxis(D, X, 142, false));
+    }
+    function weekRainSvg(D) {
+        const W = 360, H = 176, PL = 6, n = D.t.length, pw = W - PL * 2, X = i => PL + (i + 0.5) / n * pw;
+        const pMax = Math.max(4, Math.ceil(mx(D.pr))), top = 34, base = 118, YP = v => base - v / pMax * (base - top);
+        let s = '';
+        for (let i = 0; i < n; i += 2) s += '<rect x="' + (PL + i / n * pw).toFixed(1) + '" y="0" width="' + (pw / n).toFixed(1) + '" height="126" fill="#94a3b8" opacity=".10"/>';
+        const bw = Math.min(26, pw / n * 0.52);
         D.pr.forEach((v, i) => {
             const y = YP(v), x = (X(i) - bw / 2).toFixed(1);
-            s += '<rect x="' + x + '" y="144" width="' + bw.toFixed(1) + '" height="48" rx="4" fill="#94a3b8" opacity=".22"/>';
-            if (v > 0.05) s += '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(192 - y, 3).toFixed(1) + '" rx="4" fill="#3b82f6"/>';
-            s += T(X(i), Math.min(y, 192) - 4, v > 0.05 ? f(v) : '—', v > 0.05 ? '#1d4ed8' : '#94a3b8', 10, 'middle', 700);
+            s += '<rect x="' + x + '" y="' + top + '" width="' + bw.toFixed(1) + '" height="' + (base - top) + '" rx="4" fill="#94a3b8" opacity=".22"/>';
+            if (v > 0.05) s += '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(base - y, 3).toFixed(1) + '" rx="4" fill="#3b82f6"/>';
+            s += T(X(i), Math.min(y, base) - 5, v > 0.05 ? f(v) : '—', v > 0.05 ? '#1d4ed8' : '#94a3b8', 10, 'middle', 700);
         });
-        D.t.forEach((t, i) => {
-            const dt = new Date(t + 'T00:00:00'); let w = dt.toLocaleDateString('ru-RU', { weekday: 'short' }); w = w.charAt(0).toUpperCase() + w.slice(1);
-            s += T(X(i), 218, i ? w : 'Сег.', i ? '#475569' : '#0f172a', 11, 'middle', i ? 600 : 800)
-                + T(X(i), 232, dt.getDate() + '.' + String(dt.getMonth() + 1).padStart(2, '0'), '#94a3b8', 10)
-                + T(X(i), 246, Math.round(D.pp[i]) + '%', '#2563eb', 9.5, 'middle', 600);
-        });
-        return svg(W, H, s);
+        return svg(W, H, s + weekAxis(D, X, 142, true));
+    }
+    function weekSvg(D) {
+        return '<div class="wx2-two"><div class="wx2-ch"><div class="wx2-ct">Температура, °C</div>' + weekTempSvg(D) + '</div>'
+            + '<div class="wx2-ch"><div class="wx2-ct">Осадки, мм · вероятность, %</div>' + weekRainSvg(D) + '</div></div>';
     }
     function climoSvg(tM, pM) {
         const W = 360, H = 232, PL = 8, pw = W - PL * 2, X = i => PL + (i + 0.5) / 12 * pw;
@@ -12666,7 +12680,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         weather: (fc, cl, rg) => {
             const c = fc.cur, D = fc.D, gdd = D.tmax.reduce((s, v, i) => s + Math.max((v + D.tmin[i]) / 2 - 5, 0), 0);
             return blk('Сейчас (среднее, мин…макс)', grid([row('Температура, °C', rng(c.t)), row('Влажность, %', rng(c.h, 0)), row('Облачность, %', rng(c.c, 0)), row('Ветер, м/с', rng(c.w)), row('Осадки, мм', rng(c.p))]))
-                + blk('Прогноз на 7 дней', weekSvg(D), '% под датой — вероятность осадков. Красная линия — максимум, синяя — минимум, столбики — осадки за сутки.')
+                + blk('Прогноз на 7 дней', weekSvg(D), 'Красная линия — максимум, синяя — минимум суточной температуры; столбики — осадки за сутки, % под датой — вероятность осадков.')
                 + blk('За 7 дней', grid([row('Осадки, мм', rng(fc.rain)), row('T мин…макс, °C', f(mn(D.tmin)) + '…' + f(mx(D.tmax))), row('Сумма T>5°C, °C·дн', f(gdd, 0)), row('Дней с заморозком', D.tmin.filter(v => v < 0).length), row('Дождливых дней (≥1 мм)', D.pr.filter(v => v >= 1).length), row('Порывистых (≥10 м/с)', D.wd.filter(v => v >= 10).length)]),
                     (fc.src || 'Open-Meteo') + ', ' + 'точек внутри участка: ' + fc.n + '.');
         },
