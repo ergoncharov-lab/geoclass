@@ -1790,3 +1790,26 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .ag-t th:nth-child(n+3), .ag-t td.n { text-align: right; }
 .ag-t tr.t td { font-weight: 800; border-top: 2px solid #cbd5e1; }
 .pp-dyn-tw { overflow-x: auto; }
+
+/* Виджет «Слои» на карте */
+#layersWidgetPanel .ovl-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-width: 76px; height: 64px; padding: 6px; box-sizing: border-box; border: 2px solid #e2e8f0; border-radius: 10px; background: #fff; cursor: pointer; font-size: 11px; color: #1e293b; text-align: center; user-select: none; }
+#layersWidgetPanel .ovl-chip i { font-size: 18px; color: var(--c, #059669); }
+#layersWidgetPanel .ovl-chip:hover { background: #f0fdf4; }
+#layersWidgetPanel .ovl-chip.active { border-color: #059669; background: #ecfdf5; }
+/* «Снимки»: скрины по датам убраны */
+.sn-shotblock { display: none !important; }
+
+/* Обучающий курс: кнопка-значок и выноски */
+#tourWidget { position: relative; }
+#tourBtn .tour-lbl { position: absolute; left: calc(100% + 8px); top: 50%; transform: translate(-4px, -50%); padding: 7px 11px; border-radius: 8px; background: #0f172a; color: #fff; font: 600 12px/1 inherit; white-space: nowrap; box-shadow: 0 6px 16px -4px rgba(15,23,42,.5); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 5; }
+#tourBtn:hover .tour-lbl, #tourBtn:focus-visible .tour-lbl { opacity: 1; transform: translate(0, -50%); }
+.gh.gh-tour { width: 270px; }
+.gh-tour .gt-cnt2 { display: block; margin-bottom: 4px; color: #6ee7b7; font-size: 11px; font-weight: 700; }
+.gh-tour .gh-nav { display: flex; gap: 6px; margin-top: 9px; }
+.gh-tour .gh-nav button { flex: 1; padding: 6px 8px; border: 0; border-radius: 8px; background: #1e293b; color: #e2e8f0; font: 600 12px/1 inherit; cursor: pointer; }
+.gh-tour .gh-nav button:hover { background: #334155; }
+.gh-tour .gh-nav .gh-next { background: #10b981; color: #fff; }
+.gh-tour .gh-nav .gh-next:hover { background: #059669; }
+.gh-tour .gh-nav button:disabled { opacity: .4; cursor: default; }
+.gh-c::after { display: none; }
+.gh-t::after { left: var(--ax, 20px); bottom: -5px; margin-left: -6px; }

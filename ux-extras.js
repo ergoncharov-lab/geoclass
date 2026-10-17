@@ -16,7 +16,7 @@
         '.cad-dd-m{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:4px}.cad-dd-m[hidden]{display:none}' +
         '.cad-dli{padding:6px 2px;border:1px solid #c7d2fe;border-radius:8px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}.cad-dli:hover{background:#e0e7ff}' +
         '.map-context-menu .ctx-grp{display:flex;align-items:center}.map-context-menu .ctx-grp .ctx-chev{margin-left:auto;font-size:10px;color:#94a3b8;transition:transform .15s}.map-context-menu .ctx-grp.open .ctx-chev{transform:rotate(90deg)}' +
-        '.map-context-menu .ctx-sub{margin:0 0 2px 16px;border-left:2px solid #d1fae5}' +
+        '.map-context-menu .ctx-sub{position:absolute;z-index:2;min-width:190px;white-space:nowrap;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:4px}.map-context-menu .ctx-grp.open{background:#f0fdf4}.map-context-menu .ctx-grp.open .ctx-chev{transform:none;color:#059669}' +
         '.ol-bar{display:flex;gap:6px;align-items:center;margin:6px 0 2px;font-size:11px;color:#64748b}' +
         '.ol-bar select{flex:1;min-width:0;height:24px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:11px;font-family:inherit}' +
         '.ol-bar label{display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer}.ol-bar input{accent-color:#059669}' +
@@ -302,7 +302,13 @@
         { id: 'locate', s: '#locateBtn', p: 'l', t: 'Моё местоположение', d: 'Быстро переместит карту туда, где вы находитесь.' },
         { id: 'north', s: '#northBtn', p: 'l', t: 'Стрелка севера', d: 'Карту можно вращать (Shift + колесо мыши). Нажмите, чтобы вернуть север вверх.' },
         { id: 'full', s: '#fullscreenBtn', p: 'l', t: 'На весь экран', d: 'Карта раскроется вместе с боковой панелью.' },
-        { id: 'drawer', s: '#toggleDrawerBtn', p: 'r', t: 'Боковая панель', d: 'Сворачивает и разворачивает панель с инструментами.' }
+        { id: 'drawer', s: '#toggleDrawerBtn', p: 'r', t: 'Боковая панель', d: 'Сворачивает и разворачивает панель с инструментами.' },
+        { id: 'sat', s: '#satelliteBtn', p: 'l', t: 'Спутниковые снимки', d: 'Google, Esri, Sentinel-2, Landsat и другие. Выбор Sentinel открывает его раздел с датами.' },
+        { id: 'layers', s: '#layersWidgetBtn', p: 'l', t: 'Слои', d: 'Кварталы, участки и здания кадастра НСПД, а также свои слои. Включённый слой открывает свою панель.' },
+        { id: 'profile', s: '#profileBtn', p: 'l', t: 'Профиль рельефа', d: 'Нарисуйте линию на карте — построится график высот с перепадом и уклонами.' },
+        { id: 'weather', s: '#weatherBtn', p: 'l', t: 'Слой погоды', d: 'Облака, температура, ветер и осадки поверх карты. Для части слоёв нужен бесплатный ключ OpenWeatherMap.' },
+        { id: 'draw', s: '#drawMapBtn', p: 'r', t: 'Рисование', d: 'Фигуры, линии, значки и текст на карте. Параметры открываются в нижней панели.' },
+        { id: 'measure', s: '#measureBtn', p: 'r', t: 'Измерения', d: 'Расстояние и площадь по клику. Результат остаётся на карте до очистки.' }
     ];
     var seen = []; try { seen = JSON.parse(ls('gc_hints_seen') || '[]'); if (!Array.isArray(seen)) seen = []; } catch (e) { seen = []; }
     var bub = null, bubT = 0, mq = window.matchMedia('(max-width: 960px)');
@@ -335,7 +341,7 @@
         return true;
     }
     function ready() {
-        if (off() || mq.matches || document.hidden || bub) return false;
+        if (off() || mq.matches || document.hidden || bub || document.querySelector('.gh-tour')) return false;
         var r = $('map-section').getBoundingClientRect();
         if (r.top > innerHeight * 0.3 || r.bottom < innerHeight * 0.7) return false;      // карта должна быть на экране
         if (app.classList.contains('passport-open')) return false;
@@ -558,6 +564,18 @@
         var n = String(pr.categoryName || '').toLowerCase();
         return byId(/квартал/.test(n) ? 'q' : /здани|сооруж|окс|капитальн/.test(n) ? 'o' : 'z');
     }
+    // подписи полей НСПД по-русски: точные названия, иначе перевод по словам; незнакомое поле получает понятную русскую подпись
+    var RU_KEYS = { cad_num: 'Кадастровый номер', cad_number: 'Кадастровый номер', land_record_type: 'Вид земельного участка', land_record_subtype: 'Подвид земельного участка', land_record_category_type: 'Категория земель', land_record_area: 'Площадь участка', land_record_reg_date: 'Дата постановки на учёт', land_record_cancel_date: 'Дата снятия с учёта', ownership_type: 'Форма собственности', status: 'Статус', specified_area: 'Уточнённая площадь', declared_area: 'Декларированная площадь', area: 'Площадь', readable_address: 'Адрес', address: 'Адрес', cost_value: 'Кадастровая стоимость', cost_index: 'Удельный показатель стоимости', cost_determination_date: 'Дата определения стоимости', cost_application_date: 'Дата применения стоимости', cost_registration_date: 'Дата внесения стоимости', quarter_cad_number: 'Кадастровый квартал', permitted_use_established_by_document: 'Разрешённое использование по документу', permitted_use_name: 'Вид разрешённого использования', permitted_use: 'Разрешённое использование', util_by_doc: 'Использование по документу', util_code: 'Код вида использования', build_record_type_value: 'Вид объекта капитального строительства', build_record_area: 'Площадь здания', build_record_registration_date: 'Дата постановки здания на учёт', year_built: 'Год постройки', year_commisioning: 'Год ввода в эксплуатацию', commission_year: 'Год ввода в эксплуатацию', floors: 'Этажность', underground_floors: 'Подземных этажей', purpose: 'Назначение', building_purpose: 'Назначение здания', name: 'Наименование', name_by_doc: 'Наименование по документу', materials: 'Материал стен', object_type: 'Вид объекта', type_zone: 'Вид зоны', zone_type: 'Вид зоны', registration_date: 'Дата постановки на учёт', information_source: 'Источник сведений', previously_posted: 'Ранее учтённый', right_type: 'Вид права', rights_count: 'Количество прав', ref_no: 'Номер', number: 'Номер', description: 'Описание', note: 'Примечание' };
+    var RU_WORDS = { cad: 'кадастровый', num: 'номер', number: 'номер', land: 'земельный', record: 'запись', type: 'вид', subtype: 'подвид', category: 'категория', area: 'площадь', reg: 'регистрация', registration: 'регистрация', date: 'дата', ownership: 'собственность', status: 'статус', specified: 'уточнённая', declared: 'декларированная', readable: 'читаемый', address: 'адрес', cost: 'стоимость', value: 'значение', index: 'показатель', determination: 'определение', application: 'применение', quarter: 'квартал', permitted: 'разрешённое', use: 'использование', established: 'установленное', by: 'по', document: 'документу', doc: 'документу', util: 'использование', code: 'код', build: 'здание', year: 'год', built: 'постройки', floors: 'этажность', underground: 'подземных', purpose: 'назначение', name: 'наименование', materials: 'материалы', object: 'объект', zone: 'зона', source: 'источник', information: 'сведения', right: 'право', rights: 'права', count: 'количество', previously: 'ранее', posted: 'учтён', cancel: 'снятие', commisioning: 'ввода в эксплуатацию', commission: 'ввода в эксплуатацию', info: 'сведения', total: 'общая', length: 'длина', width: 'ширина', height: 'высота', depth: 'глубина', perimeter: 'периметр', unit: 'единица', measure: 'измерения', of: '', the: '', size: 'размер', owner: 'владелец', region: 'регион', district: 'район', city: 'город', settlement: 'населённый пункт', street: 'улица', house: 'дом', level: 'уровень', parent: 'родительский', child: 'дочерний', geometry: 'геометрия', update: 'обновление', updated: 'обновлено', created: 'создано', start: 'начало', end: 'окончание', first: 'первый', last: 'последний', series: 'серия', kind: 'вид', group: 'группа', class: 'класс', title: 'название', text: 'текст', comment: 'комментарий', note: 'примечание', description: 'описание', is: '', has: 'есть' };
+    function labelRu(k) {
+        var key = String(k).trim(), low = key.toLowerCase().replace(/[\s-]+/g, '_');
+        if (RU_KEYS[low]) return RU_KEYS[low];
+        if (/[а-яё]/i.test(key)) return key;      // уже по-русски
+        var parts = low.split(/_+/).filter(Boolean), miss = false;
+        var out = parts.map(function (w) { if (w in RU_WORDS) return RU_WORDS[w]; if (/^\d+$/.test(w)) return w; miss = true; return w; }).filter(Boolean);
+        if (!miss && out.length) { var s = out.join(' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+        return 'Дополнительное поле НСПД (' + key.replace(/_/g, ' ') + ')';
+    }
     // номер и список ключевых сведений [[подпись, текст]] — для карточки и для KML
     function rowsOf(pr) {
         var m = flat(pr && pr.options ? pr.options : pr, {}), num = '', list = [];
@@ -572,13 +590,13 @@
         if (!list.length) {      // у объекта нет знакомых полей (например, у слоя, добавленного по ID) — показываем первые простые значения как есть
             Object.keys(m).forEach(function (k) {
                 var v = m[k]; if (list.length >= 8 || /id$|^id|geom|coord/i.test(k) || String(v).length > 200) return;
-                list.push([k.replace(/_/g, ' '), String(v)]);
+                list.push([labelRu(k), String(v)]);
             });
         }
         var used = {}, more = []; NUMKEYS.forEach(function (k) { used[k] = 1; }); FIELDS.forEach(function (f) { f[1].forEach(function (k) { used[k] = 1; }); });
         Object.keys(m).forEach(function (k) {   // остальные простые поля слоя — для паспорта участка
             var v = m[k]; if (used[k] || more.length >= 30 || typeof v === 'object' || /(^|_)id$|^id|geom|coord|^(label|descr|externalKey|categoryName|options)$/i.test(k) || String(v).length > 200) return;
-            var s = fmt('s', v), lb = k.replace(/_/g, ' '); if (s && !list.some(function (x) { return x[0] === lb; })) more.push([lb, s]);
+            var s = fmt('s', v), lb = labelRu(k); if (s && !list.some(function (x) { return x[0] === lb; })) more.push([lb, s]);
         });
         return { num: num, list: list, more: more };
     }
@@ -899,7 +917,13 @@
             var open = !hd.classList.contains('open');
             Array.prototype.forEach.call(hd.parentNode.children, function (h) { if (h !== hd && h._sub) { h.classList.remove('open'); h._sub.style.display = 'none'; } });
             hd.classList.toggle('open', open); sub.style.display = open ? '' : 'none';
-            if (mnu) { var r = mnu.getBoundingClientRect(); if (r.bottom > window.innerHeight - 4) mnu.style.top = Math.max(4, window.innerHeight - r.height - 4) + 'px'; }
+            if (open) {   // подменю выплывает вбок от заголовка; у края экрана — влево/вверх
+                sub.style.left = (hd.offsetLeft + hd.offsetWidth - 2) + 'px'; sub.style.top = (hd.offsetTop - 4) + 'px';
+                var rr = sub.getBoundingClientRect();
+                if (rr.right > window.innerWidth - 4) sub.style.left = (hd.offsetLeft - sub.offsetWidth + 2) + 'px';
+                rr = sub.getBoundingClientRect();
+                if (rr.bottom > window.innerHeight - 4) sub.style.top = (parseFloat(sub.style.top) - (rr.bottom - window.innerHeight + 4)) + 'px';
+            }
         });
         hd._sub = sub; return hd;
     }
@@ -909,8 +933,8 @@
         return el;
     }
     var hdWx = ctxGroup('fa-cloud-sun-rain', 'Погода и климат', [ctxWx, mkItem('fa-chart-line', 'Климат участка', 'climate', 'Климат участка'), mkItem('fa-seedling', 'Тепло и вегетация', 'gdd', 'Тепло и вегетация'), mkItem('fa-snowflake', 'Заморозки', 'frost', 'Заморозки'), mkItem('fa-wind', 'Ветер и окна работ', 'windwork', 'Ветер и окна работ')]);
-    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-fire', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков'), mkItem('fa-draw-polygon', 'Границы и форма', 'shape', 'Границы и форма')]);
-    var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
+    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-fire', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
+    var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), mkItem('fa-draw-polygon', 'Границы и форма', 'shape', 'Границы и форма'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
     var hdDl = ctxGroup('fa-file-arrow-down', 'Скачать границы', [ctxKml, ctxGj, ctxShp, ctxDxf]);
     var ctxAll = [ctxSep, ctxAn, hdTr, hdTr._sub, hdDl, hdDl._sub];
     ctxAll.forEach(function (el) { el.style.display = 'none'; if (mnu) mnu.appendChild(el); });
@@ -939,7 +963,9 @@
     function toAnalysis(it, bp, title) {   // bp — вкладка нижней панели (profile / logistics / dates / weather); без неё — «Анализ участка»
         try {
             var ro = rowsOf(it.f.properties || it.f), g = it.f.geometry;
-            var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: ro.num, name: ro.num, source: 'НСПД', attrs: ro.list.concat(ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
+            var cn = g.type === 'MultiPolygon' ? g.coordinates.length : (g.type === 'Polygon' ? 1 : 0), isMulti = cn > 1;   // многоконтурность: число отдельных контуров участка
+            var mcRow = cn ? [['Многоконтурный участок', isMulti ? 'Да, контуров: ' + cn : 'Нет, один контур']] : [];
+            var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: ro.num, name: ro.num, source: 'НСПД', contours: cn, multi_contour: isMulti, attrs: mcRow.concat(ro.list, ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
             if (bp) {   // как загрузка файла в разделе: gcShapeIO[...].put ставит фигуру и запускает расчёт раздела
                 var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', change: 'sn', shape: 'shp' }[bp];
                 var io = typeof gcShapeIO !== 'undefined' ? gcShapeIO[KEY] : null;
@@ -1057,4 +1083,121 @@
     $('cadQuery').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') find(); });
 
     renderTree(); hint();
+})();
+
+/* Виджет «Слои» на карте (под подложками): кадастровые слои и «Свои слои». Включение слоя открывает его панель. */
+(function () {
+    'use strict';
+    var btn = document.getElementById('layersWidgetBtn'), panel = document.getElementById('layersWidgetPanel'), tree = document.getElementById('cadTree');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', function (e) { e.stopPropagation(); if (typeof togglePanel === 'function') togglePanel('layersWidgetPanel', 'layersWidgetBtn'); });
+    function closeWidget() { panel.classList.remove('active'); btn.classList.remove('active'); try { activePanel = null; } catch (x) { /* не критично */ } }
+    function openSection(bp) {   // как плитка в левом меню «Слои»: открывает боковую панель раздела
+        var rail = document.querySelector('#gcRail [data-rail="layers"]'); if (rail) rail.click();
+        setTimeout(function () { var t = document.querySelector('.sp-tile[data-bp="' + bp + '"]'); if (t) t.click(); }, 40);
+    }
+    function cb(id) { return tree ? tree.querySelector('input[data-id="' + id + '"]') : null; }
+    function sync() { panel.querySelectorAll('[data-cad]').forEach(function (c) { var i = cb(c.getAttribute('data-cad')); c.classList.toggle('active', !!(i && i.checked)); }); }
+    panel.addEventListener('click', function (e) {
+        var c = e.target.closest && e.target.closest('.ovl-chip'); if (!c) return;
+        e.stopPropagation();
+        if (c.hasAttribute('data-cad')) {
+            var i = cb(c.getAttribute('data-cad')); if (!i) return;
+            i.click();
+            if (i.checked) { closeWidget(); openSection('cadastre'); }
+            sync();
+        } else if (c.hasAttribute('data-open')) { closeWidget(); openSection(c.getAttribute('data-open')); }
+    });
+    if (tree) {
+        tree.addEventListener('change', function (e) { sync(); if (e.target && e.target.checked) openSection('cadastre'); });
+        if (window.MutationObserver) new MutationObserver(sync).observe(tree, { childList: true, subtree: true });
+    }
+    sync();
+})();
+
+/* Обучающий курс: кнопка на карте показывает всплывающие подсказки по элементам одну за одной (Далее / Назад / Esc). */
+(function () {
+    'use strict';
+    var btn = document.getElementById('tourBtn'), app = document.querySelector('#map-section .app-container');
+    if (!btn || !app) return;
+    var STEPS = [
+        { s: '#searchInput', p: 'r', t: 'Поиск', d: 'Введите адрес, город или координаты — карта переместится туда. Здесь же можно найти кадастровый номер.' },
+        { s: '#gcRail [data-rail="analysis"]', p: 'r', t: 'Анализ', d: 'Загрузите контур или нарисуйте участок — получите паспорт: рельеф, почва, климат, логистика.' },
+        { s: '#gcRail [data-rail="images"]', p: 'r', t: 'Снимки', d: 'Sentinel-2 по датам, индексы NDVI, NDMI, NBR и сравнение двух снимков.' },
+        { s: '#gcRail [data-rail="tools"]', p: 'r', t: 'Инструменты', d: 'Рисование, экспорт карты, 3D, агрокалькулятор, профиль рельефа и логистика.' },
+        { s: '#gcRail [data-rail="layers"]', p: 'r', t: 'Слои', d: 'Кадастр НСПД и свои слои. Включённый слой открывает свою панель.' },
+        { s: '#toggleDrawerBtn', p: 'r', t: 'Боковая панель', d: 'Сворачивает и разворачивает панель с инструментами, чтобы освободить карту.' },
+        { s: '#mapClearBtn', p: 'r', t: 'Очистить карту', d: 'Убирает рисунки, замеры, маршрут и результаты анализов одним нажатием.' },
+        { s: '#drawMapBtn', p: 'b', t: 'Рисование', d: 'Фигуры, линии, значки и текст. Параметры открываются в нижней панели.' },
+        { s: '#measureBtn', p: 'b', t: 'Измерения', d: 'Расстояние и площадь по клику прямо на карте.' },
+        { s: '#baseLayersBtn', p: 'l', t: 'Базовые карты', d: 'Смените основу: схема, рельеф или другие карты.' },
+        { s: '#satelliteBtn', p: 'l', t: 'Спутниковые снимки', d: 'Google, Esri, Sentinel-2, Landsat. Выбор Sentinel открывает раздел с датами.' },
+        { s: '#analyticsBtn', p: 'l', t: 'Аналитические подложки', d: 'Land Cover, NDVI и почвенные слои. Легенда появится в боковой панели.' },
+        { s: '#layersWidgetBtn', p: 'l', t: 'Слои', d: 'Кварталы, участки и здания кадастра, а также «Свои слои». При включении открывается панель слоя.' },
+        { s: '#swipeBtn', p: 'l', t: 'Шторка', d: 'Сравнивайте две подложки или даты снимков, двигая разделитель.' },
+        { s: '#gridBtn', p: 'l', t: 'Сетка координат', d: 'Формат, шаг и цвет сетки настраиваются в панели.' },
+        { s: '#shareBtn', p: 'l', t: 'Поделиться', d: 'Ссылка с центром и масштабом текущего вида карты.' },
+        { s: '#mode3dBtn', p: 'l', t: '3D режим', d: 'Рельеф, здания OSM и деревья. Вернуться к плоской карте — кнопка «2D».' },
+        { s: '#profileBtn', p: 'l', t: 'Профиль рельефа', d: 'Нарисуйте линию — построится график высот с перепадом и уклонами.' },
+        { s: '#weatherBtn', p: 'l', t: 'Слой погоды', d: 'Облака, температура, ветер и осадки поверх карты.' },
+        { s: '#locateBtn', p: 'l', t: 'Моё местоположение', d: 'Переместит карту туда, где вы находитесь.' },
+        { s: '#northBtn', p: 'l', t: 'Стрелка севера', d: 'Карту можно вращать (Shift + колесо мыши). Нажмите, чтобы вернуть север вверх.' },
+        { s: '#fullscreenBtn', p: 'l', t: 'На весь экран', d: 'Карта раскроется вместе с боковой панелью.' },
+        { s: null, p: 'c', t: 'Правая кнопка мыши', d: 'Щёлкните правой кнопкой по карте: «Что здесь?», маршрут, закладка. На кадастровом участке — перенос границ в разделы анализа и скачивание в KML, GeoJSON, SHP, DXF.' }
+    ];
+    var list = [], i = 0, bub = null, tgt = null;
+    function vis(el) { var r = el && el.getBoundingClientRect(); return !!r && r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden'; }
+    function clearHl() { if (tgt) { tgt.classList.remove('gh-pulse'); tgt.style.animationIterationCount = ''; tgt = null; } }
+    function stop() {
+        clearHl(); if (bub) { bub.remove(); bub = null; }
+        document.removeEventListener('keydown', onKey, true);
+    }
+    function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); stop(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    }
+    function show() {
+        var st = list[i]; clearHl();
+        document.querySelectorAll('.widget-panel.active').forEach(function (p) { p.classList.remove('active'); });
+        document.querySelectorAll('.widget-btn.active').forEach(function (b) { b.classList.remove('active'); });
+        if (bub) bub.remove();
+        var t = st.s ? document.querySelector(st.s) : null;
+        bub = document.createElement('div'); bub.className = 'gh gh-tour gh-' + st.p;
+        bub.innerHTML = '<button type="button" class="gh-x" aria-label="Закончить курс">×</button><span class="gt-cnt2">Шаг ' + (i + 1) + ' из ' + list.length + '</span><b>' + st.t + '</b>' + st.d +
+            '<div class="gh-nav"><button type="button" class="gh-prev"' + (i ? '' : ' disabled') + '>Назад</button><button type="button" class="gh-next">' + (i === list.length - 1 ? 'Готово' : 'Далее') + '</button></div>';
+        app.appendChild(bub);
+        var a = app.getBoundingClientRect(), w = bub.offsetWidth, hh = bub.offsetHeight, x, y;
+        if (t && st.p !== 'c') {
+            var r = t.getBoundingClientRect(), cx = r.left + r.width / 2 - a.left, cy = r.top + r.height / 2 - a.top;
+            if (st.p === 'l') { x = r.left - a.left - w - 14; y = cy - hh / 2; }
+            else if (st.p === 'r') { x = r.right - a.left + 14; y = cy - hh / 2; }
+            else if (st.p === 't') { x = cx - w / 2; y = r.top - a.top - hh - 14; }
+            else { x = cx - w / 2; y = r.bottom - a.top + 14; }
+            x = Math.max(8, Math.min(a.width - w - 8, x)); y = Math.max(8, Math.min(a.height - hh - 8, y));
+            bub.style.setProperty('--ay', Math.max(14, Math.min(hh - 14, cy - y)) + 'px');
+            bub.style.setProperty('--ax', Math.max(14, Math.min(w - 14, cx - x)) + 'px');
+            t.classList.add('gh-pulse'); t.style.animationIterationCount = 'infinite'; tgt = t;
+        } else { bub.className = 'gh gh-tour gh-c'; x = (a.width - w) / 2; y = (a.height - hh) / 2; }
+        bub.style.left = x + 'px'; bub.style.top = y + 'px';
+        bub.querySelector('.gh-x').onclick = stop;
+        bub.querySelector('.gh-prev').onclick = function () { go(-1); };
+        bub.querySelector('.gh-next').onclick = function () { if (i === list.length - 1) { stop(); if (typeof updateStatus === 'function') updateStatus('🎓 Обучающий курс пройден'); } else go(1); };
+    }
+    function go(d) {
+        var n = i + d;
+        while (n >= 0 && n < list.length && list[n].s && !vis(document.querySelector(list[n].s))) n += d;   // скрытые элементы пропускаем
+        if (n < 0 || n >= list.length) { if (d > 0) stop(); return; }
+        i = n; show();
+    }
+    function start() {
+        stop();
+        var pc = document.getElementById('ppClose'); if (app.classList.contains('passport-open') && pc) pc.click();
+        var hw = document.getElementById('gcHelpWin'); if (hw && !hw.hidden) { var hc = document.getElementById('gcHelpClose'); if (hc) hc.click(); }
+        list = STEPS.filter(function (s) { return !s.s || vis(document.querySelector(s.s)); });
+        if (!list.length) return;
+        i = 0; show();
+        document.addEventListener('keydown', onKey, true);
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); start(); });
 })();

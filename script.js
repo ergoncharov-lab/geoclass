@@ -2764,13 +2764,7 @@ function snShpZip(feats, base) {
         el.innerHTML = h;
     }
     // превью: для естественных цветов — готовый снимок-превью каталога; для индексов и ложных цветов — рисуется в нужном спектре
-    function thumbHtml(scene, lay) {
-        if (lay === 'sentinel2') {
-            if (true) return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="sentinel2"><i class="fa-solid fa-image"></i></span>`;
-        return `<span class="sn-th" data-tid="${esc(scene.id)}"><img decoding="async" referrerpolicy="no-referrer" alt="" data-href="${esc(scene.thumb)}" src="${esc(thumbUrl(scene.thumb))}"><i class="fa-solid fa-image"></i></span>`;
-        }
-        return `<span class="sn-th" data-pv="${esc(scene.id)}" data-lay="${lay}"><i class="fa-solid fa-image"></i></span>`;
-    }
+    function thumbHtml() { return ''; }   // скрины по датам убраны (плохо грузились)
     function hydratePv(el, retry) {
         const id = el.dataset.pv, lay = el.dataset.lay;
         snPvLimit(() => el.isConnected ? snPreview(lay, id) : Promise.resolve(null)).then(url => {
