@@ -10,11 +10,25 @@ ALLOWED_PREFIX = 'sentinel-s2-l2a-cogs/'
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.s3cache')
 CACHE_MAX = 3 * 1024 ** 3          # предел размера кэша на диске (3 ГБ) — старые файлы удаляются
 FWD_HEADERS = ('Content-Type', 'Content-Range', 'Accept-Ranges', 'Last-Modified', 'ETag')
+DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError)
 mimetypes.add_type('text/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 local = threading.local()
-NSPD_HDR = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-            'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8', 'Accept-Encoding': 'identity'}
+
+PROXY_UA = 'geoclass-proxy'
+BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+NSPD_HDR = {'User-Agent': BROWSER_UA, 'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru',
+            'Accept': 'application/json,image/png,*/*;q=0.8', 'Accept-Encoding': 'identity'}
+
+# сроки хранения кэша пользовательских слоёв, суток
+UCACHE_DAYS_DEFAULT = 7        # обычные слои
+UCACHE_DAYS_NSPD_TILE = 30     # плитки НСПД
+UCACHE_DAYS_NSPD_JSON = 3      # ответы-атрибуты НСПД (JSON)
+
+
+def response_headers(raw_headers):
+    """Заголовки ответа в виде словаря с именами в нижнем регистре."""
+    return {k.lower(): v for k, v in raw_headers}
 
 
 def make_opener(px=None):
@@ -64,7 +78,7 @@ def upstream_get(path, headers):
             conn.request('GET', path, headers=headers)
             r = conn.getresponse()
             data = r.read()
-            return r.status, {k.lower(): v for k, v in r.getheaders()}, data
+            return r.status, response_headers(r.getheaders()), data
         except Exception:
             try:
                 conn.close()
@@ -75,6 +89,7 @@ def upstream_get(path, headers):
                 raise
 
 
+# ---------- дисковый кэш ----------
 def cache_path(key, rng):
     h = hashlib.sha1((key + '|' + (rng or '')).encode('utf-8')).hexdigest()
     return os.path.join(CACHE_DIR, h[:2], h)
@@ -131,17 +146,47 @@ def cache_prune():
         print('cache prune error:', e)
 
 
+def ucache_ttl_days(is_nspd, cached_headers):
+    """Срок жизни записи кэша пользовательского слоя: плитки НСПД — 30 суток, JSON-атрибуты НСПД — 3, остальные слои — 7."""
+    if not is_nspd:
+        return UCACHE_DAYS_DEFAULT
+    is_json = 'json' in (cached_headers.get('content-type') or '')
+    return UCACHE_DAYS_NSPD_JSON if is_json else UCACHE_DAYS_NSPD_TILE
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
+    # префикс пути -> имя метода-обработчика; всё остальное — статические файлы сайта
+    ROUTES = (('/s3/', 'proxy'), ('/isric?', 'isric'), ('/ucache?', 'ucache'), ('/nspdcheck', 'nspdcheck'))
+
     def do_GET(self):
-        if self.path.startswith('/s3/'):
-            return self.proxy()
-        if self.path.startswith('/isric?'):
-            return self.isric()
-        if self.path.startswith('/ucache?'):
-            return self.ucache()
-        if self.path.startswith('/nspdcheck'):
-            return self.nspdcheck()
+        for prefix, handler in self.ROUTES:
+            if self.path.startswith(prefix):
+                return getattr(self, handler)()
         return super().do_GET()
+
+    def reply(self, status, headers, data, ignore_disconnect=True):
+        """Отправляет ответ: статус, заголовки (список пар) и тело; обрыв соединения клиентом по умолчанию игнорируется."""
+        def send():
+            self.send_response(status)
+            for name, value in headers:
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(data)
+        if not ignore_disconnect:
+            return send()
+        try:
+            send()
+        except DISCONNECT_ERRORS:
+            pass
+
+    # ---------- /ucache: кэширующий прокси плиток пользовательских слоёв ----------
+    def ucache_fetch(self, u, is_nspd):
+        """Загружает слой с источника напрямую (для НСПД — с браузерными заголовками и своим прокси)."""
+        hdr = dict(NSPD_HDR) if is_nspd else {'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'}   # НСПД отдаёт тайлы только «браузерным» запросам с их сайта
+        req = urllib.request.Request(u, headers=hdr)
+        with (NSPD_OPENER if is_nspd else OPENER).open(req, timeout=20 if is_nspd else 60) as r:
+            data = r.read()
+            return r.status, response_headers(r.getheaders()), data
 
     def ucache(self):
         """Кэширующий прокси плиток пользовательских слоёв (WMS / XYZ / ArcGIS): картинки хранятся на диске 7 суток.
@@ -154,25 +199,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         key = 'u|' + u
         is_nspd = pu.hostname.endswith('nspd.gov.ru')
         hit = stale = cache_get(key, None)
-        if hit:    # плитки НСПД хранятся 30 суток, ответы-атрибуты (JSON) — 3 суток, остальные слои — 7 суток
+        if hit:
             age = time.time() - os.path.getmtime(cache_path(key, None) + '.json')
-            is_json = 'json' in (hit[1].get('content-type') or '')
-            if age > ((3 if is_json else 30) if is_nspd else 7) * 86400:
+            if age > ucache_ttl_days(is_nspd, hit[1]) * 86400:
                 hit = None
         if hit:
             status, headers, data = hit
         else:
             try:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                hdr = {'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'}
-                if is_nspd:    # НСПД отдаёт тайлы только «браузерным» запросам с их сайта
-                    hdr.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Referer': 'https://nspd.gov.ru/map', 'Origin': 'https://nspd.gov.ru', 'Accept': 'application/json,image/png,*/*;q=0.8'})
-                req = urllib.request.Request(u, headers=hdr)
-                with (NSPD_OPENER if is_nspd else OPENER).open(req, timeout=20 if is_nspd else 60) as r:
-                    data = r.read()
-                    status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
+                status, headers, data = self.ucache_fetch(u, is_nspd)
             except Exception as e:
                 print('UCACHE error:', u[:120], e)
                 if stale:    # НСПД недоступен — отдаём устаревшую копию из кэша, лучше чем ничего
@@ -184,18 +219,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ctype = headers.get('content-type', '')
                 if status == 200 and (ctype.startswith('image/') or (is_nspd and 'json' in ctype and len(data) > 2)):
                     cache_put(key, None, status, headers, data)
-        try:
-            self.send_response(status)
-            self.send_header('Content-Type', headers.get('content-type', 'application/octet-stream'))
-            self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'public, max-age=%d' % (604800 if is_nspd else 86400))
-            self.end_headers()
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        self.reply(status, [('Content-Type', headers.get('content-type', 'application/octet-stream')), ('Content-Length', str(len(data))),
+                            ('Cache-Control', 'public, max-age=%d' % (604800 if is_nspd else 86400))], data)
 
-    def nspdcheck(self):
-        """Диагностика слоя НСПД: пробный тайл (центр Москвы) и страна IP-адреса, с которого идут запросы."""
+    # ---------- /nspdcheck: диагностика слоя НСПД ----------
+    def nspd_probe_tile(self):
+        """Пробный тайл НСПД (центр Москвы): статус, тип и размер ответа либо описание ошибки."""
         res = {}
         u = ('https://nspd.gov.ru/api/aeggis/v3/36049/wms?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=&TRANSPARENT=true'
              '&LAYERS=36049&WIDTH=256&HEIGHT=256&CRS=EPSG:3857&BBOX=4187000,7508000,4188000,7509000')
@@ -209,19 +238,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             res.update(status=e.code, error='HTTP %s' % e.code, body=e.read()[:300].decode('utf-8', 'replace'))
         except Exception as e:
             res.update(error=str(e))
+        return res
+
+    def nspd_probe_ip(self):
+        """Страна IP-адреса, с которого идут запросы (None, если определить не удалось)."""
         try:
-            with NSPD_OPENER.open(urllib.request.Request('https://ipwho.is/?fields=ip,country_code', headers={'User-Agent': 'geoclass-proxy'}), timeout=8) as r:
-                res['ip'] = json.loads(r.read().decode('utf-8'))
+            with NSPD_OPENER.open(urllib.request.Request('https://ipwho.is/?fields=ip,country_code', headers={'User-Agent': PROXY_UA}), timeout=8) as r:
+                return json.loads(r.read().decode('utf-8'))
         except Exception:
-            pass
+            return None
+
+    def nspdcheck(self):
+        """Диагностика слоя НСПД: пробный тайл (центр Москвы) и страна IP-адреса, с которого идут запросы."""
+        res = self.nspd_probe_tile()
+        ip = self.nspd_probe_ip()
+        if ip is not None:
+            res['ip'] = ip
         print('NSPD check:', res)
         data = json.dumps(res, ensure_ascii=False).encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        self.reply(200, [('Content-Type', 'application/json; charset=utf-8'), ('Content-Length', str(len(data)))], data, ignore_disconnect=False)
 
+    # ---------- /isric: прокси к WCS SoilGrids ----------
     def isric(self):
         """Прокси к WCS ISRIC SoilGrids (раздел «Хим. анализ»): обходит CORS, GeoTIFF кэшируются на диске."""
         query = self.path[7:]
@@ -235,10 +272,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             conn = http.client.HTTPSConnection('maps.isric.org', timeout=120)
             try:
-                conn.request('GET', '/mapserv?' + query, headers={'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'})
+                conn.request('GET', '/mapserv?' + query, headers={'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'})
                 r = conn.getresponse()
                 data = r.read()
-                status, headers = r.status, {k.lower(): v for k, v in r.getheaders()}
+                status, headers = r.status, response_headers(r.getheaders())
             except Exception as e:
                 print('ISRIC error:', e)
                 self.send_error(502, 'ISRIC unreachable', str(e))
@@ -247,23 +284,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 conn.close()
             if status == 200 and data[:2] in (b'II', b'MM'):
                 cache_put(key, None, status, headers, data)
-        try:
-            self.send_response(status)
-            self.send_header('Content-Type', headers.get('content-type', 'application/octet-stream'))
-            self.send_header('Content-Length', str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        self.reply(status, [('Content-Type', headers.get('content-type', 'application/octet-stream')), ('Content-Length', str(len(data)))], data)
 
+    # ---------- /s3/: прокси снимков Sentinel-2 ----------
     def proxy(self):
         key = urllib.parse.unquote(self.path[4:].split('?')[0])
         if key == 'ping':
-            self.send_response(200)
-            self.send_header('X-GeoClass-Proxy', '1')
-            self.send_header('Content-Length', '2')
-            self.end_headers()
-            self.wfile.write(b'ok')
+            self.reply(200, [('X-GeoClass-Proxy', '1'), ('Content-Length', '2')], b'ok', ignore_disconnect=False)
             return
         if not key.startswith(ALLOWED_PREFIX) or '..' in key:
             self.send_error(403, 'forbidden')
@@ -273,7 +300,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if hit:
             status, headers, data = hit
         else:
-            req_headers = {'User-Agent': 'geoclass-proxy', 'Accept-Encoding': 'identity'}
+            req_headers = {'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'}
             if rng:
                 req_headers['Range'] = rng
             try:
@@ -284,17 +311,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             if status in (200, 206):
                 cache_put(key, rng, status, headers, data)
-        try:
-            self.send_response(status)
-            for h in FWD_HEADERS:
-                if headers.get(h.lower()):
-                    self.send_header(h, headers[h.lower()])
-            self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'public, max-age=86400')
-            self.end_headers()
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        out = [(h, headers[h.lower()]) for h in FWD_HEADERS if headers.get(h.lower())]
+        self.reply(status, out + [('Content-Length', str(len(data))), ('Cache-Control', 'public, max-age=86400')], data)
 
 
 if __name__ == '__main__':

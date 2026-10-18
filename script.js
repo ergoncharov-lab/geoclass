@@ -761,7 +761,7 @@ function snMaskTile(map, c, coords, gj) {
     const m = document.createElement('canvas');
     m.width = m.height = 256;
     const mc = m.getContext('2d'), x0 = coords.x * 256, y0 = coords.y * 256;
-    const polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+    const polys = polygonsOf(gj);
     mc.beginPath();
     polys.forEach(poly => poly.forEach(ring => {
         ring.forEach((pt, i) => { const q = map.project([pt[1], pt[0]], coords.z); if (i) mc.lineTo(q.x - x0, q.y - y0); else mc.moveTo(q.x - x0, q.y - y0); });
@@ -1468,11 +1468,11 @@ const LAYER_LEGENDS = {
         ]
     },
     nbr: {
-        title: 'NBR — индекс гарей',
-        note: 'Низкие значения — гари и голая почва, высокие — здоровая густая растительность',
+        title: 'NBR — индекс состояния покрова',
+        note: 'Низкие значения — голая почва и сухой, угнетённый покров; высокие — здоровая густая растительность',
         items: [
-            ['#a50026', 'Меньше 0 — свежие гари, голая почва'],
-            ['#f46d43', '0 – 0,1 — слабая растительность, старые гари'],
+            ['#a50026', 'Меньше 0 — голая почва, сухая биомасса'],
+            ['#f46d43', '0 – 0,1 — очень слабый или сухой покров, стерня'],
             ['#fee08b', '0,1 – 0,3 — редкая растительность'],
             ['#a6d96a', '0,3 – 0,5 — травы, кустарники, посевы'],
             ['#1a9850', '0,5 – 0,7 — густая растительность'],
@@ -1785,6 +1785,46 @@ function gcLayerGJ(l) {
         return g.type === 'FeatureCollection' ? g.features[0] : g;
     } catch (e) { return null; }
 }
+// ---------- общие помощники (используются модулями рисования и анализа ниже) ----------
+// слой Leaflet → GeoJSON-полигон (круг — многоугольником из 64 вершин); не полигон или ошибка — null
+function layerPolygonGJ(layer) {
+    try {
+        if (layer instanceof L.Circle) { const c = layer.getLatLng(); return turf.circle([c.lng, c.lat], layer.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
+        const g = layer.toGeoJSON(), f = g.type === 'FeatureCollection' ? g.features[0] : g;
+        if (f && f.geometry && /Polygon/.test(f.geometry.type)) return f;
+    } catch (e) { /* не полигон */ }
+    return null;
+}
+// список полигонов (массивов колец) из Polygon / MultiPolygon
+function polygonsOf(gj) { return gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates; }
+// HTML-экранирование с кавычками (для значений атрибутов)
+function escapeHtmlAttr(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+// выбор формы для инструментов рисования: полигон / прямоугольник / круг
+function createDrawHandler(t, shapeOptions) {
+    return t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: shapeOptions })
+        : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: shapeOptions, showArea: false })
+        : new L.Draw.Circle(map, { shapeOptions: shapeOptions, showRadius: true });
+}
+// рисование работает только в 2D: в режиме 3D показать подсказку и сообщить, что инструмент запускать нельзя
+function drawBlockedBy3D() {
+    if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('ℹ️ Рисование работает в 2D — выключите 3D кнопкой «2D» на карте', true); return true; }
+    return false;
+}
+// выключить активные инструменты рисования/редактирования, если какой-то включён
+function deactivateToolsIfActive() {
+    try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
+}
+// пересчитать размер обеих карт шторки сравнения
+function invalidateSwipeMaps() {
+    ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+}
+// холст c под размер W × H css-пикселей с учётом плотности экрана dpr (пересоздаётся только при изменении)
+function fitCanvasToDpr(c, W, H, dpr) {
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+}
+// зеркала Overpass API (по очереди при сбое)
+const OVERPASS_MIRRORS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 function gcSave(blob, name) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;
@@ -2208,7 +2248,7 @@ function snKml(feats, title) {
     const ring = rg => rg.map(p => p[0].toFixed(7) + ',' + p[1].toFixed(7) + ',0').join(' ');
     const kc = hex => 'a0' + hex.slice(5, 7) + hex.slice(3, 5) + hex.slice(1, 3);
     const pm = feats.map(f => {
-        const p = f.properties, polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+        const p = f.properties, polys = polygonsOf(f);
         return '<Placemark><name>' + x(p.name) + '</name><Style><LineStyle><color>ffffffff</color><width>1.5</width></LineStyle><PolyStyle><color>' + kc(p.color || '#10b981') + '</color></PolyStyle></Style><ExtendedData>' +
             ['zone', 'ndvi_min', 'ndvi_max', 'ndvi_mean', 'area_ha', 'rate_kgha', 'total_kg', 'date'].map(k => '<Data name="' + k + '"><value>' + x(p[k]) + '</value></Data>').join('') +
             '</ExtendedData><MultiGeometry>' + polys.map(pl => '<Polygon><outerBoundaryIs><LinearRing><coordinates>' + ring(pl[0]) + '</coordinates></LinearRing></outerBoundaryIs>' +
@@ -2247,7 +2287,7 @@ function snZip(files) {   // ZIP без сжатия
 }
 function snShpZip(feats, base) {
     const recs = feats.map(f => {
-        const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates, rings = [];
+        const polys = polygonsOf(f), rings = [];
         polys.forEach(pl => pl.forEach((rg, ri) => {
             const ar = snRingArea(rg);
             rings.push((ri === 0 && ar > 0) || (ri > 0 && ar < 0) ? rg.slice().reverse() : rg);   // внешние — по часовой, дыры — против
@@ -2318,11 +2358,11 @@ function snShpZip(feats, base) {
         ndvi:  { name: 'NDVI', sub: 'Индекс растительности: густота и состояние посевов', icon: 'fa-leaf', kind: 'idx',
                  vars: [{ l: 'ndvi', t: 'NDVI', h: 'Стандартная шкала NDVI' }, { l: 'ndvi_c', t: 'Контрастный NDVI', h: 'Шкала растянута на выбранный диапазон — виден разброс внутри поля' }] },
         ndmi:  { name: 'NDMI', sub: 'Влажность растительности: засуха и водный стресс', icon: 'fa-cloud-rain', kind: 'idx', vars: [{ l: 'ndmi', t: 'NDMI', h: '' }] },
-        nbr:   { name: 'NBR', sub: 'Гари и повреждение растительности', icon: 'fa-fire', kind: 'idx', vars: [{ l: 'nbr', t: 'NBR', h: '' }] },
+        nbr:   { name: 'NBR', sub: 'Состояние покрова: сухая биомасса и угнетение растений', icon: 'fa-wheat-awn', kind: 'idx', vars: [{ l: 'nbr', t: 'NBR', h: '' }] },
         // «Сравнение снимков»: два снимка выбранного слоя на разные даты рядом (шторка на карте + панель снизу); календаря и списка дат в самом разделе нет
         change: { name: 'Сравнение снимков', sub: 'Два снимка Sentinel-2 на разные даты рядом', icon: 'fa-code-compare', kind: 'cmp',
                   vars: [{ l: 'sentinel2', t: 'Естественные', h: 'Естественные цвета (RGB)' }, { l: 'falsecolor', t: 'Ложные цвета', h: 'Ложные цвета CIR: NIR · Red · Green' },
-                         { l: 'ndvi', t: 'NDVI', h: 'Индекс растительности' }, { l: 'ndmi', t: 'NDMI', h: 'Влажность растительности' }, { l: 'nbr', t: 'NBR', h: 'Гари и повреждение растительности' }] }
+                         { l: 'ndvi', t: 'NDVI', h: 'Индекс растительности' }, { l: 'ndmi', t: 'NDMI', h: 'Влажность растительности' }, { l: 'nbr', t: 'NBR', h: 'Состояние растительного покрова' }] }
     };
     const CMPSEC = 'change';   // ключ раздела «Сравнение снимков»
     const LAYER_SEC = { sentinel2: 'dates', falsecolor: 'dates', ndvi: 'ndvi', ndvi_c: 'ndvi', ndmi: 'ndmi', nbr: 'nbr' };
@@ -2334,7 +2374,7 @@ function snShpZip(feats, base) {
         ndmi: 'NDMI = (NIR − SWIR1) / (NIR + SWIR1); SWIR (20 м) приводится к сетке 10 м',
         nbr: 'NBR = (NIR − SWIR2) / (NIR + SWIR2); SWIR (20 м) приводится к сетке 10 м'
     };
-    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndmi: ['сухо', 'влажно'], nbr: ['гарь, голая почва', 'густая растительность'] };
+    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndmi: ['сухо', 'влажно'], nbr: ['голая почва, сухой покров', 'густая растительность'] };
     // классы для калькулятора: [от, до, подпись, цвет]
     const CLS = {
         ndvi: [[-9, 0.1, 'Вода, голая почва, застройка', '#c2a878'], [0.1, 0.2, 'Очень редкая растительность', '#e8d98a'], [0.2, 0.4, 'Редкая, всходы, травы', '#b5d66b'], [0.4, 0.6, 'Густая растительность, посевы', '#5cb85c'], [0.6, 9, 'Плотная, пик вегетации', '#1e7d34']],
@@ -2495,19 +2535,7 @@ function snShpZip(feats, base) {
     }
 
     // ---------- рисование области ----------
-    function layerToGJ(layer) {
-        try {
-            if (layer instanceof L.Circle) {
-                const c = layer.getLatLng();
-                return turf.circle([c.lng, c.lat], layer.getRadius() / 1000, { steps: 64, units: 'kilometers' });
-            }
-            if (layer && layer.toGeoJSON) {
-                const g = layer.toGeoJSON(), f = g.type === 'FeatureCollection' ? g.features[0] : g;
-                if (f && f.geometry && /Polygon/.test(f.geometry.type)) return f;
-            }
-        } catch (e) { }
-        return null;
-    }
+    function layerToGJ(layer) { return layerPolygonGJ(layer); }
     function markTool() {
         eachPane((s, pane) => pane.querySelectorAll('[data-sn-tool]').forEach(b => b.classList.toggle('active', b.dataset.snTool === tool)));
         eachPane((s, pane) => pane.querySelectorAll('[data-sn-act="edit"]').forEach(b => b.classList.toggle('active', editing)));
@@ -2523,16 +2551,14 @@ function snShpZip(feats, base) {
         markTool();
     }
     function startTool(t) {
-        if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('ℹ️ Рисование работает в 2D — выключите 3D кнопкой «2D» на карте', true); return; }
+        if (drawBlockedBy3D()) return;
         const same = tool === t;
         cancelTool(); setEditing(false);
         if (same) return;
         if (typeof deactivateAllTools === 'function') deactivateAllTools();
         tool = t; markTool();
         const so = { color: '#ec4899', weight: 2, fillColor: '#ec4899', fillOpacity: 0.12 };
-        handler = t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: so })
-            : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: so, showArea: false })
-            : new L.Draw.Circle(map, { shapeOptions: so, showRadius: true });
+        handler = createDrawHandler(t, so);
         handler.enable();
         updateStatus('✏️ Рисуйте область на карте — будет создана одна фигура (прежняя заменится)');
     }
@@ -5814,6 +5840,14 @@ geoCloseBtn.addEventListener('click', function() {
     clearGeoPoint();
     updateStatus('🧹 Точка убрана с карты');
 });
+// любой следующий щелчок (кроме самой карточки адреса) убирает адрес и точку; перехват на фазе capture —
+// щелчок, который создаёт новую точку («Что здесь?», результат поиска), сначала снимает старую, затем ставит новую
+document.addEventListener('click', function(e) {
+    if (!geoMarker && geoCoordsRow.hidden) return;
+    const sec = document.getElementById('geoSection');
+    if (sec && sec.contains(e.target)) return;
+    clearGeoPoint();
+}, true);
 
 // ---------- КОПИРОВАНИЕ ----------
 async function copyToClipboard(text) {
@@ -6677,7 +6711,7 @@ map.on('zoomanim', function(e) {
 if (window.ResizeObserver) {
     new ResizeObserver(() => {
         if (!swipeState.active) return;
-        ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+        invalidateSwipeMaps();
         applySwipeClip();
         syncSwipeMaps(true);
     }).observe(mapStageEl);
@@ -6898,7 +6932,7 @@ function setSwipeMode(mode) {
     swipeState.mode = mode;
     swipeModeUI();
     map.invalidateSize({ animate: false });
-    ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+    invalidateSwipeMaps();
     if (m3d.active) [m3d.map, m3d.map2].forEach(m => { if (m) m.resize(); });
     applySwipeClip();
     syncSwipeMaps(true);
@@ -7538,7 +7572,58 @@ function skRenderCtx(kind) {
     kind = kind || el.dataset.kind || 'bar';
     el.dataset.kind = kind;
     el.className = 'sk-ctx sk-' + kind;
-    el.innerHTML = skActions(l).map(a => `<button type="button" class="sk-act${a.on ? ' on' : ''}${a.danger ? ' danger' : ''}" data-act="${a.id}" title="${a.label}"><i class="fas fa-${a.icon}"></i>${kind === 'menu' ? '<span>' + a.label + '</span>' : ''}</button>`).join('');
+    const groups = kind === 'menu' ? skCtxGroups(l) : [];   // в меню правой кнопки — те же группы, что у участков кадастра: анализ, перенос границ, скачивание
+    el._skNodes = {};
+    el.innerHTML = skActions(l).filter(a => !(groups.length && a.id === 'kml')).map(a => `<button type="button" class="sk-act${a.on ? ' on' : ''}${a.danger ? ' danger' : ''}" data-act="${a.id}" title="${a.label}"><i class="fas fa-${a.icon}"></i>${kind === 'menu' ? '<span>' + a.label + '</span>' : ''}</button>`).join('')
+        + (groups.length ? '<div class="sk-sep"></div>' + skCtxNodesHtml(groups, 'n', el._skNodes) : '');
+}
+
+// фигура рисования → объект для общего экспорта и переноса границ (то же устройство, что у объектов кадастра)
+function skShapeItem(l) {
+    const f = gcLayerGJ(l);
+    if (!f || !f.geometry) return null;
+    const k = l._sk.kind, nm = l._sk.name || 'Рисунок', pr = { cad_num: nm, name: nm, categoryName: SK_KIND_NAMES[k] || 'Рисунок' };
+    if (k !== 'line') { try { pr.area = Math.round(turf.area(f) * 100) / 100; } catch (e) { /* без площади */ } }
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec((l.options && l.options.color) || '');
+    const rgb = m ? [1, 2, 3].map(i => parseInt(m[i], 16)) : [37, 99, 235];
+    return { c: { id: 'sketch', name: 'Рисование', rgb: rgb }, f: { type: 'Feature', properties: pr, geometry: f.geometry }, src: 'Рисование', from: 'фигуры «' + nm + '» из «Рисования»' };
+}
+
+// группы меню правой кнопки: «Анализ участка», «Перенести границы в», «Скачать границы» — как у слоя кадастровых участков
+function skCtxGroups(l) {
+    const api = window.gcShapeMenuApi, k = l._sk.kind;
+    if (!api || skIsMarker(k) || k === 'point') return [];
+    const run = fn => () => {
+        const it = skShapeItem(l);
+        if (!it) { updateStatus('⚠️ Не удалось собрать геометрию фигуры', true); return; }
+        fn(it);
+    };
+    const leaf = (icon, label, fn) => ({ icon: icon, label: label, fn: run(fn) });
+    const conv = t => t.sub ? { icon: t.icon, label: t.label, sub: t.sub.map(conv) } : leaf(t.icon, t.label, it => api.toAnalysis(it, t.bp, t.label));
+    const out = [];
+    if (k === 'polygon' || k === 'rectangle' || k === 'circle') {
+        out.push(leaf('fa-magnifying-glass-chart', 'Анализ участка', it => api.toAnalysis(it)));
+        out.push({ icon: 'fa-share-from-square', label: 'Перенести границы в', sub: api.targets.map(conv) });
+    }
+    out.push({ icon: 'fa-file-arrow-down', label: 'Скачать границы', sub: api.formats.map(f => leaf('fa-file-arrow-down', f.label, it => api.exportAs(f.id, [it]))) });
+    return out;
+}
+function skCtxNodesHtml(nodes, pre, store) {
+    return nodes.map((n, i) => {
+        const key = pre + i, ic = n.icon === 'gc-pent' ? '<i class="gc-pent"></i>' : `<i class="fas ${n.icon}"></i>`;
+        store[key] = n;
+        if (!n.sub) return `<button type="button" class="sk-act" data-node="${key}">${ic}<span>${n.label}</span></button>`;
+        return `<button type="button" class="sk-act sk-grp" data-grp="${key}">${ic}<span>${n.label}</span><i class="fas fa-chevron-right sk-chev"></i></button>`
+            + `<div class="sk-sub" hidden>${skCtxNodesHtml(n.sub, key + '_', store)}</div>`;
+    }).join('');
+}
+function skToggleCtxGroup(el, hd) {
+    const sub = hd.nextElementSibling, open = sub.hidden;
+    Array.from(hd.parentNode.children).forEach(h => { if (h !== hd && h.classList.contains('sk-grp')) { h.classList.remove('open'); h.nextElementSibling.hidden = true; } });
+    hd.classList.toggle('open', open);
+    sub.hidden = !open;
+    const rect = mapStageEl.getBoundingClientRect();   // меню выросло — удерживаем его в пределах карты
+    el.style.top = Math.max(6, Math.min(parseFloat(el.style.top) || 0, rect.height - el.offsetHeight - 6)) + 'px';
 }
 
 function skShowCtx(ev, kind) {
@@ -7958,6 +8043,9 @@ function skInitUI() {
         ctxEl.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); });
         ctxEl.addEventListener('click', ev => {
             ev.stopPropagation();
+            const gb = ev.target.closest('[data-grp]'), nb = ev.target.closest('[data-node]');
+            if (gb) { skToggleCtxGroup(ctxEl, gb); return; }
+            if (nb) { const n = (ctxEl._skNodes || {})[nb.dataset.node]; skHideCtx(); if (n && n.fn) n.fn(); return; }
             const b = ev.target.closest('[data-act]'), l = sketchState.selected;
             if (!b || !l) return;
             const a = skActions(l).find(x => x.id === b.dataset.act);
@@ -8733,8 +8821,7 @@ function m3LabBuild() {
 }
 
 // ---------- ЛЭП с проводами (данные OSM через Overpass, three.js): опоры, траверсы и провода с провисанием ----------
-const M3_OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter',
-    'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+const M3_OVERPASS = OVERPASS_MIRRORS;
 const M3_POWER_HINT = 'Опоры и провода ЛЭП из OSM (с масштаба z11.5; загружается область ≈ 11×11 км вокруг центра карты)';
 const M3_POWER_MINZ = 11.5, M3_POWER_MAXSPANS = 5000, M3_POWER_MAXT = 6000;
 
@@ -9861,7 +9948,7 @@ function enter3D() {
     document.querySelectorAll('.widget-btn').forEach(b => { if (b.id !== 'mode3dBtn' && !(b.id === 'swipeBtn' && swipeState.active)) b.classList.remove('active'); });
     activePanel = null;
     try { if (measureMode) deactivateMeasureMode(); } catch (e) { /* не критично */ }
-    try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
+    deactivateToolsIfActive();
     hideMapContextMenu();
 
     m3d.active = true;
@@ -9902,7 +9989,7 @@ function exit3D() {
     if (!swipeState.active && !map.hasLayer(currentTileLayer)) currentTileLayer.addTo(map);
     map.invalidateSize();
     if (swipeState.active) {   // вернуть Leaflet-половины шторки
-        ['left', 'right'].forEach(side => swipeState.sides[side].map.invalidateSize({ animate: false }));
+        invalidateSwipeMaps();
         applySwipeClip();
         syncSwipeMaps(true);
     }
@@ -10962,6 +11049,20 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         const n = Math.pow(2, z), lr = lat * Math.PI / 180;
         return { x: (lng + 180) / 360 * n, y: (1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2 * n };
     }
+    // высота в точке по тайлам рельефа data (ключ 'x,y'): билинейная интерполяция; null — тайл не загружен
+    function sampleElev(data, z, lat, lng) {
+        const t = tileXY(lat, lng, z), tx = Math.floor(t.x), ty = Math.floor(t.y), a = data[tx + ',' + ty];
+        if (!a) return null;
+        const px = Math.min(254.999, Math.max(0, (t.x - tx) * 256 - 0.5)), py = Math.min(254.999, Math.max(0, (t.y - ty) * 256 - 0.5));
+        const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0, o = y0 * 256 + x0;
+        return a[o] * (1 - fx) * (1 - fy) + a[o + 1] * fx * (1 - fy) + a[o + 256] * (1 - fx) * fy + a[o + 257] * fx * fy;
+    }
+    // диапазон тайлов рельефа, покрывающих bbox (север, запад, юг, восток); уровень z снижается, пока тайлов больше 48
+    function pickTileRange(bn, bw, bs, be, z) {
+        const rng = zz => { const a = tileXY(bn, bw, zz), b = tileXY(bs, be, zz); return { x0: Math.floor(a.x), x1: Math.floor(b.x), y0: Math.floor(a.y), y1: Math.floor(b.y) }; };
+        let R = rng(z); while (z > 5 && (R.x1 - R.x0 + 1) * (R.y1 - R.y0 + 1) > 48) R = rng(--z);
+        return { z, R };
+    }
 
     // --- рисование линии ---
     function pfOpenTab() {
@@ -11010,7 +11111,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (m3d.active) { updateStatus('ℹ️ Профиль рельефа строится на 2D-карте — выключите 3D кнопкой «2D» на карте', true); return; }
         if (keep && pf.drawing) return;
         try { if (measureMode) deactivateMeasureMode(); } catch (e) { /* не критично */ }
-        try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
+        deactivateToolsIfActive();
         if (!keep) pfClear();   // при автозапуске прежний результат остаётся, пока не начата новая линия
         pf.pts = [];
         pf.drawing = true;
@@ -11122,11 +11223,9 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         const raw = [];
         let miss = 0;
         for (let i = 0; i < N; i++) {
-            const t = tileXY(lat[i], lng[i], z), tx = Math.floor(t.x), ty = Math.floor(t.y), a = data[tx + ',' + ty];
-            if (!a) { raw.push(null); miss++; continue; }
-            const px = Math.min(254.999, Math.max(0, (t.x - tx) * 256 - 0.5)), py = Math.min(254.999, Math.max(0, (t.y - ty) * 256 - 0.5));
-            const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0, o = y0 * 256 + x0;
-            raw.push(a[o] * (1 - fx) * (1 - fy) + a[o + 1] * fx * (1 - fy) + a[o + 256] * (1 - fx) * fy + a[o + 257] * fx * fy);
+            const v = sampleElev(data, z, lat[i], lng[i]);
+            if (v == null) { raw.push(null); miss++; continue; }
+            raw.push(v);
         }
         if (miss === N) {
             $('pfEmpty').textContent = 'Не удалось загрузить данные рельефа. Проверьте подключение к интернету.';
@@ -11189,7 +11288,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         const wrap = $('pfWrap'), c = $('pfCanvas'), W = wrap.clientWidth, H = wrap.clientHeight;
         if (!W || !H) return;
         const dpr = window.devicePixelRatio || 1;
-        if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+        fitCanvasToDpr(c, W, H, dpr);
         const g = c.getContext('2d');
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
@@ -11336,24 +11435,20 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         while (((be - bw) * mLng / step) * ((bn - bs) * mLat / step) > 90000) step *= 1.2;
         const cols = Math.ceil((be - bw) * mLng / step), rows = Math.ceil((bn - bs) * mLat / step), dLat = step / mLat, dLng = step / mLng;
         let z = Math.max(5, Math.min(14, Math.ceil(Math.log2(156543.03 * cosL / step))));
-        const rng = zz => { const a = tileXY(bn, bw, zz), b = tileXY(bs, be, zz); return { x0: Math.floor(a.x), x1: Math.floor(b.x), y0: Math.floor(a.y), y1: Math.floor(b.y) }; };
-        let R = rng(z); while (z > 5 && (R.x1 - R.x0 + 1) * (R.y1 - R.y0 + 1) > 48) R = rng(--z);
+        let R; ({ z, R } = pickTileRange(bn, bw, bs, be, z));
         const data = {}, jobs = [];
         for (let x = R.x0; x <= R.x1; x++) for (let y = R.y0; y <= R.y1; y++) jobs.push(pfTile(z, x, y).then(a => { data[x + ',' + y] = a; }));
         await Promise.all(jobs);
         if (!alive()) return null;
-        const polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+        const polys = polygonsOf(gj);
         const grid = new Float32Array(rows * cols).fill(NaN); let mn = Infinity, mx = -Infinity;
         for (let r = 0; r < rows; r++) {
             const lat = bn - (r + 0.5) * dLat;
             for (let c = 0; c < cols; c++) {
                 const lng = bw + (c + 0.5) * dLng;
                 if (!inPoly(lng, lat, polys)) continue;
-                const t = tileXY(lat, lng, z), tx = Math.floor(t.x), ty = Math.floor(t.y), a = data[tx + ',' + ty];
-                if (!a) continue;
-                const px = Math.min(254.999, Math.max(0, (t.x - tx) * 256 - 0.5)), py = Math.min(254.999, Math.max(0, (t.y - ty) * 256 - 0.5));
-                const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0, o = y0 * 256 + x0;
-                const v = a[o] * (1 - fx) * (1 - fy) + a[o + 1] * fx * (1 - fy) + a[o + 256] * (1 - fx) * fy + a[o + 257] * fx * fy;
+                const v = sampleElev(data, z, lat, lng);
+                if (v == null) continue;
                 grid[r * cols + c] = v; if (v < mn) mn = v; if (v > mx) mx = v;
             }
             if (r % 30 === 29) { await yieldUI(); if (!alive()) return null; }
@@ -11454,7 +11549,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (hy.drawing) return;
         if (m3d.active) { updateStatus('ℹ️ Гипсометрия строится на 2D-карте — выключите 3D кнопкой «2D» на карте', true); return; }
         try { if (measureMode) deactivateMeasureMode(); } catch (e) { /* не критично */ }
-        try { if (currentTool || activeDrawHandler || isEditing || sketchState.tool) deactivateAllTools(); } catch (e) { /* не критично */ }
+        deactivateToolsIfActive();
         if (pf.drawing) { if (pf.pts.length) pfClear(); else pfEndDrawUI(); }
         if (!keep) hyClear();   // при автозапуске прежний результат остаётся, пока не нарисован новый полигон
         hy.drawing = true;
@@ -11512,8 +11607,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         while (((be - bw) * mLng / step) * ((bn - bs) * mLat / step) > 250000) step *= 1.2;
         const cols = Math.ceil((be - bw) * mLng / step), rows = Math.ceil((bn - bs) * mLat / step), dLat = step / mLat, dLng = step / mLng;
         let z = Math.max(5, Math.min(14, Math.ceil(Math.log2(156543.03 * cosL / step))));
-        const rng = zz => { const a = tileXY(bn, bw, zz), b = tileXY(bs, be, zz); return { x0: Math.floor(a.x), x1: Math.floor(b.x), y0: Math.floor(a.y), y1: Math.floor(b.y) }; };
-        let R = rng(z); while (z > 5 && (R.x1 - R.x0 + 1) * (R.y1 - R.y0 + 1) > 48) R = rng(--z);
+        let R; ({ z, R } = pickTileRange(bn, bw, bs, be, z));
         const total = (R.x1 - R.x0 + 1) * (R.y1 - R.y0 + 1), data = {}, jobs = []; let done = 0;
         $('hyEmpty').hidden = false; $('hyEmpty').textContent = 'Загрузка высот: 0/' + total + '…';
         updateStatus('⛰️ Гипсометрия: загружаю тайлы высот…');
@@ -11523,18 +11617,15 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         if (window.AnLoader && AnLoader.cancelledNow()) return hyFail('загрузка отменена');
         if (my !== hy.seq) return;
 
-        const polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+        const polys = polygonsOf(gj);
         const grid = new Float32Array(rows * cols).fill(NaN), vals = [], wts = []; let miss = 0;
         for (let r = 0; r < rows; r++) {
             const lat = bn - (r + 0.5) * dLat, wt = Math.cos(lat * Math.PI / 180);
             for (let c = 0; c < cols; c++) {
                 const lng = bw + (c + 0.5) * dLng;
                 if (!inPoly(lng, lat, polys)) continue;
-                const t = tileXY(lat, lng, z), tx = Math.floor(t.x), ty = Math.floor(t.y), a = data[tx + ',' + ty];
-                if (!a) { miss++; continue; }
-                const px = Math.min(254.999, Math.max(0, (t.x - tx) * 256 - 0.5)), py = Math.min(254.999, Math.max(0, (t.y - ty) * 256 - 0.5));
-                const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0, o = y0 * 256 + x0;
-                const v = a[o] * (1 - fx) * (1 - fy) + a[o + 1] * fx * (1 - fy) + a[o + 256] * (1 - fx) * fy + a[o + 257] * fx * fy;
+                const v = sampleElev(data, z, lat, lng);
+                if (v == null) { miss++; continue; }
                 grid[r * cols + c] = v; vals.push(v); wts.push(wt);
             }
             if (r % 40 === 39) { $('hyEmpty').textContent = 'Расчёт: ' + Math.round(r / rows * 100) + '%'; if (window.AnLoader) AnLoader.progress(55 + r / rows * 45, 'Расчёт по площади: ' + Math.round(r / rows * 100) + '%'); await yieldUI(); if (my !== hy.seq) return; }
@@ -11591,7 +11682,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         const wrap = $('hyWrap'), c = $('hyCanvas'), W = wrap.clientWidth, H = wrap.clientHeight;
         if (!W || !H) return;
         const dpr = window.devicePixelRatio || 1;
-        if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+        fitCanvasToDpr(c, W, H, dpr);
         const g = c.getContext('2d');
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
@@ -11698,8 +11789,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
 (function () {
     const $ = id => document.getElementById(id);
     if (!$('lgBuffer')) return;
-    const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter',
-        'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+    const OVERPASS = OVERPASS_MIRRORS;
     const OSRM = 'https://router.project-osrm.org/';
     const MAIN_RE = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$/;
     const P_MAIN = ['way["highway"~"^(motorway|trunk|primary|secondary|tertiary)(_link)?$"]'];
@@ -11712,7 +11802,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     let obj = null, objLayer = null, tool = null, handler = null, editing = false;
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const esc = escapeHtmlAttr;
     const fmtD = m => m < 1000 ? Math.round(m) + ' м' : (m / 1000).toFixed(m < 10000 ? 2 : 1) + ' км';
     const fmtA = m2 => m2 >= 1e6 ? (m2 / 1e6).toFixed(2) + ' км²' : (m2 / 1e4).toFixed(m2 < 1e5 ? 2 : 1) + ' га';
     const setStatus = (t, err) => { const e = $('lgStatus'); e.textContent = t; e.classList.toggle('lg-err', !!err); };
@@ -11846,9 +11936,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         tool = t; markTool();
         if (t === 'point') { map.getContainer().classList.add('lg-picking'); return setStatus('Кликните по карте, чтобы поставить точку (Esc — отмена)'); }
         const so = { color: '#0f172a', weight: 2, fillColor: '#0f172a', fillOpacity: 0.1 };
-        handler = t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: so })
-            : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: so, showArea: false })
-            : new L.Draw.Circle(map, { shapeOptions: so, showRadius: true });
+        handler = createDrawHandler(t, so);
         handler.enable();
         setStatus('Рисуйте на карте — будет создан один объект (прежний заменится)');
     }
@@ -12251,14 +12339,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     const mx = a => Math.max.apply(null, a), mn = a => Math.min.apply(null, a);
 
     // ---------- фигура ----------
-    function toGJ(layer) {
-        try {
-            if (layer instanceof L.Circle) { const c = layer.getLatLng(); return turf.circle([c.lng, c.lat], layer.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
-            const g = layer.toGeoJSON(), x = g.type === 'FeatureCollection' ? g.features[0] : g;
-            if (x && x.geometry && /Polygon/.test(x.geometry.type)) return x;
-        } catch (e) { /* не полигон */ }
-        return null;
-    }
+    function toGJ(layer) { return layerPolygonGJ(layer); }
     function info() {
         let h;
         if (!st.gj) h = 'Нарисуйте участок или загрузите его из файла (KML, GeoJSON, Excel, XML Росреестра) — погодный анализ считается только по фигуре. Значок «рука» берёт фигуру, выбранную на карте.';
@@ -12267,7 +12348,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     }
     function region() {
         const gj = st.gj;
-        const bb = turf.bbox(gj), polys = gj.geometry.type === 'Polygon' ? [gj.geometry.coordinates] : gj.geometry.coordinates;
+        const bb = turf.bbox(gj), polys = polygonsOf(gj);
         let c; try { c = turf.pointOnFeature(gj).geometry.coordinates; } catch (e) { c = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]; }
         const wd = bb[2] - bb[0], hd = bb[3] - bb[1], pts = [];
         if (Math.max(wd, hd) < 0.15) pts.push(c);
@@ -12307,15 +12388,13 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     }
     window.wxClearAll = () => del();   // кнопка «Очистить» на карте
     function startTool(t) {
-        if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('ℹ️ Рисование работает в 2D — выключите 3D кнопкой «2D» на карте', true); return; }
+        if (drawBlockedBy3D()) return;
         const same = st.tool === t;
         cancelTool(); setEditing(false);
         if (same) return;
         if (typeof deactivateAllTools === 'function') deactivateAllTools();
         st.tool = t; markTool();
-        st.handler = t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: SO })
-            : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: SO, showArea: false })
-            : new L.Draw.Circle(map, { shapeOptions: SO, showRadius: true });
+        st.handler = createDrawHandler(t, SO);
         st.handler.enable();
         updateStatus('✏️ Рисуйте участок для анализа погоды — будет создана одна фигура (прежняя заменится)');
     }
@@ -12593,7 +12672,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         WA.org = L.point(Math.round(ctr.x - d / 2), Math.round(ctr.y - d / 2));
         if (WA.W !== d) { WA.cv.width = d; WA.cv.height = d; WA.W = d; }
         L.DomUtil.setPosition(WA.cv, WA.org);
-        const polys = st.gj.geometry.type === 'Polygon' ? [st.gj.geometry.coordinates] : st.gj.geometry.coordinates, P = new Path2D();
+        const polys = polygonsOf(st.gj), P = new Path2D();
         let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
         polys.forEach(poly => poly.forEach(ring => {
             ring.forEach((c, i) => {
@@ -12803,7 +12882,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     if (!pane) return;
     const $ = id => document.getElementById(id);
     const RAD = Math.PI / 180;
-    const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = escapeHtmlAttr;
     const LEN = { m: ['м', 1], km: ['км', 1000], mi: ['мили', 1609.344], nmi: ['мор. мили', 1852], ft: ['футы', 0.3048] };
     const ARE = { ha: ['га', 10000], m2: ['м²', 1], km2: ['км²', 1e6], ac: ['акры', 4046.8564224] };
     const MODES = {
@@ -13078,7 +13157,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
 (function () {
     const pane = document.querySelector('[data-bp-pane="chem"]');
     if (!pane) return;
-    const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = escapeHtmlAttr;
     const q = n => pane.querySelector('[data-ch="' + n + '"]');
     const nf = (v, d) => v.toLocaleString('ru-RU', { maximumFractionDigits: d });
     // k — делитель «родных» единиц SoilGrids; d — знаков после запятой
@@ -13100,14 +13179,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     const fv = v => isFinite(v) ? nf(v, P().d) : '—';
 
     // ---------- фигура ----------
-    function toGJ(layer) {
-        try {
-            if (layer instanceof L.Circle) { const c = layer.getLatLng(); return turf.circle([c.lng, c.lat], layer.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
-            const g = layer.toGeoJSON(), f = g.type === 'FeatureCollection' ? g.features[0] : g;
-            if (f && f.geometry && /Polygon/.test(f.geometry.type)) return f;
-        } catch (e) { /* не полигон */ }
-        return null;
-    }
+    function toGJ(layer) { return layerPolygonGJ(layer); }
     function info() {
         const el = q('shapeInfo');
         if (!st.gj) { el.classList.remove('warn'); el.innerHTML = 'Нарисуйте полигон, прямоугольник или круг — анализ пройдёт по этой фигуре. Значок «рука» берёт фигуру, выбранную на карте.'; return; }
@@ -13142,15 +13214,13 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         clearRes(); clearRast(); info();
     }
     function startTool(t) {
-        if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('ℹ️ Рисование работает в 2D — выключите 3D кнопкой «2D» на карте', true); return; }
+        if (drawBlockedBy3D()) return;
         const same = st.tool === t;
         cancelTool(); setEditing(false);
         if (same) return;
         if (typeof deactivateAllTools === 'function') deactivateAllTools();
         st.tool = t; markTool();
-        st.handler = t === 'polygon' ? new L.Draw.Polygon(map, { allowIntersection: false, showArea: false, shapeOptions: SO })
-            : t === 'rectangle' ? new L.Draw.Rectangle(map, { shapeOptions: SO, showArea: false })
-            : new L.Draw.Circle(map, { shapeOptions: SO, showRadius: true });
+        st.handler = createDrawHandler(t, SO);
         st.handler.enable();
         updateStatus('✏️ Рисуйте область для анализа почвы — будет создана одна фигура (прежняя заменится)');
     }
@@ -13217,7 +13287,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             const f = Math.max(2, Math.min(12, Math.floor(Math.sqrt(1.2e6 / Math.max(1, ((bb[2] - bb[0]) / cdx) * ((bb[3] - bb[1]) / cdy))))));
             const dx = cdx / f, dy = cdy / f, X0 = bb[0] - 2 * dx, Y1 = bb[3] + 2 * dy;
             const Wf = Math.ceil((bb[2] - X0) / dx) + 2, Hf = Math.ceil((Y1 - bb[1]) / dy) + 2;
-            const polys = st.gj.geometry.type === 'Polygon' ? [st.gj.geometry.coordinates] : st.gj.geometry.coordinates;
+            const polys = polygonsOf(st.gj);
             const inside = (x, y) => polys.some(p => snPip(x, y, p[0]) && !p.slice(1).some(h => snPip(x, y, h)));
             const vals = new Float32Array(Wf * Hf).fill(NaN), mask = new Uint8Array(Wf * Hf), seen = new Uint8Array(c.W * c.H);
             let cells = 0;
@@ -13343,7 +13413,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         }
         g.globalCompositeOperation = 'destination-in';   // обрезка по контуру фигуры
         g.beginPath();
-        const polys = st.gj.geometry.type === 'Polygon' ? [st.gj.geometry.coordinates] : st.gj.geometry.coordinates, ox = c.x0 + ix0 * cdx, oy = c.y1 - iy0 * cdy;
+        const polys = polygonsOf(st.gj), ox = c.x0 + ix0 * cdx, oy = c.y1 - iy0 * cdy;
         polys.forEach(p => p.forEach(ring => ring.forEach((pt, i) => { const px = (pt[0] - ox) / cdx * S, py = (oy - pt[1]) / cdy * S; if (i) g.lineTo(px, py); else g.moveTo(px, py); })));
         g.fillStyle = '#000'; g.fill('evenodd');
         // как тепловая карта профиля: стандартная панель тайлов, поверх подложки (любой), под векторами
@@ -13534,7 +13604,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         let txt = null;
         if (r && st.rastVis && st.gj && st.tool === null) {
             const c = r.c, ix = Math.floor((e.latlng.lng - c.x0) / r.cdx), iy = Math.floor((c.y1 - e.latlng.lat) / r.cdy);
-            const polys = st.gj.geometry.type === 'Polygon' ? [st.gj.geometry.coordinates] : st.gj.geometry.coordinates;
+            const polys = polygonsOf(st.gj);
             if (ix >= 0 && iy >= 0 && ix < c.W && iy < c.H && polys.some(p => snPip(e.latlng.lng, e.latlng.lat, p[0]))) {
                 const v = c.v[iy * c.W + ix];
                 if (v === v) txt = esc(PROPS[r.prop].n) + ': <b>' + nf(v, PROPS[r.prop].d) + '</b> ' + esc(PROPS[r.prop].u);

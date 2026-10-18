@@ -2,8 +2,24 @@
    индикация сетевых запросов, сворачивание разделов паспорта. Подключается после script.js. */
 (function () {
     'use strict';
+
+    // ---------- общие помощники (window.gcUx): используются во всех блоках этого файла ----------
     var $ = function (id) { return document.getElementById(id); };
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var vis = function (el) { var r = el && el.getBoundingClientRect(); return !!r && r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden'; };
+    var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+    // положение выноски-подсказки относительно элемента: pos — l / r / t / b; a — рамка контейнера, r — рамка элемента, w × hh — размер выноски;
+    // возвращает левый/верхний угол (x, y) и смещение «хвостика» выноски (ax, ay)
+    var bubblePlace = function (pos, a, r, w, hh) {
+        var cx = r.left + r.width / 2 - a.left, cy = r.top + r.height / 2 - a.top, x, y;
+        if (pos === 'l') { x = r.left - a.left - w - 14; y = cy - hh / 2; }
+        else if (pos === 'r') { x = r.right - a.left + 14; y = cy - hh / 2; }
+        else if (pos === 't') { x = cx - w / 2; y = r.top - a.top - hh - 14; }
+        else { x = cx - w / 2; y = r.bottom - a.top + 14; }
+        x = clamp(x, 8, a.width - w - 8); y = clamp(y, 8, a.height - hh - 8);
+        return { x: x, y: y, ax: clamp(cx - x, 14, w - 14), ay: clamp(cy - y, 14, hh - 14) };
+    };
+    window.gcUx = { $: $, esc: esc, vis: vis, bubblePlace: bubblePlace };
 
     // ---------- стили ----------
     var st = document.createElement('style');
@@ -221,7 +237,7 @@
 /* «Поделиться», кнопка «Полный анализ», вкладка «Поддержка» и всплывающие подсказки-выноски (отключаются, выбор хранится в localStorage). */
 (function () {
     'use strict';
-    var $ = function (id) { return document.getElementById(id); };
+    var $ = gcUx.$, vis = gcUx.vis, bubblePlace = gcUx.bubblePlace;
     var app = document.querySelector('#map-section .app-container');
     function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* хранилище недоступно */ } return null; }
     function shareUrl() { var c = map.getCenter(); return location.href.split(/[?#]/)[0] + '?c=' + c.lat.toFixed(5) + ',' + c.lng.toFixed(5) + '&z=' + map.getZoom() + '#map-section'; }
@@ -314,7 +330,6 @@
     var bub = null, bubT = 0, mq = window.matchMedia('(max-width: 960px)');
     var off = function () { return ls('gc_hints_off') === '1'; };
     function hide() { clearTimeout(bubT); if (bub) { if (bub._t) bub._t.classList.remove('gh-pulse'); bub.remove(); bub = null; } }
-    function vis(el) { var r = el && el.getBoundingClientRect(); return !!r && r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden'; }
     function show(h) {
         var t = document.querySelector(h.s);
         if (!vis(t)) return false;
@@ -322,15 +337,10 @@
         bub = document.createElement('div'); bub.className = 'gh gh-' + h.p;
         bub.innerHTML = '<button type="button" class="gh-x" aria-label="Закрыть">×</button><b>' + h.t + '</b>' + h.d + '<button type="button" class="gh-off">Больше не показывать подсказки</button>';
         app.appendChild(bub);
-        var a = app.getBoundingClientRect(), r = t.getBoundingClientRect(), w = bub.offsetWidth, hh = bub.offsetHeight, x, y;
-        var cx = r.left + r.width / 2 - a.left, cy = r.top + r.height / 2 - a.top;
-        if (h.p === 'l') { x = r.left - a.left - w - 14; y = cy - hh / 2; }
-        else if (h.p === 'r') { x = r.right - a.left + 14; y = cy - hh / 2; }
-        else { x = cx - w / 2; y = r.bottom - a.top + 14; }
-        x = Math.max(8, Math.min(a.width - w - 8, x)); y = Math.max(8, Math.min(a.height - hh - 8, y));
-        bub.style.left = x + 'px'; bub.style.top = y + 'px';
-        bub.style.setProperty('--ay', Math.max(14, Math.min(hh - 14, cy - y)) + 'px');
-        bub.style.setProperty('--ax', Math.max(14, Math.min(w - 14, cx - x)) + 'px');
+        var pl = bubblePlace(h.p, app.getBoundingClientRect(), t.getBoundingClientRect(), bub.offsetWidth, bub.offsetHeight);
+        bub.style.left = pl.x + 'px'; bub.style.top = pl.y + 'px';
+        bub.style.setProperty('--ay', pl.ay + 'px');
+        bub.style.setProperty('--ax', pl.ax + 'px');
         t.classList.add('gh-pulse'); bub._t = t;
         bub.querySelector('.gh-x').onclick = hide;
         bub.querySelector('.gh-off').onclick = function () { ls('gc_hints_off', '1'); if (chk) chk.checked = false; hide(); updateStatus('💡 Подсказки на карте отключены (включить: Главное → Поддержка)'); };
@@ -374,8 +384,7 @@
    Какие слои включены, не запоминается (при каждом открытии сайта все слои выключены); в localStorage хранятся только правки ID и добавленные слои. */
 (function () {
     'use strict';
-    var $ = function (id) { return document.getElementById(id); };
-    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); };
+    var $ = gcUx.$, esc = gcUx.esc;
     var tree = $('cadTree');
     if (!tree || typeof map === 'undefined') return;
     var pane = document.querySelector('[data-bp-pane="cadastre"]');
@@ -898,7 +907,7 @@
     ctxGj.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в GeoJSON';
     ctxShp.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в SHP';
     ctxDxf.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в DXF';
-    ctxAn.innerHTML = '<i class="gc-pent"></i> Анализ участка';
+    ctxAn.innerHTML = '<i class="fas fa-magnifying-glass-chart"></i> Анализ участка';
     ctxPf.innerHTML = '<i class="fas fa-mountain"></i> Участок в «Профиль»';
     ctxLg.innerHTML = '<i class="fas fa-route"></i> Участок в «Логистику»';
     ctxIm.innerHTML = '<i class="fas fa-satellite"></i> Участок в «Снимки»';
@@ -933,7 +942,7 @@
         return el;
     }
     var hdWx = ctxGroup('fa-cloud-sun-rain', 'Погода и климат', [ctxWx, mkItem('fa-chart-line', 'Климат участка', 'climate', 'Климат участка'), mkItem('fa-seedling', 'Тепло и вегетация', 'gdd', 'Тепло и вегетация'), mkItem('fa-snowflake', 'Заморозки', 'frost', 'Заморозки'), mkItem('fa-wind', 'Ветер и окна работ', 'windwork', 'Ветер и окна работ')]);
-    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-fire', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
+    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-wheat-awn', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
     var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), mkItem('fa-draw-polygon', 'Границы и форма', 'shape', 'Границы и форма'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
     var hdDl = ctxGroup('fa-file-arrow-down', 'Скачать границы', [ctxKml, ctxGj, ctxShp, ctxDxf]);
     var ctxAll = [ctxSep, ctxAn, hdTr, hdTr._sub, hdDl, hdDl._sub];
@@ -965,7 +974,7 @@
             var ro = rowsOf(it.f.properties || it.f), g = it.f.geometry;
             var cn = g.type === 'MultiPolygon' ? g.coordinates.length : (g.type === 'Polygon' ? 1 : 0), isMulti = cn > 1;   // многоконтурность: число отдельных контуров участка
             var mcRow = cn ? [['Многоконтурный участок', isMulti ? 'Да, контуров: ' + cn : 'Нет, один контур']] : [];
-            var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: ro.num, name: ro.num, source: 'НСПД', contours: cn, multi_contour: isMulti, attrs: mcRow.concat(ro.list, ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
+            var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: it.src ? '' : ro.num, name: ro.num, source: it.src || 'НСПД', contours: cn, multi_contour: isMulti, attrs: mcRow.concat(ro.list, ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
             if (bp) {   // как загрузка файла в разделе: gcShapeIO[...].put ставит фигуру и запускает расчёт раздела
                 var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', change: 'sn', shape: 'shp' }[bp];
                 var io = typeof gcShapeIO !== 'undefined' ? gcShapeIO[KEY] : null;
@@ -978,7 +987,7 @@
                     if (bp === 'logistics') go('#lgBuffer', 0);
                     else if (bp === 'chem') go('[data-bp-pane="chem"] [data-ch-act="calc"]', 300);
                     else if (bp === 'change') go('[data-bp-pane="change"] [data-sn-act="cmp"]', 250);
-                    if (typeof updateStatus === 'function') updateStatus('📥 Границы участка ' + (ro.num || '') + ' из НСПД перенесены в «' + title + '».');
+                    if (typeof updateStatus === 'function') updateStatus('📥 Границы ' + (it.from || 'участка ' + (ro.num || '') + ' из НСПД') + ' перенесены в «' + title + '».');
                 }, 120);
                 return;
             }
@@ -992,13 +1001,33 @@
             if (typeof updateObjectList === 'function') updateObjectList();
             clearSel();
             var tb = bp ? document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]') : document.querySelector('.panel-tab[data-tab="analysis"]'); if (tb) tb.click();
-            if (typeof updateStatus === 'function') updateStatus('📥 Границы участка ' + (ro.num || '') + ' из НСПД перенесены в «' + (title || 'Анализ участка') + '».' + (bp ? '' : ' Выберите дату снимка и запустите анализ.'));
+            if (typeof updateStatus === 'function') updateStatus('📥 Границы ' + (it.from || 'участка ' + (ro.num || '') + ' из НСПД') + ' перенесены в «' + (title || 'Анализ участка') + '».' + (bp ? '' : ' Выберите дату снимка и запустите анализ.'));
         } catch (x) { say('Не удалось перенести границы в анализ: ' + x.message); }
     }
     ctxAn.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) toAnalysis(it); });
     [[ctxPf, 'profile', 'Профиль'], [ctxLg, 'logistics', 'Логистика'], [ctxIm, 'dates', 'Снимки'], [ctxWx, 'weather', 'Погода']].forEach(function (a) {
         a[0].addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) toAnalysis(it, a[1], a[2]); });
     });
+
+    // общий вход для меню правой кнопки других инструментов (например «Рисование»): те же форматы скачивания и те же разделы переноса границ, что у участков НСПД
+    window.gcShapeMenuApi = {
+        formats: [{ id: 'kml', label: 'KML' }, { id: 'geojson', label: 'GeoJSON' }, { id: 'shp', label: 'SHP (с атрибутами)' }, { id: 'dxf', label: 'DXF' }],
+        targets: [
+            { icon: 'fa-mountain', label: 'Профиль', bp: 'profile' },
+            { icon: 'fa-route', label: 'Логистика', bp: 'logistics' },
+            { icon: 'fa-flask', label: 'Почвенный анализ', bp: 'chem' },
+            { icon: 'fa-draw-polygon', label: 'Границы и форма', bp: 'shape' },
+            { icon: 'fa-cloud-sun-rain', label: 'Погода и климат', sub: [
+                { icon: 'fa-cloud-sun-rain', label: 'Погода', bp: 'weather' }, { icon: 'fa-chart-line', label: 'Климат участка', bp: 'climate' },
+                { icon: 'fa-seedling', label: 'Тепло и вегетация', bp: 'gdd' }, { icon: 'fa-snowflake', label: 'Заморозки', bp: 'frost' },
+                { icon: 'fa-wind', label: 'Ветер и окна работ', bp: 'windwork' }] },
+            { icon: 'fa-satellite', label: 'Снимки и индексы', sub: [
+                { icon: 'fa-satellite', label: 'Снимки', bp: 'dates' }, { icon: 'fa-leaf', label: 'NDVI', bp: 'ndvi' }, { icon: 'fa-cloud-rain', label: 'NDMI', bp: 'ndmi' },
+                { icon: 'fa-wheat-awn', label: 'NBR', bp: 'nbr' }, { icon: 'fa-code-compare', label: 'Сравнение снимков', bp: 'change' }] }
+        ],
+        exportAs: exportAs,
+        toAnalysis: toAnalysis
+    };
 
     function feats(t) {
         try { var j = JSON.parse(t); return { f: j.features || (j.data && j.data.features) || (j.data && j.data.type === 'Feature' ? [j.data] : []), raw: '' }; }
@@ -1118,6 +1147,7 @@
 /* Обучающий курс: кнопка на карте показывает всплывающие подсказки по элементам одну за одной (Далее / Назад / Esc). */
 (function () {
     'use strict';
+    var vis = gcUx.vis, bubblePlace = gcUx.bubblePlace;
     var btn = document.getElementById('tourBtn'), app = document.querySelector('#map-section .app-container');
     if (!btn || !app) return;
     var STEPS = [
@@ -1146,7 +1176,6 @@
         { s: null, p: 'c', t: 'Правая кнопка мыши', d: 'Щёлкните правой кнопкой по карте: «Что здесь?», маршрут, закладка. На кадастровом участке — перенос границ в разделы анализа и скачивание в KML, GeoJSON, SHP, DXF.' }
     ];
     var list = [], i = 0, bub = null, tgt = null;
-    function vis(el) { var r = el && el.getBoundingClientRect(); return !!r && r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden'; }
     function clearHl() { if (tgt) { tgt.classList.remove('gh-pulse'); tgt.style.animationIterationCount = ''; tgt = null; } }
     function stop() {
         clearHl(); if (bub) { bub.remove(); bub = null; }
@@ -1169,14 +1198,10 @@
         app.appendChild(bub);
         var a = app.getBoundingClientRect(), w = bub.offsetWidth, hh = bub.offsetHeight, x, y;
         if (t && st.p !== 'c') {
-            var r = t.getBoundingClientRect(), cx = r.left + r.width / 2 - a.left, cy = r.top + r.height / 2 - a.top;
-            if (st.p === 'l') { x = r.left - a.left - w - 14; y = cy - hh / 2; }
-            else if (st.p === 'r') { x = r.right - a.left + 14; y = cy - hh / 2; }
-            else if (st.p === 't') { x = cx - w / 2; y = r.top - a.top - hh - 14; }
-            else { x = cx - w / 2; y = r.bottom - a.top + 14; }
-            x = Math.max(8, Math.min(a.width - w - 8, x)); y = Math.max(8, Math.min(a.height - hh - 8, y));
-            bub.style.setProperty('--ay', Math.max(14, Math.min(hh - 14, cy - y)) + 'px');
-            bub.style.setProperty('--ax', Math.max(14, Math.min(w - 14, cx - x)) + 'px');
+            var pl = bubblePlace(st.p, a, t.getBoundingClientRect(), w, hh);
+            x = pl.x; y = pl.y;
+            bub.style.setProperty('--ay', pl.ay + 'px');
+            bub.style.setProperty('--ax', pl.ax + 'px');
             t.classList.add('gh-pulse'); t.style.animationIterationCount = 'infinite'; tgt = t;
         } else { bub.className = 'gh gh-tour gh-c'; x = (a.width - w) / 2; y = (a.height - hh) / 2; }
         bub.style.left = x + 'px'; bub.style.top = y + 'px';

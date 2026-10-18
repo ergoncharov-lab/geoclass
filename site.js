@@ -1,4 +1,13 @@
 /* Навигация, «листание с приглашением» и паспорт участка. К коду карты (script.js) отношения не имеет. */
+/* Общие помощники для блоков этого файла (window.gcSite): экранирование HTML, поиск по id, открытие боковой панели */
+(function () {
+    window.gcSite = {
+        $: function (id) { return document.getElementById(id); },
+        esc: function (s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); },
+        // боковая панель скрыта — нажать кнопку-«язычок», чтобы открыть
+        openDrawer: function (panel) { if (panel && panel.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); } }
+    };
+})();
 (function () {
     var root = document.documentElement;
     var header = document.getElementById('siteHeader');
@@ -188,7 +197,7 @@
     if (snCal) (function () {
         var month = new Date(), groups = [], seq = 0, cache = {}, lastKey = '', sel = null, note = 'Сначала загрузите или нарисуйте участок — затем здесь появятся даты со снимками.';
         month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
-        var $ = function (id) { return document.getElementById(id); }, p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+        var $ = gcSite.$, p2 = function (n) { return (n < 10 ? '0' : '') + n; };
         var ccCol = function (c) { return c == null ? '#94a3b8' : c <= 10 ? '#10b981' : c <= 30 ? '#84cc16' : c <= 60 ? '#f59e0b' : '#ef4444'; };
         var fmtD = function (d) { return new Date(d + 'T00:00:00Z').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); };
         var stacUrl = function () { return (typeof SENTINEL !== 'undefined' && SENTINEL.stacUrl) || 'https://earth-search.aws.element84.com/v1'; };
@@ -249,8 +258,9 @@
             var g = groups.filter(function (x) { return x.day === b.getAttribute('data-day'); })[0]; if (!g) return;
             sel = { day: g.day, cc: g.cc, scenes: g.scenes.map(function (s) { return { id: s.id, cc: s.cc }; }) }; showSel(); draw();
         });
-        $('anSatPrev').addEventListener('click', function () { month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)); load(0); });
-        $('anSatNext').addEventListener('click', function () { month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)); load(0); });
+        function shiftMonth(d) { month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + d, 1)); load(0); }
+        $('anSatPrev').addEventListener('click', function () { shiftMonth(-1); });
+        $('anSatNext').addEventListener('click', function () { shiftMonth(1); });
         $('anSatFind').addEventListener('click', function () { cache = {}; lastKey = ''; load(3); });
         $('anSatCc').addEventListener('input', function () { $('anSatCcVal').textContent = this.value; draw(); });
         // контур участка могли загрузить, нарисовать или изменить — следим, пока вкладка «Анализ» открыта
@@ -313,6 +323,7 @@
 (function () {
     var panel = document.getElementById('mainPanel');
     if (!panel) return;
+    var esc = gcSite.esc, openDrawer = gcSite.openDrawer;
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
@@ -392,7 +403,6 @@
         var okPts = [], wps = [];
         var SPD = { car: 5, foot: 1.4, bike: 4 };   // м/с — оценка скорости на участках вне дорог (для времени)
 
-        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
         function fmtT(sec) { var m = Math.max(1, Math.round(sec / 60)); return m < 60 ? m + ' мин' : Math.floor(m / 60) + ' ч ' + (m % 60 ? (m % 60) + ' мин' : ''); }
         function fmtD(m) { return m < 1000 ? Math.round(m / 10) * 10 + ' м' : (m < 100000 ? (m / 1000).toFixed(1).replace('.', ',') : Math.round(m / 1000)) + ' км'; }
         function letter(i) { return i === 0 ? 'A' : (i === pts.length - 1 ? 'B' : String(i)); }
@@ -624,9 +634,11 @@
             }
         };
     })();
+    // маршрутизатор подключён? иначе — сообщение в строку состояния
+    function rtReady() { if (RT) return true; if (typeof updateStatus === 'function') updateStatus('ℹ️ Карта ещё не загружена', true); return false; }
     var route = document.getElementById('routeBtn');
     if (route) route.addEventListener('click', function () {
-        if (!RT) { if (typeof updateStatus === 'function') updateStatus('ℹ️ Карта ещё не загружена', true); return; }
+        if (!rtReady()) return;
         setView('route', 'Маршрут'); RT.open();
     });
     // ---- правый клик по карте: «Маршрут сюда» / «Маршрут отсюда» / «Сохранить закладку» ----
@@ -635,8 +647,8 @@
         var ll = ctxPt();
         if (typeof hideMapContextMenu === 'function') hideMapContextMenu();
         if (!ll) return;
-        if (!RT) { if (typeof updateStatus === 'function') updateStatus('ℹ️ Карта ещё не загружена', true); return; }
-        if (panel.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        if (!rtReady()) return;
+        openDrawer(panel);
         setView('route', 'Маршрут'); RT.open(); RT.setEnd(which, ll);
     }
     var cTo = document.getElementById('ctxRouteTo'), cFrom = document.getElementById('ctxRouteFrom'), cBm = document.getElementById('ctxBookmark');
@@ -693,6 +705,7 @@
     var sec = document.getElementById('data-catalog');
     if (!sec) return;
     var opts = Array.prototype.slice.call(sec.querySelectorAll('.s-opt'));
+    function eachCatAll(fn) { Array.prototype.forEach.call(sec.querySelectorAll('.s-cat-all'), fn); }
     var sum = document.getElementById('catSum'), clr = document.getElementById('catClear'), ord = document.getElementById('catOrder'), ok = document.getElementById('catOk');
     var NAMES = { osm: 'векторные OSM', sat: 'спутниковые', ana: 'аналитические' };
     function plural(n) { var a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'набор' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'набора' : 'наборов'; }
@@ -706,13 +719,13 @@
         }
         clr.disabled = ord.disabled = !on.length;
         ok.hidden = true;
-        Array.prototype.forEach.call(sec.querySelectorAll('.s-cat-all'), function (b) {
+        eachCatAll(function (b) {
             var card = b.closest('.s-cat-card'), all = card.querySelectorAll('.s-opt'), sel = card.querySelectorAll('.s-opt.selected');
             b.textContent = (sel.length === all.length) ? 'Снять выбор' : 'Выбрать все';
         });
     }
     opts.forEach(function (o) { o.addEventListener('click', function () { o.classList.toggle('selected'); refresh(); }); });
-    Array.prototype.forEach.call(sec.querySelectorAll('.s-cat-all'), function (b) {
+    eachCatAll(function (b) {
         b.addEventListener('click', function () {
             var all = b.closest('.s-cat-card').querySelectorAll('.s-opt'), full = b.closest('.s-cat-card').querySelectorAll('.s-opt.selected').length === all.length;
             Array.prototype.forEach.call(all, function (o) { o.classList.toggle('selected', !full); });
@@ -786,10 +799,10 @@
 /* ===== Закладки: хранятся в localStorage браузера (скриншот карты, название, описание) ===== */
 (function () {
     var KEY = 'geoclass.bookmarks.v1';
+    var esc = gcSite.esc;
     var listEl = document.getElementById('bmList'), emptyEl = document.getElementById('bmEmpty'), cntEl = document.getElementById('bmCount');
     if (!listEl || typeof L === 'undefined' || typeof map === 'undefined') return;
     var items = [], pin = null;
-    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function load() { try { var a = JSON.parse(localStorage.getItem(KEY) || '[]'); items = Array.isArray(a) ? a : []; } catch (e) { items = []; } }
     function save() {
         try { localStorage.setItem(KEY, JSON.stringify(items)); }
@@ -839,8 +852,7 @@
         });
     }
     function openPane() {
-        var p = document.getElementById('mainPanel');
-        if (p && p.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        gcSite.openDrawer(document.getElementById('mainPanel'));
         var t = document.querySelector('.panel-tab[data-tab="bookmarks"]'); if (t) t.click();
         if (window.gcRailMark) window.gcRailMark('bookmarks');
     }
@@ -902,7 +914,7 @@
         if (k === 'help') { setHelp(true); return; }
         setHelp(false);
         if (app && app.classList.contains('passport-open')) { var pc = document.getElementById('ppClose'); if (pc) pc.click(); }
-        if (panel.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        gcSite.openDrawer(panel);
         var bb = document.getElementById('spBackBtn');
         if (panel.getAttribute('data-view') !== 'home' && bb) bb.click();   // закрыть открытый раздел или маршрут
         if (k === 'bookmarks') { var t = document.querySelector('.panel-tab[data-tab="bookmarks"]'); if (t) t.click(); mark(k); return; }
@@ -997,7 +1009,7 @@
         { ic: 'fa-leaf', c: '#22c55e', t: 'NDVI — растительность', d: 'Густота и состояние растительности: от воды и голой почвы до густых посевов, статистика и зоны.', h: 'Выберите дату и обведите поле.', bp: 'ndvi', m: 'Главный индекс состояния посевов: чем выше значение, тем гуще и здоровее растительность. Помогает находить проблемные места на поле и планировать обследование.', f: ['Карта индекса и статистика по фигуре', 'Зоны внутри поля — равные по площади или по интервалам', 'Сравнение разных дат'] },
         { ic: 'fa-code-compare', c: '#6366f1', t: 'Сравнение снимков', d: 'Два снимка Sentinel-2 на разные даты рядом: карта делится пополам, под каждым — дата и статистика индекса.', h: 'Нарисуйте или импортируйте фигуру и нажмите «Сравнить снимки».', bp: 'change', m: 'Сравнивайте состояние участка на две даты: до и после события, в разные фазы вегетации или в соседние сезоны. Карта делится на две половины, внизу у каждой — календарь выбора даты и показатели индекса, а сверху — сводка изменения среднего значения.', f: ['Естественные и ложные цвета, NDVI, NDMI, NBR', 'Область — рисование или импорт фигуры (KML, GeoJSON, Excel, XML Росреестра)', 'Статистика и гистограмма под каждым снимком'] },
         { ic: 'fa-seedling', c: '#0284c7', t: 'NDMI — влажность растений', d: 'Содержание влаги в растениях: помогает заметить засуху и водный стресс.', h: 'Выберите дату и сравните поля между собой.', bp: 'ndmi', m: 'Индекс влажности растительного покрова. Падение значений раньше глаза показывает, что растения начали страдать от нехватки воды.', f: ['Водный стресс растений', 'Раннее выявление засухи', 'Календарь, область и скачивание GeoTIFF'] },
-        { ic: 'fa-fire', c: '#f59e0b', t: 'NBR — гари', d: 'Гари и повреждение растительности; сравнение «до и после» помогает оценить ущерб.', h: 'Сравните снимки до и после события.', bp: 'nbr', m: 'Индекс горения: по нему различают сгоревшие и здоровые участки. Сравнение снимков до и после события показывает масштаб и тяжесть повреждения.', f: ['Выявление гарей', 'Оценка тяжести повреждения', 'Календарь, область и скачивание GeoTIFF'] },
+        { ic: 'fa-wheat-awn', c: '#f59e0b', t: 'NBR — состояние покрова', d: 'Сухая биомасса и угнетение растений; сравнение дат показывает динамику состояния участка.', h: 'Сравните снимки на разные даты.', bp: 'nbr', m: 'Индекс по ближнему и коротковолновому ИК (SWIR2): чувствителен к сухой биомассе, влажности покрова и голой почве. Сравнение снимков на разные даты показывает, как меняется состояние покрова за сезон — до и после уборки, засухи или обработки.', f: ['Сухая биомасса и угнетённые посевы', 'Динамика покрова за сезон (сравнение двух дат)', 'Календарь, область и скачивание GeoTIFF'] },
         { ic: 'fa-cloud-sun-rain', c: '#0ea5e9', t: 'Прогноз погоды', d: 'Погода сейчас и на 7 дней по вашему участку: температура, осадки, ветер, дни с заморозком.', h: 'Нарисуйте участок или загрузите контур — расчёт идёт по фигуре.', bp: 'weather', m: 'Погода по вашему участку, а не по городу: расчёт идёт по точкам внутри нарисованной фигуры. Видно, что происходит сейчас и чего ждать всю неделю.', f: ['Сейчас: температура, влажность, облачность, ветер, осадки', 'Прогноз на 7 дней с вероятностью осадков', 'Сумма T > 5 °C и дни с заморозком'] },
         { ic: 'fa-chart-line', c: '#6366f1', t: 'Климат участка', d: 'Климатограмма за 10 лет: температура и осадки по месяцам, ГТК Селянинова.', h: 'Нарисуйте участок — данные ERA5 загрузятся для его центра.', bp: 'climate', m: 'Типичный климат участка за последние 10 лет по реанализу ERA5. Нужен для подбора культур и сортов и оценки климатических рисков.', f: ['Температура и осадки по месяцам', 'Климатограмма и самый влажный месяц', 'ГТК Селянинова — оценка увлажнения'] },
         { ic: 'fa-sun-plant-wilt', c: '#22c55e', t: 'Тепло и вегетация', d: 'Суммы температур выше 5 и 10 °C, период вегетации и культуры, которым хватит тепла.', h: 'Нарисуйте участок и откройте раздел.', bp: 'gdd', m: 'Сколько тепла получает участок за год и хватит ли его выбранной культуре. Даты вегетации помогают планировать сроки сева и уборки.', f: ['Суммы температур выше 5 и 10 °C за год', 'Даты начала и конца вегетации', 'Кривая накопления тепла и подходящие культуры'] },
@@ -1088,8 +1100,7 @@
     'use strict';
     var KEY = 'gc_user_layers', pane = document.querySelector('[data-bp-pane="userlayers"]');
     if (!pane || typeof map === 'undefined') return;
-    var $ = function (id) { return document.getElementById(id); };
-    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var $ = gcSite.$, esc = gcSite.esc;
     var TYPES = { xyz: 'XYZ / TMS / WMTS ({z}/{x}/{y})', wms: 'WMS', wfs: 'WFS', arcgis: 'ArcGIS MapServer (плитки)', arcfeat: 'ArcGIS FeatureServer', geojson: 'GeoJSON / KML по ссылке' };
     var HINT = { xyz: 'Пример: https://tile.example.com/{z}/{x}/{y}.png', wms: 'Адрес сервиса без параметров; в поле «Слои» — имя слоя из GetCapabilities.', wfs: 'Адрес WFS и typeName. Сервер должен отдавать JSON и разрешать CORS.', arcgis: 'Адрес …/MapServer или …/MapServer/0 (растровый показ слоя).', arcfeat: 'Адрес слоя …/FeatureServer/0', geojson: 'Прямая ссылка на .geojson / .json / .kml.' };
     var items = [], live = {};
@@ -1385,8 +1396,7 @@
     var b = document.getElementById('drawMapBtn'); if (!b) return;
     b.addEventListener('click', function (e) {
         e.stopPropagation();
-        var p = document.getElementById('mainPanel');
-        if (p && p.classList.contains('hidden')) { var tg = document.getElementById('toggleDrawerBtn'); if (tg) tg.click(); }
+        gcSite.openDrawer(document.getElementById('mainPanel'));
         var t = document.querySelector('#mainPanel .sp-tile[data-bp="draw"]'); if (t) t.click();
         if (window.gcRailMark) window.gcRailMark('tools');
     });

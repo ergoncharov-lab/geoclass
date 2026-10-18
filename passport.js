@@ -193,7 +193,7 @@
         var el = document.getElementById('ppLeg_' + key); if (el) el.innerHTML = legHtml(cols, lo, hi, unit) + legSrc(key);
     }
     function addImg(key, url, bounds, op) { var o = minis[key]; if (!o) return null; return L.imageOverlay(url, bounds, { pane: 'tilePane', zIndex: 12, opacity: op || 0.85, interactive: false }).addTo(o.map); }
-    function snap(o) {
+    function snap(o, noLeg) {
         var r0 = o.el.getBoundingClientRect(), S = 2, c = document.createElement('canvas'); c.width = Math.round(r0.width * S); c.height = Math.round(r0.height * S);
         var g = c.getContext('2d'); g.scale(S, S); g.fillStyle = '#e5e7eb'; g.fillRect(0, 0, r0.width, r0.height);
         ['img.leaflet-tile', 'img.leaflet-image-layer'].forEach(function (sel) {
@@ -210,7 +210,7 @@
         });
         g.font = '600 13px sans-serif'; var tw = g.measureText(o.title).width + 18;
         g.fillStyle = 'rgba(15,23,42,.78)'; g.fillRect(8, 8, tw, 26); g.fillStyle = '#fff'; g.fillText(o.title, 17, 26);
-        if (o.leg) {
+        if (o.leg && !noLeg) {
             var lg = o.leg, x = 8, y = r0.height - 50, w = Math.min(190, r0.width - 40), grd = g.createLinearGradient(x + 8, 0, x + 8 + w, 0);
             lg.cols.forEach(function (cl, i) { grd.addColorStop(i / (lg.cols.length - 1), cl); });
             g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(x, y, w + 16, 42); g.fillStyle = grd; g.fillRect(x + 8, y + 7, w, 10);
@@ -278,10 +278,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     });
 
     body.addEventListener('click', function (e) {   // копирование таблицы вершин
-        var b = e.target.closest('[data-vcopy]'); if (!b || !D.vtxt) return;
-        var ok = function () { b.innerHTML = '<i class="fas fa-check"></i> Скопировано'; setTimeout(function () { b.innerHTML = '<i class="fas fa-copy"></i> Копировать'; }, 1800); };
-        var fb = function () { var ta = document.createElement('textarea'); ta.value = D.vtxt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (er) { updateStatus('⚠️ Не удалось скопировать', true); } document.body.removeChild(ta); };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(D.vtxt).then(ok, fb); else fb();
+        var b = e.target.closest('[data-vcopy]'); if (!b || !D.vtxt) return; copyText(b, D.vtxt);
     });
     // ---------- 3D-карта (MapLibre): рельеф + снимок, при наличии heat — тепловая карта высот поверх ----------
     function mk3d(key, gj, heat) {
@@ -355,23 +352,38 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         } else if (Array.isArray(p.attrs)) p.attrs.forEach(function (x) { add(esc(x[0]), esc(x[1])); });
         return r;
     }
+    // ---------- общие блоки «Общей информации»: используются и в паспорте участка, и в блоке «Фигура» ----------
+    function sizeFmt(m) { return m < 1000 ? nf(m, 0) + ' м' : nf(m / 1000, 2) + ' км'; }
+    function compactionK(a, per) { return 4 * Math.PI * a / Math.pow(per * 1000, 2); }   // компактность K = 4π·S / P²
+    function sizeTiles(a, per, nv, c, bb, K) {
+        var w = hav(c[1], bb[0], c[1], bb[2]), h = hav(bb[1], c[0], bb[3], c[0]);
+        var kl = K >= 0.6 ? ['компактная', '#16a34a'] : K >= 0.3 ? ['умеренно вытянутая', '#eab308'] : ['сильно вытянутая', '#dc2626'];
+        return tiles([['Площадь', nf(a / 1e4, 2) + ' га', nf(a, 0) + ' м²', CC.gen], ['Периметр', nf(per * 1000, 0) + ' м', nf(per, 2) + ' км', '#0ea5e9'], ['Габариты В–З × С–Ю', sizeFmt(w) + ' × ' + sizeFmt(h), '', '#14b8a6'], ['Вершин контура', nf(nv, 0), '', '#a855f7'], ['Компактность K', nf(K, 2), kl[0], kl[1]]]);
+    }
+    function compactChart(K, note) { return chart('Форма участка на шкале компактности', meter([[0.3, '#ef4444'], [0.6, '#facc15'], [0.8, '#22c55e']], K, 0, 0.8, 1), 'Красная зона — вытянутые и изрезанные контуры (больше холостых проходов техники), зелёная — компактные участки, удобные для обработки.' + note); }
+    function centerKv(c, cad, a, addrId) { return kv([['Центр (широта, долгота)', c[1].toFixed(6) + ', ' + c[0].toFixed(6)], ['Адрес', '<span id="' + addrId + '">определяется…</span>'], ['Кадастровый номер', cad ? esc(cad) : ''], ['Площадь в других единицах', nf(a / 100, 1) + ' сот. · ' + nf(a / 4046.86, 2) + ' акра'], ['Зона UTM', (Math.floor((c[0] + 180) / 6) + 1) + (c[1] >= 0 ? ' N' : ' S')]]); }
+    function cadChart(cp, cr) { return (cr.length ? chart(cp.source === 'rosreestr' ? 'Кадастровые сведения · выписка ЕГРН' : 'Сведения об объекте', kv(cr), cp.source === 'rosreestr' ? 'Атрибуты объекта из кадастра; площадь по контуру считается по границам на карте и может немного отличаться от кадастровой.' : 'Атрибуты объекта; площадь по контуру считается по границам на карте и может немного отличаться от указанной в источнике.') : ''); }
+    function reverseGeocode(c) { return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }); }
+    // копирование текста в буфер обмена с подменой подписи на кнопке b (запасной путь — через скрытое textarea)
+    function copyText(b, text) {
+        var ok = function () { b.innerHTML = '<i class="fas fa-check"></i> Скопировано'; setTimeout(function () { b.innerHTML = '<i class="fas fa-copy"></i> Копировать'; }, 1800); };
+        var fb = function () { var ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (er) { updateStatus('⚠️ Не удалось скопировать', true); } document.body.removeChild(ta); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fb); else fb();
+    }
+
     // ---------- 1. общая информация ----------
     function general(l, gj) {
         var a = turf.area(gj), per = 0, c = turf.centroid(gj).geometry.coordinates, cad = l.feature && l.feature.properties && l.feature.properties.cad_number, bb = turf.bbox(gj), nv = 0;
         polysOf(gj).forEach(function (p) { p.forEach(function (r) { per += turf.length(turf.lineString(r), { units: 'kilometers' }); nv += Math.max(0, r.length - 1); }); });
-        var w = hav(c[1], bb[0], c[1], bb[2]), h = hav(bb[1], c[0], bb[3], c[0]), K = 4 * Math.PI * a / Math.pow(per * 1000, 2), fm2 = function (m) { return m < 1000 ? nf(m, 0) + ' м' : nf(m / 1000, 2) + ' км'; };
+        var K = compactionK(a, per);
         D.area = a; D.per = per; D.c = c; D.cad = cad; D.comp = K; D.nv = nv;
-        var kl = K >= 0.6 ? ['компактная', '#16a34a'] : K >= 0.3 ? ['умеренно вытянутая', '#eab308'] : ['сильно вытянутая', '#dc2626'];
         var cp = l.feature && l.feature.properties, cr = cadRows(cp, a);
         return sec(1, 'circle-info', 'Общая информация об участке', 'Размеры, форма, положение и адрес', CC.gen, blk({
             t: 'Границы, размеры и форма', i: 'draw-polygon', map: mapBox('gen'),
             info: ['Базовые геометрические характеристики контура участка: площадь, периметр, габариты, форма, положение и адрес.',
                 'Площадь и периметр — основа расчёта норм семян и удобрений, затрат на обработку и ограждение. Форма влияет на эффективность техники: чем более вытянут и изрезан контур, тем больше поворотов и холостых проходов.',
                 'Площадь — геодезическая (turf.area, эллипсоид WGS-84); периметр — сумма длин всех колец контура; компактность K = 4π·S / P² (1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый); габариты — стороны описанного прямоугольника по С–Ю и В–З; адрес — обратное геокодирование OpenStreetMap Nominatim по центру участка; зона UTM = ⌊(долгота + 180) / 6⌋ + 1.'],
-            body: tiles([['Площадь', nf(a / 1e4, 2) + ' га', nf(a, 0) + ' м²', CC.gen], ['Периметр', nf(per * 1000, 0) + ' м', nf(per, 2) + ' км', '#0ea5e9'], ['Габариты В–З × С–Ю', fm2(w) + ' × ' + fm2(h), '', '#14b8a6'], ['Вершин контура', nf(nv, 0), '', '#a855f7'], ['Компактность K', nf(K, 2), kl[0], kl[1]]]) +
-                chart('Форма участка на шкале компактности', meter([[0.3, '#ef4444'], [0.6, '#facc15'], [0.8, '#22c55e']], K, 0, 0.8, 1), 'Красная зона — вытянутые и изрезанные контуры (больше холостых проходов техники), зелёная — компактные участки, удобные для обработки.') +
-                kv([['Центр (широта, долгота)', c[1].toFixed(6) + ', ' + c[0].toFixed(6)], ['Адрес', '<span id="ppAddr">определяется…</span>'], ['Кадастровый номер', cad ? esc(cad) : ''], ['Площадь в других единицах', nf(a / 100, 1) + ' сот. · ' + nf(a / 4046.86, 2) + ' акра'], ['Зона UTM', (Math.floor((c[0] + 180) / 6) + 1) + (c[1] >= 0 ? ' N' : ' S')]]) +
-                (cr.length ? chart('Кадастровые сведения · ' + (cp.source === 'rosreestr' ? 'выписка ЕГРН' : 'слой кадастра (НСПД)'), kv(cr), 'Атрибуты объекта из кадастра; площадь по контуру считается по границам на карте и может немного отличаться от кадастровой.') : '') +
+            body: sizeTiles(a, per, nv, c, bb, K) + compactChart(K, '') + centerKv(c, cad, a, 'ppAddr') + cadChart(cp, cr) +
                 vtab(gj)
         }));
     }
@@ -407,6 +419,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#passportPane .pp-top .pp-tb.pri{background:linear-gradient(135deg,#6366f1,#2563eb);color:#fff}#passportPane .pp-top .pp-tb.pdf{background:linear-gradient(135deg,#f97316,#dc2626);color:#fff}',
         '#passportPane .pp-top .pp-tb.sec{background:#fff;color:#334155;border-color:#cbd5e1}#passportPane .pp-top .pp-tb.sec i{color:#2563eb}',
         '#passportPane .pp-top .pp-tbs{display:flex;flex-direction:column;gap:6px;order:5;margin-left:auto}#passportPane .pp-top .pp-tbs .pp-tb{width:100%;height:30px}',
+        '#passportPane .pp-top .pp-tb.xls{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}#passportPane .pp-top .pp-tb:disabled{opacity:.7;cursor:progress;transform:none}',
         '@media print{#ppSt{display:none}}'
     ].join('');
     function ppCss() { if (!document.getElementById('ppStCss')) { var cs = document.createElement('style'); cs.id = 'ppStCss'; cs.textContent = ST_CSS; document.head.appendChild(cs); } }
@@ -447,10 +460,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     function stTop(top) {
         var q = function (id) { return document.getElementById(id); }, set = function (el, cls, ic, tx) { if (!el) return; el.classList.add('pp-tb', cls); if (tx) el.innerHTML = '<i class="fas fa-' + ic + '"></i> ' + tx; };
         var rf = q('ppRefresh'), pr = q('ppPrint');
-        set(rf, 'pri', 'rotate', 'Обновить по фигуре'); set(pr, 'pdf', 'file-pdf', 'Весь паспорт в PDF');
+        var px = q('ppExcel'); if (!px && pr) { px = document.createElement('button'); px.type = 'button'; px.id = 'ppExcel'; px.className = 'pp-btn'; pr.parentNode.insertBefore(px, pr.nextSibling); }
+        set(rf, 'pri', 'rotate', 'Обновить по фигуре'); set(pr, 'pdf', 'file-pdf', 'Весь паспорт в PDF'); if (px && !px.disabled) set(px, 'xls', 'file-excel', 'Паспорт в Excel');
         set(q('ppCollapseAll'), 'sec');   // значок и подпись меняет ux-extras.js
         Array.prototype.forEach.call(top.querySelectorAll('button, a'), function (e) { if (!e.classList.contains('pp-tb') && e.textContent.trim().length < 20 && /К карте/.test(e.textContent)) set(e, 'sec', 'map-location-dot', 'К карте'); });
-        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); w.appendChild(rf); if (pr) w.appendChild(pr); }
+        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); w.appendChild(rf); if (pr) w.appendChild(pr); if (px) w.appendChild(px); }
+        var sd = q('ppSide'); if (sd && px && px.parentNode !== sd) sd.appendChild(px);
     }
     function stInit() {
         var top = document.querySelector('#passportPane .pp-top'); if (!top) return;
@@ -479,7 +494,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         stSum();
     }
     function address(c, tok) {
-        fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }).then(function (j) {
+        reverseGeocode(c).then(function (j) {
             if (tok !== seq) return; var el = document.getElementById('ppAddr'); if (el) el.textContent = j.display_name || 'адрес не найден'; stSet('addr', j.display_name ? 'ok' : 'err', j.display_name ? '' : 'адрес не найден');
         }).catch(function () { if (tok === seq) stSet('addr', 'err', 'нет связи с геокодером'); var el = document.getElementById('ppAddr'); if (el) el.textContent = 'не удалось определить (нет связи с геокодером)'; });
     }
@@ -509,9 +524,9 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         { k: 'ndmi', t: 'NDMI — влажность растительности', i: 'cloud-rain', c: '#0ea5e9', l: 'NDMI',
             f: ['Индекс влажности растительного покрова (содержание воды в листьях).', 'Раннее выявление водного стресса и засухи — до появления видимых признаков; планирование полива и сроков уборки.', 'NDMI = (NIR − SWIR1) / (NIR + SWIR1) = (B08 − B11) / (B08 + B11); канал B11 (20 м) приводится к 10 м.'],
             sc: [['> 0,4 · высокая влагообеспеченность', '#0ea5e9'], ['0,2–0,4 · хорошая', '#4ade80'], ['0–0,2 · умеренная', '#facc15'], ['−0,2–0 · водный стресс', '#f97316'], ['< −0,2 · сильный стресс, сухая почва', '#dc2626']] },
-        { k: 'nbr', t: 'NBR — гари и нарушения покрова', i: 'fire', c: '#ea580c', l: 'NBR',
-            f: ['Нормализованный индекс гарей — чувствителен к повреждению и удалению растительности.', 'Выявляет гари, вырубки и сильные нарушения покрова, позволяет оценить скорость восстановления.', 'NBR = (NIR − SWIR2) / (NIR + SWIR2) = (B08 − B12) / (B08 + B12); для оценки события считают dNBR = NBR до − NBR после.'],
-            sc: [['> 0,3 · здоровая растительность', '#16a34a'], ['0,1–0,3 · восстановление', '#facc15'], ['−0,1–0,1 · слабое нарушение', '#f97316'], ['< −0,1 · свежая гарь, вырубка', '#dc2626']] }
+        { k: 'nbr', t: 'NBR — состояние растительного покрова', i: 'wheat-awn', c: '#ea580c', l: 'NBR',
+            f: ['Нормализованный индекс по ближнему и коротковолновому ИК (SWIR2) — чувствителен к сухой биомассе, влажности покрова и голой почве.', 'Показывает угнетение и усыхание посевов, созревание культур, стерню и обнажённую почву; сравнение дат — динамику состояния участка.', 'NBR = (NIR − SWIR2) / (NIR + SWIR2) = (B08 − B12) / (B08 + B12); для сравнения дат считают ΔNBR = NBR до − NBR после.'],
+            sc: [['> 0,3 · здоровая густая растительность', '#16a34a'], ['0,1–0,3 · умеренный покров', '#facc15'], ['−0,1–0,1 · слабый или сухой покров', '#f97316'], ['< −0,1 · голая почва, сухая биомасса', '#dc2626']] }
     ];
     // ---------- 3. спутниковые снимки Sentinel-2: расчёт по дате, выбранной в «Анализе» ----------
     var SATCLS = {
@@ -780,15 +795,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             p[0].slice(0, -1).forEach(function (pt, i) { var n = (np > 1 ? (k + 1) + '.' : '') + (i + 1); rows.push('<tr><td>' + n + '</td><td>' + pt[1].toFixed(6) + '</td><td>' + pt[0].toFixed(6) + '</td></tr>'); txt.push(n + '\t' + pt[1].toFixed(6) + '\t' + pt[0].toFixed(6)); });
         });
         shpTxt = txt.join('\n');
-        var w = hav(c[1], bb[0], c[1], bb[2]), h = hav(bb[1], c[0], bb[3], c[0]), K = 4 * Math.PI * a / Math.pow(per * 1000, 2), fm2 = function (m) { return m < 1000 ? nf(m, 0) + ' м' : nf(m / 1000, 2) + ' км'; };
-        var kl = K >= 0.6 ? ['компактная', '#16a34a'] : K >= 0.3 ? ['умеренно вытянутая', '#eab308'] : ['сильно вытянутая', '#dc2626'];
+        var K = compactionK(a, per);
         out.className = '';
-        out.innerHTML = tiles([['Площадь', nf(a / 1e4, 2) + ' га', nf(a, 0) + ' м²', CC.gen], ['Периметр', nf(per * 1000, 0) + ' м', nf(per, 2) + ' км', '#0ea5e9'], ['Габариты В–З × С–Ю', fm2(w) + ' × ' + fm2(h), '', '#14b8a6'], ['Вершин контура', nf(nv, 0), '', '#a855f7'], ['Компактность K', nf(K, 2), kl[0], kl[1]]]) +
-            chart('Форма участка на шкале компактности', meter([[0.3, '#ef4444'], [0.6, '#facc15'], [0.8, '#22c55e']], K, 0, 0.8, 1), 'Красная зона — вытянутые и изрезанные контуры (больше холостых проходов техники), зелёная — компактные участки, удобные для обработки. K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') +
-            kv([['Центр (широта, долгота)', c[1].toFixed(6) + ', ' + c[0].toFixed(6)], ['Адрес', '<span id="ppShpAddr">определяется…</span>'], ['Кадастровый номер', cad ? esc(cad) : ''], ['Площадь в других единицах', nf(a / 100, 1) + ' сот. · ' + nf(a / 4046.86, 2) + ' акра'], ['Зона UTM', (Math.floor((c[0] + 180) / 6) + 1) + (c[1] >= 0 ? ' N' : ' S')]]) +
-            (cr.length ? chart('Кадастровые сведения · ' + (cp.source === 'rosreestr' ? 'выписка ЕГРН' : 'слой кадастра (НСПД)'), kv(cr), 'Атрибуты объекта из кадастра; площадь по контуру считается по границам на карте и может немного отличаться от кадастровой.') : '') +
+        out.innerHTML = sizeTiles(a, per, nv, c, bb, K) + compactChart(K, ' K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') + centerKv(c, cad, a, 'ppShpAddr') + cadChart(cp, cr) +
             '<div class="pp-ch pp-vtw"><h5>Координаты вершин полигона <button type="button" class="pp-btn pp-vcopy" data-shp-copy title="Скопировать таблицу (столбцы через табуляцию — вставляется в Excel)"><i class="fas fa-copy"></i> Копировать</button></h5><div class="pp-vt"><table><thead><tr><th>№</th><th>Широта</th><th>Долгота</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div><div class="pp-cap">WGS-84, градусы; внешний контур' + (np > 1 ? ' каждой части участка' : '') + '.</div></div>';
-        fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }).then(function (j) {
+        reverseGeocode(c).then(function (j) {
             var el = tok === shpSeq && document.getElementById('ppShpAddr'); if (el) el.textContent = j.display_name || 'адрес не найден';
         }).catch(function () { var el = tok === shpSeq && document.getElementById('ppShpAddr'); if (el) el.textContent = 'не удалось определить (нет связи с геокодером)'; });
     }
@@ -807,10 +818,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 }
                 return;
             }
-            var b = e.target.closest('[data-shp-copy]'); if (!b || !shpTxt) return;
-            var ok = function () { b.innerHTML = '<i class="fas fa-check"></i> Скопировано'; setTimeout(function () { b.innerHTML = '<i class="fas fa-copy"></i> Копировать'; }, 1800); };
-            var fb = function () { var ta = document.createElement('textarea'); ta.value = shpTxt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (er) { updateStatus('⚠️ Не удалось скопировать', true); } document.body.removeChild(ta); };
-            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(shpTxt).then(ok, fb); else fb();
+            var b = e.target.closest('[data-shp-copy]'); if (!b || !shpTxt) return; copyText(b, shpTxt);
         });
         document.addEventListener('click', function (e) {
             var t = e.target.closest && e.target.closest('.bp-tab, .panel-tab');
@@ -1318,6 +1326,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
 
     // ---------- сборка ----------
+    function invalidateMinis() { Object.keys(minis).forEach(function (k) { try { minis[k].map.invalidateSize(); } catch (e) { /* карта удалена */ } }); }
     function clearMinis() {
         Object.keys(minis).forEach(function (k) { try { minis[k].map.remove(); } catch (e) { /* уже удалена */ } delete minis[k]; });
         Object.keys(m3s).forEach(function (k) { try { m3s[k].remove(); } catch (e) { /* уже удалена */ } delete m3s[k]; });
@@ -1397,7 +1406,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         });
         return function () { saved.forEach(function (s) { try { s[0].media.mediaText = s[1]; } catch (e) { /* правило удалено */ } }); };
     }
-    function ppPdf() {
+    function ppPdfPrint() {   // запасной вариант: печать через окно браузера (если не загрузилась библиотека для автоматического PDF)
         var pane = document.getElementById('passportPane');
         if (!pane || !pane.parentNode || document.getElementById('ppPrintHost')) return;
         var unfreeze = freezeMedia();
@@ -1416,12 +1425,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             unfreeze();
             document.documentElement.classList.remove('pp-printing', 'pp-onepage');
             pane.scrollTop = top;
-            Object.keys(minis).forEach(function (k) { try { minis[k].map.invalidateSize(); } catch (e) { /* карта удалена */ } });
+            invalidateMinis();
         }
         window.addEventListener('afterprint', undo);
         setTimeout(undo, 600000);   // страховка: браузер не прислал afterprint
         setTimeout(function () {
-            Object.keys(minis).forEach(function (k) { try { minis[k].map.invalidateSize(); } catch (e) { /* карта удалена */ } });
+            invalidateMinis();
             setTimeout(function () {
                 var H0 = Math.ceil(Math.max(pane.scrollHeight, host.scrollHeight) * 1.06) + 160, H = Math.min(H0, 19000);   // с запасом: при печати колонки раскладываются чуть выше, чем на экране
                   // предел размера страницы в PDF — около 200 дюймов
@@ -1433,6 +1442,560 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         }, 120);
     }
     var bP = document.getElementById('ppPrint'); if (bP) bP.addEventListener('click', ppPdf);
+
+    // ---------- выгрузка паспорта: PDF сразу файлом (без окна печати) и Excel (цифры, текст, карты, диаграммы) ----------
+    // PDF: паспорт рисуется на холсте (html2canvas) в той же раскладке, что и на сайте (мини-карты подставляются готовыми снимками),
+    // режется на страницы A4 по границам блоков и собирается в PDF прямо в браузере; файл скачивается автоматически.
+    // Если библиотека не загрузилась (нет доступа к CDN) — запасной вариант: прежняя печать через окно браузера.
+    var ppBusy = false;
+    var H2C_URLS = ['https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'];
+    function loadScripts(urls, ok) {
+        return new Promise(function (res, rej) {
+            var i = 0;
+            (function next() {
+                if (ok()) return res();
+                if (i >= urls.length) return rej(new Error('не удалось загрузить библиотеку html2canvas'));
+                var s = document.createElement('script'); s.src = urls[i++]; s.async = true;
+                s.onload = function () { if (ok()) res(); else next(); };
+                s.onerror = function () { s.remove(); next(); };
+                document.head.appendChild(s);
+            })();
+        });
+    }
+    function needH2C() { return loadScripts(H2C_URLS, function () { return typeof window.html2canvas === 'function'; }); }
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var say = function (m, err) { if (typeof updateStatus === 'function') updateStatus(m, err); };
+    function waitIdle(maxMs) {   // ждём, пока завершатся расчёты разделов (крутилки загрузки в блоках)
+        var t0 = Date.now();
+        return (function poll() {
+            if (!body.querySelector('.fa-spin') || Date.now() - t0 > maxMs) return Promise.resolve();
+            return sleep(400).then(poll);
+        })();
+    }
+    function busy(btn, on, txt) {
+        if (!btn) return;
+        if (on) { btn._h = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + txt; }
+        else { btn.disabled = false; if (btn._h != null) btn.innerHTML = btn._h; btn._h = null; }
+    }
+    function fileStem() {
+        var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+        return 'pasport_' + (D.cad ? String(D.cad).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g, '-') : 'uchastka') + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+    }
+    function dataBytes(url) { var bin = atob(url.split(',')[1]), u = new Uint8Array(bin.length), i; for (i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+
+    // снимок 3D-вида (MapLibre) — делается в момент отрисовки кадра
+    function shot3(m) {
+        return new Promise(function (res) {
+            var done = false, fin = function () {
+                if (done) return; done = true;
+                try { var cv = m.getCanvas(); res(cv.width ? { url: cv.toDataURL('image/jpeg', 0.92), w: cv.width, h: cv.height } : null); } catch (e) { res(null); }
+            };
+            try { m.once('render', fin); m.triggerRepaint(); } catch (e) { fin(); }
+            setTimeout(fin, 1500);
+        });
+    }
+    // снимки всех видимых мини-карт (Leaflet) и 3D-видов
+    function snapAll() {
+        var out = { map: {}, m3: {} }, ps = [];
+        Object.keys(minis).forEach(function (k) {
+            var o = minis[k];
+            try { if (o.el.clientWidth > 20 && o.el.clientHeight > 20) { var s = snap(o, true); if (s) out.map[k] = s; } } catch (e) { /* карта недоступна */ }
+        });
+        Object.keys(m3s).forEach(function (k) {
+            var el = body.querySelector('[data-map3="' + k + '"]'); if (!el || el.clientWidth < 20) return;
+            ps.push(shot3(m3s[k]).then(function (s) { if (s) out.m3[k] = s; }));
+        });
+        return Promise.all(ps).then(function () { return out; });
+    }
+    // SVG-диаграммы: вне страницы CSS-классы не действуют, поэтому вычисленные стили переносятся прямо в элементы
+    var SVG_PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin', 'opacity', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline', 'letter-spacing', 'paint-order', 'visibility'];
+    function inlineSvg(src, dst, root) {
+        var win = (src.ownerDocument && src.ownerDocument.defaultView) || window, cs = win.getComputedStyle(src), i, p, v, vals = [];
+        if (!/^(title|desc|defs|stop|lineargradient|radialgradient|clippath|pattern|style)$/i.test(src.nodeName)) {
+            for (i = 0; i < SVG_PROPS.length; i++) { p = SVG_PROPS[i]; if (root && p === 'opacity') continue; v = cs.getPropertyValue(p); if (v) vals.push([p, v]); }
+            vals.forEach(function (x) { dst.style.setProperty(x[0], x[1]); });
+        }
+        for (i = 0; i < src.children.length; i++) if (dst.children[i]) inlineSvg(src.children[i], dst.children[i], false);
+    }
+    function svgPng(svg) {
+        return new Promise(function (res) {
+            try {
+                var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number), r = svg.getBoundingClientRect();
+                var w = vb.length === 4 && vb[2] > 0 ? vb[2] : r.width, h = vb.length === 4 && vb[3] > 0 ? vb[3] : r.height;
+                if (!(w > 80 && h > 40)) return res(null);
+                var cp = svg.cloneNode(true); inlineSvg(svg, cp, true);
+                cp.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); cp.setAttribute('width', w); cp.setAttribute('height', h);
+                if (!cp.getAttribute('viewBox')) cp.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+                var xml = new XMLSerializer().serializeToString(cp), SC = 2, im = new Image();
+                im.onload = function () {
+                    var c = document.createElement('canvas'); c.width = Math.round(w * SC); c.height = Math.round(h * SC);
+                    var g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+                    try { res({ url: c.toDataURL('image/png'), w: w, h: h }); } catch (e) { res(null); }
+                };
+                im.onerror = function () { res(null); };
+                im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+            } catch (e) { res(null); }
+        });
+    }
+    var svgOk = function (s) { return !(s.closest && s.closest('.leaflet-container, button, .pp-map, .pp-i-btn')); };
+
+    // ----- PDF: сборка многостраничного файла из JPEG-страниц -----
+    function pdfPages(pages, PW, PH, title) {
+        var enc = new TextEncoder(), parts = [], off = [], len = 0, n = pages.length, i;
+        var add = function (x) { var u = typeof x === 'string' ? enc.encode(x) : x; parts.push(u); len += u.length; };
+        var obj = function (k, s) { off[k] = len; add(k + ' 0 obj\n' + s + '\nendobj\n'); };
+        var hex = ''; for (i = 0; i < title.length; i++) hex += ('000' + title.charCodeAt(i).toString(16)).slice(-4);
+        add('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+        obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+        var kids = []; for (i = 0; i < n; i++) kids.push((4 + 3 * i) + ' 0 R');
+        obj(2, '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>');
+        obj(3, '<< /Title <FEFF' + hex + '> /Producer (GeoClass) /Creator (GeoClass) >>');
+        pages.forEach(function (p, k) {
+            var pg = 4 + 3 * k, im = pg + 1, ct = pg + 2, cs = 'q ' + PW + ' 0 0 ' + PH + ' 0 0 cm /Im Do Q';
+            obj(pg, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources << /XObject << /Im ' + im + ' 0 R >> >> /Contents ' + ct + ' 0 R >>');
+            off[im] = len; add(im + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + p.w + ' /Height ' + p.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + p.jpg.length + ' >>\nstream\n'); add(p.jpg); add('\nendstream\nendobj\n');
+            obj(ct, '<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream');
+        });
+        var N = 4 + 3 * n, x = len; add('xref\n0 ' + N + '\n0000000000 65535 f \n');
+        for (i = 1; i < N; i++) add(String(off[i]).padStart(10, '0') + ' 00000 n \n');
+        add('trailer\n<< /Size ' + N + ' /Root 1 0 R /Info 3 0 R >>\nstartxref\n' + x + '\n%%EOF');
+        return new Blob(parts, { type: 'application/pdf' });
+    }
+    // границы страниц: блоки не разрезаются; spans — непрерывные «неделимые» участки [верх, низ] в px, H — полная высота, PHc — высота страницы
+    function pageBreaks(spans, H, PHc) {
+        var sp = spans.slice().sort(function (a, b) { return a[0] - b[0]; }), mg = [], out = [], y = 0, g = 0, k;
+        sp.forEach(function (s) { var l = mg[mg.length - 1]; if (l && s[0] < l[1]) l[1] = Math.max(l[1], s[1]); else mg.push([s[0], s[1]]); });
+        while (y < H - 1 && g++ < 400) {
+            var lim = y + PHc;
+            if (lim >= H) { out.push([y, H]); break; }
+            var e = lim;
+            for (k = 0; k < mg.length; k++) if (mg[k][0] < lim && mg[k][1] > lim) { if (mg[k][0] > y + PHc * 0.25) e = mg[k][0]; break; }
+            out.push([y, e]); y = e;
+        }
+        return out;
+    }
+    // подготовка копии страницы для html2canvas: та же раскладка, что при печати (site.css, html.pp-printing), карты — готовыми снимками
+    function prepClone(doc, W, snaps, plan) {
+        var cp = doc.getElementById('passportPane'); if (!cp) return;
+        var host = doc.createElement('div'), st = doc.createElement('style');
+        host.id = 'ppPrintHost'; host.className = 'passport-open'; host.style.width = W + 'px';
+        doc.body.appendChild(host); host.appendChild(cp);
+        doc.documentElement.classList.add('pp-printing');
+        st.textContent = '#ppBody .pp-mcol{position:static!important}#passportPane .pp-top{position:static!important;box-shadow:none!important}#passportPane .pp-dl,#passportPane .pp-bar .pp-btn,#passportPane .leaflet-control-container,#passportPane .pp-cal{display:none!important}#passportPane *{animation:none!important;transition:none!important}';
+        doc.head.appendChild(st);
+        var put = function (sel, s) {
+            var el = cp.querySelector(sel); if (!el || !s) return;
+            el.innerHTML = ''; el.style.position = 'relative'; el.style.overflow = 'hidden';
+            var im = doc.createElement('img'); im.src = s.url; im.style.cssText = 'display:block;position:absolute;left:0;top:0;width:100%;height:100%';
+            el.appendChild(im);
+        };
+        Object.keys(snaps.map).forEach(function (k) { put('[data-map="' + k + '"]', snaps.map[k]); });
+        Object.keys(snaps.m3).forEach(function (k) { put('[data-map3="' + k + '"]', snaps.m3[k]); });
+        Array.prototype.forEach.call(cp.querySelectorAll('svg'), function (s) { if (svgOk(s)) { try { inlineSvg(s, s, true); } catch (e) { /* пропуск */ } } });
+        // участки, которые нельзя разрезать границей страницы
+        var top0 = cp.getBoundingClientRect().top, spans = [], add = function (a, b) { if (b - a > 1) spans.push([a - top0, b - top0]); };
+        Array.prototype.forEach.call(cp.querySelectorAll('.pp-sub, .pp-kpis, .pp-top, .pp-bar'), function (e) { var r = e.getBoundingClientRect(); add(r.top, r.bottom); });
+        Array.prototype.forEach.call(cp.querySelectorAll('.pp-sec'), function (s) {   // заголовок раздела не отрывается от первого блока
+            var h = s.querySelector('.pp-sec-h'), f = s.querySelector('.pp-sub'); if (!h) return;
+            var a = h.getBoundingClientRect(), b = f ? f.getBoundingClientRect() : a; if (b.bottom > a.top) add(a.top, b.bottom);
+        });
+        plan.spans = spans; plan.H = Math.ceil(cp.getBoundingClientRect().height); plan.W = W;
+    }
+    function ppPdf() {
+        if (ppBusy) return;
+        var pane = document.getElementById('passportPane'), btn = document.getElementById('ppPrint');
+        if (!pane || !body.children.length) return;
+        ppBusy = true; busy(btn, true, 'Формируем PDF…');
+        var top = pane.scrollTop, plan = {}, snaps = null;
+        var finish = function () { ppBusy = false; busy(btn, false); try { pane.scrollTop = top; } catch (e) { /* нет */ } };
+        say('⏳ Формируем PDF: паспорт собирается в файл…');
+        waitIdle(60000).then(function () { return needH2C(); }).then(function () {
+            pane.scrollTop = 0; return sleep(100);
+        }).then(snapAll).then(function (sn) {
+            snaps = sn;
+            var W = Math.round(pane.getBoundingClientRect().width), He = Math.max(pane.scrollHeight, 1) * 1.12;
+            var sc = Math.max(0.6, Math.min(2, Math.sqrt(36e6 / (W * He)), 30000 / He));
+            var bg = '#f8fafc'; try { var c = getComputedStyle(pane).backgroundColor; if (c && c !== 'rgba(0, 0, 0, 0)') bg = c; } catch (e) { /* по умолчанию */ }
+            return window.html2canvas(pane, {
+                scale: sc, useCORS: true, allowTaint: false, backgroundColor: bg, logging: false, imageTimeout: 20000,
+                windowWidth: window.innerWidth, windowHeight: window.innerHeight, scrollX: 0, scrollY: 0,
+                onclone: function (doc) { try { prepClone(doc, W, snaps, plan); } catch (e) { console.warn('Паспорт PDF: подготовка копии', e); } }
+            }).then(function (big) { return { big: big, W: W, bg: bg }; });
+        }).then(function (r) {
+            var big = r.big, W = plan.W || r.W, H = plan.H || Math.round(big.height / (big.width / W)), k = big.width / W;
+            var PWp = 595.28, PHp = 841.89, padT = 12, foot = 26, pageH = Math.round(W * PHp / PWp), PHc = pageH - padT - foot;
+            var br = pageBreaks(plan.spans || [], H, PHc), pages = [], d = new Date();
+            br.forEach(function (b, i) {
+                var cv = document.createElement('canvas'); cv.width = Math.round(W * k); cv.height = Math.round(pageH * k);
+                var g = cv.getContext('2d'); g.fillStyle = r.bg; g.fillRect(0, 0, cv.width, cv.height);
+                var sy = Math.round(b[0] * k), sh = Math.min(Math.round((b[1] - b[0]) * k), big.height - sy);
+                if (sh > 0) g.drawImage(big, 0, sy, big.width, sh, 0, Math.round(padT * k), big.width, sh);
+                g.fillStyle = '#64748b'; g.font = Math.round(11 * k) + 'px sans-serif'; g.textBaseline = 'middle';
+                g.fillText('Паспорт участка' + (D.cad ? ' № ' + D.cad : '') + ' · GeoClass · ' + d.toLocaleDateString('ru-RU'), Math.round(26 * k), Math.round((pageH - foot / 2) * k));
+                g.textAlign = 'right'; g.fillText('стр. ' + (i + 1) + ' из ' + br.length, Math.round((W - 26) * k), Math.round((pageH - foot / 2) * k));
+                pages.push({ jpg: dataBytes(cv.toDataURL('image/jpeg', 0.9)), w: cv.width, h: cv.height });
+                cv.width = cv.height = 0;
+            });
+            big.width = big.height = 0;
+            save(pdfPages(pages, PWp, PHp, 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '')), fileStem() + '.pdf');
+            say('✅ PDF сформирован и скачан (страниц: ' + pages.length + ')');
+            finish();
+        }).catch(function (e) {
+            console.warn('Паспорт PDF:', e); finish();
+            say('⚠️ Не удалось собрать PDF автоматически (' + (e && e.message || e) + ') — открываю окно печати: выберите «Сохранить как PDF»', true);
+            ppPdfPrint();
+        });
+    }
+
+    // ----- Excel: собственный упаковщик XLSX (zip без сжатия), листы по разделам, карты и диаграммы — картинками -----
+    var CRC_T = null;
+    function crc32(u) {
+        if (!CRC_T) { CRC_T = []; for (var n = 0, c, k; n < 256; n++) { c = n; for (k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } }
+        var c2 = 0xFFFFFFFF, i; for (i = 0; i < u.length; i++) c2 = CRC_T[(c2 ^ u[i]) & 255] ^ (c2 >>> 8); return (c2 ^ 0xFFFFFFFF) >>> 0;
+    }
+    function zipStore(files) {
+        var enc = new TextEncoder(), parts = [], cen = [], off = 0, dt = new Date();
+        var dd = ((dt.getFullYear() - 1980) << 9) | ((dt.getMonth() + 1) << 5) | dt.getDate(), tt = (dt.getHours() << 11) | (dt.getMinutes() << 5) | (dt.getSeconds() >> 1);
+        files.forEach(function (f) {
+            var nm = enc.encode(f.n), d = typeof f.d === 'string' ? enc.encode(f.d) : f.d, crc = crc32(d);
+            var h = new DataView(new ArrayBuffer(30)), c = new DataView(new ArrayBuffer(46));
+            h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(10, tt, true); h.setUint16(12, dd, true);
+            h.setUint32(14, crc, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true);
+            c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(12, tt, true); c.setUint16(14, dd, true);
+            c.setUint32(16, crc, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+            parts.push(new Uint8Array(h.buffer), nm, d); cen.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + d.length;
+        });
+        var cl = 0, e = new DataView(new ArrayBuffer(22)); cen.forEach(function (u) { cl += u.length; });
+        e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cl, true); e.setUint32(16, off, true);
+        return new Blob(parts.concat(cen, [new Uint8Array(e.buffer)]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+    var xcol = function (i) { var s = '', m; i++; while (i > 0) { m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+    var xe = function (s) { return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var XNS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"', RNS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    var XHD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    function Styles() {
+        var fonts = ['<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>'], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+        var borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'], nfs = [], xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], cache = {};
+        var reg = function (list, x) { var i = list.indexOf(x); if (i < 0) { list.push(x); i = list.length - 1; } return i; };
+        var LN = function (t) { return '<' + t + ' style="thin"><color rgb="FFCBD5E1"/></' + t + '>'; };
+        this.get = function (o) {   // o: b, i, sz, color, fill, border, wrap, h (выравнивание), nf (формат числа)
+            var key = JSON.stringify(o); if (cache[key] != null) return cache[key];
+            var f = reg(fonts, '<font>' + (o.b ? '<b/>' : '') + (o.i ? '<i/>' : '') + '<sz val="' + (o.sz || 10) + '"/>' + (o.color ? '<color rgb="FF' + o.color + '"/>' : '') + '<name val="Calibri"/><family val="2"/></font>');
+            var fl = o.fill ? reg(fills, '<fill><patternFill patternType="solid"><fgColor rgb="FF' + o.fill + '"/><bgColor indexed="64"/></patternFill></fill>') : 0;
+            var bd = o.border ? reg(borders, '<border>' + LN('left') + LN('right') + LN('top') + LN('bottom') + '<diagonal/></border>') : 0;
+            var nf = 0; if (o.nf) { var ni = nfs.indexOf(o.nf); if (ni < 0) { nfs.push(o.nf); ni = nfs.length - 1; } nf = 164 + ni; }
+            xfs.push('<xf numFmtId="' + nf + '" fontId="' + f + '" fillId="' + fl + '" borderId="' + bd + '" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment vertical="' + (o.v || 'top') + '"' + (o.h ? ' horizontal="' + o.h + '"' : '') + (o.wrap ? ' wrapText="1"' : '') + '/></xf>');
+            return (cache[key] = xfs.length - 1);
+        };
+        this.xml = function () {
+            return XHD + '<styleSheet ' + XNS + '>' + (nfs.length ? '<numFmts count="' + nfs.length + '">' + nfs.map(function (c, i) { return '<numFmt numFmtId="' + (164 + i) + '" formatCode="' + xe(c) + '"/>'; }).join('') + '</numFmts>' : '') +
+                '<fonts count="' + fonts.length + '">' + fonts.join('') + '</fonts><fills count="' + fills.length + '">' + fills.join('') + '</fills><borders count="' + borders.length + '">' + borders.join('') + '</borders>' +
+                '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs>' +
+                '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+        };
+    }
+    var COLW = [38, 17, 17, 17, 17, 2];   // A–E — данные, F — отступ, дальше (G…) — картинки
+    var IMG_COL = 6;
+    function Sheet(name, tab) { this.name = name; this.tab = tab; this.rows = []; this.hts = []; this.merges = []; this.imgs = []; }
+    Sheet.prototype.add = function (cells, ht) {   // cells: [{v, s, span}] → номер строки (с 0)
+        var r = this.rows.length; this.rows.push(cells); this.hts.push(ht || 15);
+        var c = 0; cells.forEach(function (x) { if (x.span > 1) this.merges.push(xcol(c) + (r + 1) + ':' + xcol(c + x.span - 1) + (r + 1)); c += x.span || 1; }, this);
+        return r;
+    };
+    Sheet.prototype.xml = function (drawRid) {
+        var self = this, mx = 0, rowsX = this.rows.map(function (cells, r) {
+            var c = 0, cx = '';
+            cells.forEach(function (x) {
+                var sp = x.span || 1, i, ref = xcol(c) + (r + 1);
+                if (x.v == null || x.v === '') cx += '<c r="' + ref + '" s="' + x.s + '"/>';
+                else if (typeof x.v === 'number') cx += '<c r="' + ref + '" s="' + x.s + '"><v>' + x.v + '</v></c>';
+                else cx += '<c r="' + ref + '" s="' + x.s + '" t="inlineStr"><is><t xml:space="preserve">' + xe(String(x.v).slice(0, 32000)) + '</t></is></c>';
+                for (i = 1; i < sp; i++) cx += '<c r="' + xcol(c + i) + (r + 1) + '" s="' + x.s + '"/>';
+                c += sp;
+            });
+            mx = Math.max(mx, c);
+            return '<row r="' + (r + 1) + '" ht="' + self.hts[r] + '" customHeight="1">' + cx + '</row>';
+        }).join('');
+        return XHD + '<worksheet ' + XNS + ' ' + RNS + '><sheetPr>' + (this.tab ? '<tabColor rgb="FF' + this.tab + '"/>' : '') + '<pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:' + xcol(Math.max(mx, 1) - 1) + Math.max(this.rows.length, 1) + '"/>' +
+            '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
+            '<cols>' + COLW.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>' +
+            '<sheetData>' + rowsX + '</sheetData>' + (this.merges.length ? '<mergeCells count="' + this.merges.length + '">' + this.merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '') +
+            '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' + (drawRid ? '<drawing r:id="' + drawRid + '"/>' : '') + '</worksheet>';
+    };
+    function buildXlsx(sheets, ST) {
+        var files = [], ct = '', wbS = '', wbR = '', media = 0, dn = 0;
+        sheets.forEach(function (sh, i) {
+            var n = i + 1, drawRid = null;
+            if (sh.imgs.length) {
+                dn++; drawRid = 'rId1';
+                var dx = '', dr = '';
+                sh.imgs.forEach(function (im, k) {
+                    media++; var ext = im.ext, nm = 'image' + media + '.' + ext, cx = Math.round(im.w * 9525), cy = Math.round(im.h * 9525);
+                    files.push({ n: 'xl/media/' + nm, d: im.bytes });
+                    dr += '<Relationship Id="rId' + (k + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/' + nm + '"/>';
+                    dx += '<xdr:oneCellAnchor><xdr:from><xdr:col>' + IMG_COL + '</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>' + im.row + '</xdr:row><xdr:rowOff>' + Math.round(im.off * 9525) + '</xdr:rowOff></xdr:from><xdr:ext cx="' + cx + '" cy="' + cy + '"/>' +
+                        '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="' + (k + 2) + '" name="Рисунок ' + (k + 1) + '"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId' + (k + 1) + '"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+                        '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+                });
+                files.push({ n: 'xl/drawings/drawing' + dn + '.xml', d: XHD + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' + RNS + '>' + dx + '</xdr:wsDr>' });
+                files.push({ n: 'xl/drawings/_rels/drawing' + dn + '.xml.rels', d: XHD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + dr + '</Relationships>' });
+                files.push({ n: 'xl/worksheets/_rels/sheet' + n + '.xml.rels', d: XHD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing' + dn + '.xml"/></Relationships>' });
+                ct += '<Override PartName="/xl/drawings/drawing' + dn + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
+            }
+            files.push({ n: 'xl/worksheets/sheet' + n + '.xml', d: sh.xml(drawRid) });
+            ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+            wbS += '<sheet name="' + xe(sh.name) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+            wbR += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
+        });
+        var ns = sheets.length;
+        wbR += '<Relationship Id="rId' + (ns + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+        files.unshift({ n: 'xl/_rels/workbook.xml.rels', d: XHD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + wbR + '</Relationships>' });
+        files.unshift({ n: 'xl/workbook.xml', d: XHD + '<workbook ' + XNS + ' ' + RNS + '><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="12000"/></bookViews><sheets>' + wbS + '</sheets></workbook>' });
+        files.unshift({ n: '_rels/.rels', d: XHD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' });
+        files.unshift({ n: '[Content_Types].xml', d: XHD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + '</Types>' });
+        files.push({ n: 'xl/styles.xml', d: ST.xml() });
+        return zipStore(files);
+    }
+
+    // ----- Excel: разбор разметки паспорта на строки таблицы -----
+    var WS = /[\s\u00A0\u202F]+/g, norm = function (s) { return String(s == null ? '' : s).replace(WS, ' ').trim(); };
+    var SKIP_N = /^(script|style|title|svg|button|i|canvas|img|template|noscript)$/i;
+    var SKIP_S = '.pp-dl, .pp-legbar, .pp-legsrc, .pp-cal, .leaflet-container, .pp-i-btn, [data-pp-all], .pp-mapw .pp-map';
+    function tx(e) {   // текст одной строкой; вложенное em — в скобках
+        var s = '';
+        (function w(n) {
+            if (n.nodeType === 3) { s += n.nodeValue; return; }
+            if (n.nodeType !== 1 || SKIP_N.test(n.nodeName)) return;
+            var nm = n.nodeName.toLowerCase();
+            if (nm === 'em') { var t = norm(n.textContent); if (t) s += ' (' + t + ') '; return; }
+            var blk = /^(div|p|li|br|td|th|tr|small|b|u|s|h\d)$/.test(nm); if (blk) s += ' ';
+            Array.prototype.forEach.call(n.childNodes, w); if (blk) s += ' ';
+        })(e);
+        return norm(s).replace(/ \)/g, ')').replace(/\( /g, '(');
+    }
+    var BLOCKQ = 'div,p,ul,ol,table,svg,section,h3,h4,h5,li';
+    function kidsOf(n) { return Array.prototype.filter.call(n.children, function (c) { return !SKIP_N.test(c.nodeName) && !(c.matches && c.matches(SKIP_S)); }); }
+    function rowsOf(root, out) {
+        (function walk(n) {
+            if (n.nodeType !== 1) return;
+            var nm = n.nodeName.toLowerCase();
+            if (SKIP_N.test(nm) || n.matches(SKIP_S)) return;
+            if (n.matches('.pp-leg2')) { var ls = Array.prototype.map.call(n.querySelectorAll('.pp-legl span'), tx).filter(Boolean); if (ls.length) out.push({ c: ['Шкала карты', ls.join(' … ')], kv: true }); return; }
+            if (n.matches('.pp-tiles')) { Array.prototype.forEach.call(n.children, function (t) { var a = Array.prototype.map.call(t.children, tx); if (a.filter(Boolean).length) out.push({ c: a.filter(function (x, i) { return x || i < 2; }), kv: true }); }); return; }
+            if (nm === 'table') { Array.prototype.forEach.call(n.rows || n.querySelectorAll('tr'), function (tr) { var a = Array.prototype.map.call(tr.cells || tr.children, tx); if (a.some(Boolean)) out.push({ c: a, head: !!tr.querySelector('th'), kv: a.length <= 3 }); }); return; }
+            if (nm === 'ul' || nm === 'ol') { Array.prototype.forEach.call(n.children, function (li) { var t = tx(li); if (t) out.push({ c: [t] }); }); return; }
+            if (n.matches('.pp-mt2')) { var lo = Array.prototype.map.call(n.querySelectorAll('.l span'), tx); if (lo.length) out.push({ c: ['Шкала', lo.join(' … ')], kv: true }); return; }
+            if (n.matches('.pp-ch')) {
+                var h = n.querySelector('h5'), cap = n.querySelector('.pp-cap'), sv = n.querySelectorAll('svg'), tt = [], tl = [];
+                if (h) out.push({ c: [tx(h)], sub: true });
+                kidsOf(n).forEach(function (c) { if (c !== h && c !== cap && !/^svg$/i.test(c.nodeName)) walk(c); });
+                Array.prototype.forEach.call(sv, function (s) {
+                    var ti = Array.prototype.map.call(s.querySelectorAll('title'), function (t) { return norm(t.textContent); }).filter(Boolean);
+                    if (ti.length) tt = tt.concat(ti); else tl = tl.concat(Array.prototype.map.call(s.querySelectorAll('text'), function (t) { return norm(t.textContent); }).filter(Boolean));
+                });
+                tt.forEach(function (t) { var k = t.lastIndexOf(': '); out.push({ c: k > 0 ? [t.slice(0, k), t.slice(k + 2)] : [t], kv: true }); });
+                if (!tt.length && tl.length) out.push({ c: ['Подписи диаграммы', tl.join('; ').slice(0, 400)], kv: true });
+                if (cap) { var ct = tx(cap); if (ct) out.push({ c: [ct], note: true }); }
+                return;
+            }
+            var ec = kidsOf(n), direct = Array.prototype.some.call(n.childNodes, function (x) { return x.nodeType === 3 && norm(x.nodeValue); });
+            if (!ec.length) { var t0 = tx(n); if (t0) out.push({ c: [t0] }); return; }
+            var cellLike = ec.every(function (c) { return !c.querySelector(BLOCKQ); });
+            var asRows = ec.length > 1 && ec.every(function (c) { return kidsOf(c).filter(function (x) { return tx(x); }).length >= 2; });   // список строк: каждая — своя строка таблицы
+            if (cellLike && !asRows) {
+                var ne = ec.filter(function (c) { return tx(c); });
+                if (direct || ne.length < 2) { var t1 = tx(n); if (t1) out.push({ c: [t1] }); }
+                else out.push({ c: ne.map(tx), kv: ne.length <= 3 });
+                return;
+            }
+            Array.prototype.forEach.call(n.childNodes, function (c) {
+                if (c.nodeType === 3) { var t2 = norm(c.nodeValue); if (t2) out.push({ c: [t2] }); } else walk(c);
+            });
+        })(root);
+        return out;
+    }
+    var NUMRE = /^([−\-+]?\d+(?:[\u00A0\u202F\s]\d{3})*(?:[.,]\d+)?)\s*([^\d\s][^\d]{0,22})?$/;
+    function parseNum(s) {   // «12 345,6 га» → {n: 12345.6, u: 'га'}
+        var m = NUMRE.exec(String(s).trim()); if (!m) return null;
+        var raw = m[1].replace(/[\u00A0\u202F\s]/g, '').replace('−', '-').replace(',', '.');
+        if (/^[-+]?0\d/.test(raw)) return null;
+        var n = parseFloat(raw), u = (m[2] || '').trim(); if (!isFinite(n) || /["\\;]/.test(u)) return null;
+        return { n: n, u: u };
+    }
+    var lineH = function (s, w) { var l = 0; String(s).split('\n').forEach(function (p) { l += Math.max(1, Math.ceil(p.length / (w * 1.1))); }); return Math.max(15, l * 13 + 3); };
+    var AW = function (a, b) { var w = 0, i; for (i = a; i < b; i++) w += COLW[i]; return w; };
+    function xlsxRows(sh, ST, rows, accent) {   // выводит строки блока в лист; возвращает число добавленных строк
+        var st = {
+            lab: ST.get({ b: 1, wrap: 1, border: 1 }), txt: ST.get({ wrap: 1, border: 1 }), head: ST.get({ b: 1, wrap: 1, border: 1, fill: 'E2E8F0' }),
+            note: ST.get({ i: 1, wrap: 1, color: '64748B' }), sub: ST.get({ b: 1, color: accent || '334155', sz: 10 })
+        };
+        var cnt = 0;
+        rows.forEach(function (r) {
+            var c = r.c.slice(0, 5);
+            if (r.c.length > 5) c[4] = r.c.slice(4).join(' · ');
+            if (r.sub) { sh.add([{ v: c[0], s: st.sub, span: 5 }]); cnt++; return; }
+            if (r.note) { sh.add([{ v: c[0], s: st.note, span: 5 }], lineH(c[0], AW(0, 5))); cnt++; return; }
+            var cells = [], ht = 15, n = c.length, col = 0;
+            c.forEach(function (v, i) {
+                var pn = i > 0 && !r.head ? parseNum(v) : null, last = i === n - 1, span = last && !pn ? Math.max(1, 5 - col) : 1, s = st.txt, val = v;
+                if (pn) { val = pn.n; s = ST.get({ border: 1, h: 'right', nf: pn.u ? 'General"' + (/^[%°′″‰]/.test(pn.u) ? '' : ' ') + pn.u + '"' : undefined }); }
+                else if (r.head) s = st.head;
+                else if (i === 0 && r.kv && n > 1) s = st.lab;
+                cells.push({ v: val, s: s, span: span });
+                ht = Math.max(ht, lineH(typeof val === 'number' ? '' : val, AW(col, col + span)));
+                col += span;
+            });
+            sh.add(cells, ht); cnt++;
+        });
+        return cnt;
+    }
+    function bannerRow(sh, ST, text, color, sz) { return sh.add([{ v: text, s: ST.get({ b: 1, color: 'FFFFFF', fill: color || '334155', sz: sz || 11, v: 'center', wrap: 1 }), span: 5 }], sz > 12 ? 24 : 20); }
+    function addImgs(sh, startRow, list) {   // картинки столбиком справа от строк блока; при нехватке высоты добавляются пустые строки
+        if (!list.length) return;
+        var y = 0, gap = 8, need = 0; list.forEach(function (im) { need += im.h + gap; });
+        var have = function () { var t = 0, r; for (r = startRow; r < sh.hts.length; r++) t += sh.hts[r] * 4 / 3; return t; };
+        while (have() < need) sh.add([], 15);
+        list.forEach(function (im) {
+            var r = startRow, acc = 0, h;
+            while (r < sh.hts.length) { h = sh.hts[r] * 4 / 3; if (acc + h > y) break; acc += h; r++; }
+            im.row = r; im.off = y - acc; sh.imgs.push(im); y += im.h + gap;
+        });
+    }
+    function imgOf(s, w) {   // {url, w, h} → картинка листа; w — предельная ширина на листе, px
+        var dw = Math.min(w, Math.max(s.w * 1.2, 260));
+        return { bytes: dataBytes(s.url), ext: /^data:image\/png/.test(s.url) ? 'png' : 'jpeg', w: Math.round(dw), h: Math.round(s.h * dw / s.w) };
+    }
+    function secColor(sec) { var m = /--ac:\s*(#[0-9a-fA-F]{6})/.exec(sec.getAttribute('style') || ''); return m ? m[1].slice(1).toUpperCase() : '334155'; }
+    function buildSections(ST, snaps) {
+        var sheets = [], used = {}, secs = body.querySelectorAll('section.pp-sec');
+        var uniq = function (nm) { nm = nm.replace(/[\[\]:*?\/\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31); var b = nm, i = 2; while (used[nm.toLowerCase()]) nm = b.slice(0, 28) + ' ' + (i++); used[nm.toLowerCase()] = 1; return nm; };
+        var imgsFor = function (sub) {
+            var out = [];
+            Array.prototype.forEach.call(sub.querySelectorAll('[data-map], [data-map3], svg'), function (e) {
+                var s = null;
+                if (e.hasAttribute('data-map')) s = snaps.map[e.getAttribute('data-map')];
+                else if (e.hasAttribute('data-map3')) s = snaps.m3[e.getAttribute('data-map3')];
+                else if (e._ppImg && svgOk(e)) s = e._ppImg;
+                if (s) out.push(imgOf(s, 440));
+            });
+            return out;
+        };
+        Array.prototype.forEach.call(secs, function (sec, idx) {
+            var h3 = sec.querySelector('.pp-sec-h h3'), p = sec.querySelector('.pp-sec-h p'), nn = sec.querySelector('.pp-n'), color = secColor(sec);
+            var num = nn ? norm(nn.textContent) : String(idx + 1), title = h3 ? tx(h3) : 'Раздел ' + num;
+            var sh = new Sheet(uniq(num + ' ' + title), color);
+            sh.add([{ v: num + '. ' + title, s: ST.get({ b: 1, sz: 16, color: color }), span: 5 }], 26);
+            if (p && tx(p)) sh.add([{ v: tx(p), s: ST.get({ i: 1, color: '64748B', wrap: 1 }), span: 5 }], lineH(tx(p), AW(0, 5)));
+            sh.add([]);
+            var emit = function (blk, loose) {
+                var ttl = '', info = [];
+                if (!loose) {
+                    var hh = blk.querySelector('.pp-sub-h h4'); ttl = hh ? tx(hh) : '';
+                    Array.prototype.forEach.call(blk.querySelectorAll('.pp-info > div'), function (d) { var b = d.querySelector('b'), l = b ? tx(b) : '', t = tx(d); if (l && t.indexOf(l) === 0) t = t.slice(l.length).trim(); if (t) info.push([l, t]); });
+                }
+                if (ttl) bannerRow(sh, ST, ttl, color, 11);
+                var start = sh.rows.length;
+                var rr = rowsOf(loose ? blk : (blk.querySelector('.pp-mc') || blk), []);
+                // расшифровка — серым курсивом, данные — таблицей
+                info.forEach(function (x) { sh.add([{ v: x[0], s: ST.get({ b: 1, color: '64748B', wrap: 1 }) }, { v: x[1], s: ST.get({ i: 1, color: '64748B', wrap: 1 }), span: 4 }], lineH(x[1], AW(1, 5))); });
+                xlsxRows(sh, ST, rr, color);
+                addImgs(sh, start, imgsFor(blk));
+                sh.add([]);
+            };
+            (function walkSec(n) {
+                Array.prototype.forEach.call(n.children, function (c) {
+                    if (c.matches('.pp-sub')) emit(c, false);
+                    else if (c.querySelector('.pp-sub')) walkSec(c);
+                    else if (tx(c) && !c.matches('.pp-sec-h')) emit(c, true);
+                });
+            })(sec.querySelector('.pp-sec-b') || sec);
+            sheets.push(sh);
+        });
+        return sheets;
+    }
+    function buildCover(ST, secSheets, snaps) {
+        var sh = new Sheet('Паспорт', '1E293B'), t = document.getElementById('ppTitle'), ad = document.getElementById('ppAddr'), d = new Date();
+        var lab = ST.get({ b: 1, border: 1, wrap: 1 }), val = ST.get({ border: 1, wrap: 1 }), num = ST.get({ border: 1, h: 'right' });
+        sh.add([{ v: t ? norm(t.textContent) : 'Паспорт участка', s: ST.get({ b: 1, sz: 18, color: '1E293B' }), span: 5 }], 30);
+        sh.add([{ v: 'Выгрузка сформирована ' + d.toLocaleString('ru-RU') + ' · GeoClass', s: ST.get({ i: 1, color: '64748B' }), span: 5 }]);
+        sh.add([]);
+        var kv = function (k, v, unit) {
+            if (v == null || v === '' || (typeof v === 'number' && !isFinite(v))) return;
+            if (typeof v === 'number') sh.add([{ v: k, s: lab }, { v: v, s: ST.get({ border: 1, h: 'right', nf: unit ? 'General"' + (unit === '°' ? '' : ' ') + unit + '"' : undefined }) }]);
+            else sh.add([{ v: k, s: lab }, { v: v, s: val, span: 4 }], lineH(v, AW(1, 5)));
+        };
+        var i0 = sh.rows.length;
+        bannerRow(sh, ST, 'Общие сведения', '334155', 11);
+        kv('Кадастровый номер', D.cad || '');
+        kv('Адрес (определён по центру)', ad ? norm(ad.textContent) : '');
+        kv('Площадь', D.area ? D.area / 1e4 : null, 'га');
+        if (D.c) { kv('Центр, широта', D.c[1], '°'); kv('Центр, долгота', D.c[0], '°'); }
+        if (D.satSel && D.satSel.day) kv('Дата снимка Sentinel-2', satDay(D.satSel.day));
+        sh.add([]);
+        var covImgs = [], gm = snaps && snaps.map.gen, rs = document.querySelector('#ppKpi .pp-score svg');
+        if (gm) covImgs.push(imgOf(gm, 360));
+        if (rs && rs._ppImg) covImgs.push(imgOf(rs._ppImg, 300));
+        var sc = null; try { sc = scores(); } catch (e) { /* нет данных */ }
+        if (sc) {
+            bannerRow(sh, ST, 'Индекс пригодности участка (0–100)', '059669', 11);
+            sh.add([{ v: 'Фактор', s: ST.get({ b: 1, border: 1, fill: 'E2E8F0' }) }, { v: 'Оценка', s: ST.get({ b: 1, border: 1, fill: 'E2E8F0', h: 'right' }) }, { v: 'Основание', s: ST.get({ b: 1, border: 1, fill: 'E2E8F0' }), span: 3 }]);
+            var ok = sc.filter(function (x) { return x.v != null; });
+            sc.forEach(function (x) { sh.add([{ v: x.l, s: lab }, { v: x.v == null ? 'н/д' : Math.round(x.v), s: num }, { v: x.b, s: val, span: 3 }], lineH(x.b, AW(2, 5))); });
+            if (ok.length) sh.add([{ v: 'Итоговый индекс', s: ST.get({ b: 1, border: 1, fill: 'DCFCE7' }) }, { v: Math.round(avg(ok.map(function (x) { return x.v; }))), s: ST.get({ b: 1, border: 1, fill: 'DCFCE7', h: 'right' }) }, { v: 'среднее по доступным факторам', s: ST.get({ i: 1, border: 1, fill: 'DCFCE7' }), span: 3 }]);
+            sh.add([]);
+        }
+        var kp = document.getElementById('ppKpi');
+        if (kp) {
+            var kr = []; Array.prototype.forEach.call(kp.querySelectorAll('.pp-kpi'), function (k) { var a = Array.prototype.map.call(k.children, tx); if (a[1]) kr.push({ c: [a[0], a[1], a[2] || ''], kv: true }); });
+            if (kr.length) { bannerRow(sh, ST, 'Ключевые показатели', '2563EB', 11); xlsxRows(sh, ST, kr, '2563EB'); sh.add([]); }
+        }
+        var sm = document.getElementById('ppSum');
+        if (sm) { var sr = rowsOf(sm, []); if (sr.length) { bannerRow(sh, ST, 'Автоматические выводы', 'EA580C', 11); xlsxRows(sh, ST, sr, 'EA580C'); sh.add([]); } }
+        bannerRow(sh, ST, 'Листы книги', '334155', 11);
+        secSheets.forEach(function (s) { sh.add([{ v: s.name, s: val, span: 5 }]); });
+        sh.add([]);
+        sh.add([{ v: 'Показатели предварительные, рассчитаны автоматически по открытым данным (SoilGrids, ERA5, OSM, Sentinel-2 и др.); карты и диаграммы вставлены картинками.', s: ST.get({ i: 1, color: '64748B', wrap: 1 }), span: 5 }], 30);
+        addImgs(sh, i0, covImgs);
+        return sh;
+    }
+    function ppExcel() {
+        if (ppBusy) return;
+        var pane = document.getElementById('passportPane'), btn = document.getElementById('ppExcel');
+        if (!pane || !body.querySelector('section.pp-sec')) { say('⚠️ Нет данных паспорта для выгрузки', true); return; }
+        ppBusy = true; busy(btn, true, 'Формируем Excel…');
+        var top = pane.scrollTop, opened = [];
+        var finish = function () {
+            opened.forEach(function (s) { s.classList.add('pp-col'); });
+            if (opened.length) { invalidateMinis(); window.dispatchEvent(new Event('resize')); }
+            ppBusy = false; busy(btn, false); try { pane.scrollTop = top; } catch (e) { /* нет */ }
+        };
+        say('⏳ Формируем Excel: собираем показатели, карты и диаграммы…');
+        waitIdle(60000).then(function () {
+            // свёрнутые разделы временно раскрываем: у скрытых карт нет размеров, снимок невозможен
+            Array.prototype.forEach.call(body.querySelectorAll('.pp-sec.pp-col'), function (s) { s.classList.remove('pp-col'); opened.push(s); });
+            if (!opened.length) return null;
+            invalidateMinis(); window.dispatchEvent(new Event('resize'));
+            var t0 = Date.now();
+            return sleep(900).then(function poll() {
+                if (!body.querySelector('.leaflet-tile-loading') || Date.now() - t0 > 7000) return sleep(400);
+                return sleep(300).then(poll);
+            });
+        }).then(snapAll).then(function (snaps) {
+            var svgs = Array.prototype.filter.call(body.querySelectorAll('svg'), svgOk);
+            return Promise.all(svgs.map(function (s) { return svgPng(s).then(function (r) { s._ppImg = r; }); })).then(function () { return snaps; });
+        }).then(function (snaps) {
+            var ST = new Styles(), secSheets = buildSections(ST, snaps), cover = buildCover(ST, secSheets, snaps);
+            save(buildXlsx([cover].concat(secSheets), ST), fileStem() + '.xlsx');
+            say('✅ Excel сформирован и скачан (листов: ' + (secSheets.length + 1) + ')');
+            finish();
+        }).catch(function (e) {
+            console.warn('Паспорт Excel:', e); finish();
+            say('⚠️ Не удалось сформировать Excel: ' + (e && e.message || e), true);
+        });
+    }
+    document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('#ppExcel'); if (b && !b.disabled) ppExcel(); });
+    document.addEventListener('passport-open', function () { setTimeout(function () { needH2C().catch(function () { /* без CDN — запасная печать */ }); }, 2500); });   // заранее подгружаем библиотеку для PDF
 
     // ---------- типографика: число с единицей, день с месяцем, однобуквенные предлоги и тире не разрываются переносом строки ----------
     var NB = '\u00A0', RE_UNIT = /(\d) (?=(?:°C|°|мм|см|км|м\/с|м²|м|га|дн\.|дн|ч|мин|г\/кг|кг|лет|т|ц|мг|л|₽)(?![A-Za-zА-Яа-яЁё°²]))/g,
