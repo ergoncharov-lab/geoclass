@@ -2526,7 +2526,6 @@ function snShpZip(feats, base) {
             '<div class="sn-key"><span style="--c:#10b981">≤10%</span><span style="--c:#84cc16">≤30%</span><span style="--c:#f59e0b">≤60%</span><span style="--c:#ef4444">&gt;60%</span></div></div>' +
             contrast +
             '<div class="dw-block sn-shotblock"><div class="dw-title">Скрин выбранной даты</div><div class="sn-shots" data-sn="shots"></div><div class="sn-foot" data-sn="foot"></div></div>' +
-            '<div class="dw-block sn-listblock"><div class="dw-title">Снимки за месяц <span class="badge" data-sn="count">0</span></div><div class="sn-cards" data-sn="cards"></div></div>' +
             calc +
             '<div class="dw-block sn-dl"><div class="dw-title">Скачать GeoTIFF</div>' + fmt +
             '<div class="m3-hint" data-sn="dlInfo"></div>' +
@@ -2736,7 +2735,7 @@ function snShpZip(feats, base) {
         } else if (!(st && st.date)) {
             // дата не выбирается автоматически: слой включится только после выбора даты пользователем
             if (!groups.length && retries > 0) { month = new Date(Date.UTC(y, m - 1, 1)); load(retries - 1); return; }
-            if (groups.length) note = 'Выберите дату съёмки в календаре или в списке — слой появится на карте';
+            if (groups.length) note = 'Выберите дату съёмки в календаре — слой появится на карте';
         }
         renderAll();
     }
@@ -2770,7 +2769,7 @@ function snShpZip(feats, base) {
     }
     function showLoading() {
         if (!sec) return;
-        q(sec, 'cards').innerHTML = '<div class="sn-empty"><i class="fa-solid fa-spinner fa-spin"></i> Поиск снимков…</div>';
+        const ft = q(sec, 'foot'); if (ft) ft.innerHTML = '<span><i class="fa-solid fa-spinner fa-spin"></i> Поиск снимков…</span>';
         q(sec, 'cal').classList.add('busy');
     }
     function renderCal() {
@@ -2824,25 +2823,10 @@ function snShpZip(feats, base) {
             if (im.complete && im.naturalWidth === 0 && im.getAttribute('src')) thumbFail(im);
         });
     }
-    function renderCards() {
-        const el = q(sec, 'cards'), lay = layerOf(sec), st = SENTINEL.state[lay] || {}, max = +q(sec, 'cc').value;
-        q(sec, 'count').textContent = groups.length;
-        if (!groups.length) { el.innerHTML = '<div class="sn-empty">' + esc(note || 'В этой области за месяц снимков нет') + '</div>'; return; }
-        el.innerHTML = groups.map(g => {
-            const d = dayDate(g.day);
-            const wd = d.toLocaleDateString('ru-RU', { weekday: 'short', timeZone: 'UTC' });
-            const mo = d.toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '');
-            const over = g.cc != null && g.cc > max;
-            return `<button type="button" class="sn-card${g.day === st.date ? ' sel' : ''}${over ? ' dim' : ''}" data-day="${g.day}" style="--c:${ccColor(g.cc)}" title="${fmtDay(g.day)} · облачность ${ccText(g.cc)} · снимков: ${g.scenes.length}">` +
-                thumbHtml(g.scenes[0], 'sentinel2') +
-                `<span class="sn-ci"><b>${d.getUTCDate()} ${mo}</b><em>☁ ${ccText(g.cc)}</em></span><small>${wd}${g.scenes.length > 1 ? ' · сцен: ' + g.scenes.length : ''}</small></button>`;
-        }).join('');
-        watchPv(el);
-    }
     // «скрины» сцен выбранной даты (превью с облаками) — чтобы оценить снимок до загрузки на карту
     function renderShots() {
         const el = q(sec, 'shots'), lay = layerOf(sec), st = SENTINEL.state[lay];
-        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">📅 Выберите дату съёмки в календаре или в списке ниже — ' + 'снимок загрузится внутри нарисованной фигуры' + '</div>'; return; }
+        if (!st || !st.date) { el.className = 'sn-shots'; el.innerHTML = '<div class="sn-empty">📅 Выберите дату съёмки в календаре — ' + 'снимок загрузится внутри нарисованной фигуры' + '</div>'; return; }
         const g = groups.find(x => x.day === st.date);
         const list = (g ? g.scenes : st.scenes || []).slice(0, 6);
         el.className = 'sn-shots' + (list.length === 1 ? ' one' : '');
@@ -2853,7 +2837,7 @@ function snShpZip(feats, base) {
     function renderFoot() {
         const st = SENTINEL.state[layerOf(sec)], el = q(sec, 'foot');
         const src = '<span class="sn-src">Sentinel-2 L2A · AWS</span>';
-        if (!st || !st.date) { el.innerHTML = `<span>${esc(note || 'Выберите дату съёмки — снимок появится на карте')}</span>${src}`; return; }
+        if (!st || !st.date) { el.innerHTML = `<span>${esc(note || (groups.length ? 'Выберите дату съёмки — снимок появится на карте' : 'В этой области за месяц снимков нет'))}</span>${src}`; return; }
         el.innerHTML = `<span><b>${fmtDay(st.date)}</b> · облачность ~${ccText(st.cc)} · сцен за день: ${st.scenes.length}</span>${src}`;
     }
     function renderDl() {
@@ -3182,7 +3166,7 @@ function snShpZip(feats, base) {
         try {
             const r = await snAutoRange(st, bb);
             SENTINEL.contrast.min = r.min; SENTINEL.contrast.max = r.max;
-            syncContrast(); renderLegend(); ctrApply(); renderCards(); renderShots();
+            syncContrast(); renderLegend(); ctrApply(); renderShots();
             updateStatus(`🎚️ Контраст NDVI: ${fmtN(r.min)} … ${fmtN(r.max)}`);
         } catch (e) {
             console.warn('Sentinel: автоконтраст', e);
@@ -3192,7 +3176,7 @@ function snShpZip(feats, base) {
 
     function renderAll() {
         if (!sec || sec === CMPSEC) return;
-        renderHead(); renderMonth(); renderCal(); renderCards(); renderShots(); renderFoot(); renderDl(); renderShapeInfo();
+        renderHead(); renderMonth(); renderCal(); renderShots(); renderFoot(); renderDl(); renderShapeInfo();
     }
 
     // ---------- скачивание ----------
@@ -3606,7 +3590,7 @@ function snShpZip(feats, base) {
             SENTINEL.maxCC = +cc.value;
             eachPane((x, pn) => { const c = pn.querySelector('[data-sn="cc"]'); c.value = cc.value; pn.querySelector('[data-sn="ccVal"]').textContent = cc.value; });
             if (sec === CMPSEC) { if (cmp.on) [1, 2].forEach(cmpCalDraw); }
-            else if (sec) { renderCal(); renderCards(); }
+            else if (sec) { renderCal(); }
         });
         pane.addEventListener('click', onClick);
         pane.addEventListener('change', onChange);
@@ -3622,7 +3606,7 @@ function snShpZip(feats, base) {
                 clearTimeout(ctrT); ctrT = setTimeout(ctrApply, 350);
             };
             cMin.addEventListener('input', upd); cMax.addEventListener('input', upd);
-            const done = () => { if (sec) { renderCards(); renderShots(); } };
+            const done = () => { if (sec) { renderShots(); } };
             cMin.addEventListener('change', done); cMax.addEventListener('change', done);
         }
         pane.addEventListener('error', e => {   // превью не загрузилось — остаётся значок

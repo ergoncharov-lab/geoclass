@@ -114,9 +114,9 @@
     function scCol(v) { return v >= 75 ? '#16a34a' : v >= 55 ? '#84cc16' : v >= 40 ? '#eab308' : v >= 25 ? '#f97316' : '#dc2626'; }
     // радар пригодности: a — [{l, v 0..100 или null}]
     function radar(a) {
-        var n = a.length, s = '<svg viewBox="0 0 240 216" class="pp-svg pp-radar">', pt = function (r, i) { var t = (i * 360 / n - 90) * Math.PI / 180; return [120 + r * Math.cos(t), 108 + r * Math.sin(t)]; }, ptS = function (r, i) { return pt(r, i).map(function (x) { return x.toFixed(1); }).join(','); };
+        var n = a.length, s = '<svg viewBox="-24 0 288 216" class="pp-svg pp-radar">', pt = function (r, i) { var t = (i * 360 / n - 90) * Math.PI / 180; return [120 + r * Math.cos(t), 108 + r * Math.sin(t)]; }, ptS = function (r, i) { return pt(r, i).map(function (x) { return x.toFixed(1); }).join(','); };
         [0.25, 0.5, 0.75, 1].forEach(function (f) { s += '<polygon points="' + a.map(function (_, i) { return ptS(72 * f, i); }).join(' ') + '" class="rg"/>'; });
-        a.forEach(function (x, i) { var e = pt(72, i), l = pt(88, i); s += '<line x1="120" y1="108" x2="' + e[0].toFixed(1) + '" y2="' + e[1].toFixed(1) + '" class="rg"/><text x="' + l[0].toFixed(1) + '" y="' + (l[1] + 3).toFixed(1) + '" text-anchor="middle">' + x.l + ' ' + (x.v == null ? 'н/д' : Math.round(x.v)) + '</text>'; });
+        a.forEach(function (x, i) { var e = pt(72, i), l = pt(88, i); s += '<line x1="120" y1="108" x2="' + e[0].toFixed(1) + '" y2="' + e[1].toFixed(1) + '" class="rg"/><text x="' + l[0].toFixed(1) + '" y="' + (l[1] + 3).toFixed(1) + '" text-anchor="middle">' + (x.r || x.l) + ' ' + (x.v == null ? 'н/д' : Math.round(x.v)) + '</text>'; });
         var ok = a.filter(function (x) { return x.v != null; }), av = ok.length ? avg(ok.map(function (x) { return x.v; })) : null, col = av == null ? '#64748b' : scCol(av);
         s += '<polygon points="' + a.map(function (x, i) { return ptS(72 * (x.v || 0) / 100, i); }).join(' ') + '" fill="' + col + '" fill-opacity=".35" stroke="' + col + '" stroke-width="2"/>';
         a.forEach(function (x, i) { if (x.v != null) { var q = pt(72 * x.v / 100, i); s += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.6" fill="' + scCol(x.v) + '" stroke="#fff" stroke-width="1.2"/>'; } });
@@ -292,7 +292,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 center: [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], zoom: 12 });
         } catch (err) { el.innerHTML = '<div class="pp-ph3">3D недоступно (WebGL)</div>'; return; }
         m3s[key] = m;
-        var fit = function () { try { m.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 30, pitch: 60, bearing: -20, duration: 0 }); } catch (e) { /* карта удалена */ } };
+        var kicks = 0, heatSpec = { id: 'heat', type: 'raster', source: 'heat', paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 } };
+        var kick = function () {   // слой поверх рельефа дорисовывается не целиком, пока подгружаются тайлы высот: пересоздаём слой и рельеф, когда карта «затихла»
+            try { if (m.getLayer('heat')) { m.removeLayer('heat'); m.addLayer(heatSpec, m.getLayer('plot') ? 'plot' : undefined); } m.setTerrain({ source: 'dem', exaggeration: 1.5 }); m.triggerRepaint(); } catch (e) { /* карта удалена */ }
+        };
+        var fit = function () { try { m.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 30, pitch: 60, bearing: -20, duration: 0 }); kicks = 0; } catch (e) { /* карта удалена */ } };
+        if (heat) m.on('idle', function () { if (m.getSource('heat') && kicks < 3) { kicks++; setTimeout(kick, 200); } });
         var lw = 0, ro = window.ResizeObserver ? new ResizeObserver(function () {   // контейнер меняет размер после загрузки данных выше по странице — подстраиваем холст и кадр
             var w = el.clientWidth; if (!w) return; try { m.resize(); } catch (e) { return; }
             if (Math.abs(w - lw) > 40) { lw = w; fit(); }
@@ -305,7 +310,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 if (heat && heat._url && heat._bounds) {
                     var b = heat._bounds;
                     m.addSource('heat', { type: 'image', url: heat._url, coordinates: [[b.getWest(), b.getNorth()], [b.getEast(), b.getNorth()], [b.getEast(), b.getSouth()], [b.getWest(), b.getSouth()]] });
-                    m.addLayer({ id: 'heat', type: 'raster', source: 'heat', paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 } });
+                    m.addLayer(heatSpec);
                 }
             } catch (e) { console.warn('Паспорт: слой 3D', e); }
             try { m.addSource('plot', { type: 'geojson', data: gj }); m.addLayer({ id: 'plot', type: 'line', source: 'plot', paint: { 'line-color': '#ffffff', 'line-width': 2.5 } }); } catch (e) { console.warn('Паспорт: контур 3D', e); }
@@ -388,6 +393,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         }));
     }
     // ---------- статусы загрузки блоков (в шапке паспорта) ----------
+    var RETRY_WAIT = [3000, 7000, 15000];   // автоповтор неудавшихся блоков: паузы перед 1-й, 2-й и 3-й попыткой, мс
     var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', wx: 'Погода', addr: 'Адрес' };
     var ST_CSS = [
         '#passportPane .pp-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}#ppSt.pp-stbar{position:relative;display:flex;align-items:center;gap:10px;flex:1 1 100%;order:10;min-width:0;margin:0;padding:7px 12px 9px;border-radius:12px;background:linear-gradient(180deg,#fff,#f8fafc);border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.08);overflow:hidden}',
@@ -414,11 +420,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#ppBody .pp-pack.on .pk-g .pp-dcol{flex:0 0 auto;width:auto}#ppBody .pp-pack.on .pp-mapcard .pp-dcol{flex:1 1 auto;display:flex;flex-direction:column}',
         '#ppBody .pp-pack.on .pk-g .pp-mapw{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}',
         '#ppBody .pp-pack.on .pk-g .pp-map{flex:1 1 auto;width:100%;height:auto;min-height:260px;aspect-ratio:auto}',
-        '#passportPane .pp-top .pp-tb{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:32px;margin:0;padding:0 14px;border:1px solid transparent;border-radius:10px;font:600 13px/1 system-ui,sans-serif;white-space:nowrap;cursor:pointer;box-shadow:0 1px 3px rgba(15,23,42,.15);transition:transform .15s,box-shadow .15s,filter .15s}',
+        '#passportPane .pp-top .pp-tb{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:26px;margin:0;padding:0 9px;border:1px solid transparent;border-radius:8px;font:600 12px/1 system-ui,sans-serif;white-space:nowrap;cursor:pointer;box-shadow:0 1px 3px rgba(15,23,42,.15);transition:transform .15s,box-shadow .15s,filter .15s}',
         '#passportPane .pp-top .pp-tb:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,23,42,.2);filter:brightness(1.06)}#passportPane .pp-top .pp-tb:active{transform:none}',
         '#passportPane .pp-top .pp-tb.pri{background:linear-gradient(135deg,#6366f1,#2563eb);color:#fff}#passportPane .pp-top .pp-tb.pdf{background:linear-gradient(135deg,#f97316,#dc2626);color:#fff}',
         '#passportPane .pp-top .pp-tb.sec{background:#fff;color:#334155;border-color:#cbd5e1}#passportPane .pp-top .pp-tb.sec i{color:#2563eb}',
-        '#passportPane .pp-top .pp-tbs{display:flex;flex-direction:column;gap:6px;order:5;margin-left:auto}#passportPane .pp-top .pp-tbs .pp-tb{width:100%;height:30px}',
+        '#passportPane .pp-top .pp-tbs{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:5px;order:5;margin-left:auto}#passportPane .pp-top .pp-tbs .pp-tb{width:auto;height:26px;flex:0 0 auto}#passportPane .pp-top .pp-tb i{font-size:11px}',
         '#passportPane .pp-top .pp-tb.xls{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}#passportPane .pp-top .pp-tb:disabled{opacity:.7;cursor:progress;transform:none}',
         '@media print{#ppSt{display:none}}'
     ].join('');
@@ -461,11 +467,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var q = function (id) { return document.getElementById(id); }, set = function (el, cls, ic, tx) { if (!el) return; el.classList.add('pp-tb', cls); if (tx) el.innerHTML = '<i class="fas fa-' + ic + '"></i> ' + tx; };
         var rf = q('ppRefresh'), pr = q('ppPrint');
         var px = q('ppExcel'); if (!px && pr) { px = document.createElement('button'); px.type = 'button'; px.id = 'ppExcel'; px.className = 'pp-btn'; pr.parentNode.insertBefore(px, pr.nextSibling); }
-        set(rf, 'pri', 'rotate', 'Обновить по фигуре'); set(pr, 'pdf', 'file-pdf', 'Весь паспорт в PDF'); if (px && !px.disabled) set(px, 'xls', 'file-excel', 'Паспорт в Excel');
-        set(q('ppCollapseAll'), 'sec');   // значок и подпись меняет ux-extras.js
+        set(rf, 'pri', 'rotate', 'Обновить'); set(pr, 'pdf', 'file-pdf', 'PDF'); if (px && !px.disabled) set(px, 'xls', 'file-excel', 'Excel');
+        if (rf) rf.title = 'Обновить паспорт по фигуре'; if (pr) pr.title = 'Весь паспорт в PDF'; if (px) px.title = 'Паспорт в Excel';
+        var ca = q('ppCollapseAll'); set(ca, 'sec');   // значок и подпись меняет ux-extras.js
         Array.prototype.forEach.call(top.querySelectorAll('button, a'), function (e) { if (!e.classList.contains('pp-tb') && e.textContent.trim().length < 20 && /К карте/.test(e.textContent)) set(e, 'sec', 'map-location-dot', 'К карте'); });
-        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); w.appendChild(rf); if (pr) w.appendChild(pr); if (px) w.appendChild(px); }
-        var sd = q('ppSide'); if (sd && px && px.parentNode !== sd) sd.appendChild(px);
+        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); if (ca) w.appendChild(ca); w.appendChild(rf); if (pr) w.appendChild(pr); if (px) w.appendChild(px); }
+        var sd = q('ppSide'); if (sd && ca && ca.parentNode !== sd) sd.insertBefore(ca, sd.firstChild); if (sd && px && px.parentNode !== sd) sd.appendChild(px);
     }
     function stInit() {
         var top = document.querySelector('#passportPane .pp-top'); if (!top) return;
@@ -493,10 +500,11 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         el.innerHTML = '<i class="fas fa-' + (st === 'load' ? 'spinner fa-spin' : st === 'off' ? 'circle-pause' : st === 'ok' ? 'circle-check' : 'triangle-exclamation') + '"></i>' + STL[k] + (st === 'err' ? ' <i class="fas fa-rotate-right"></i>' : '');
         stSum();
     }
-    function address(c, tok) {
+    function address(c, tok, n) {
+        n = n || 0;
         reverseGeocode(c).then(function (j) {
             if (tok !== seq) return; var el = document.getElementById('ppAddr'); if (el) el.textContent = j.display_name || 'адрес не найден'; stSet('addr', j.display_name ? 'ok' : 'err', j.display_name ? '' : 'адрес не найден');
-        }).catch(function () { if (tok === seq) stSet('addr', 'err', 'нет связи с геокодером'); var el = document.getElementById('ppAddr'); if (el) el.textContent = 'не удалось определить (нет связи с геокодером)'; });
+        }).catch(function () { if (tok === seq) { stSet('addr', 'err', 'нет связи с геокодером'); if (n < RETRY_WAIT.length) setTimeout(function () { if (tok === seq) { stSet('addr', 'load'); address(c, tok, n + 1); } }, RETRY_WAIT[n]); } var el = document.getElementById('ppAddr'); if (el) el.textContent = 'не удалось определить (нет связи с геокодером)'; });
     }
 
     // ---------- 2. классификация ----------
@@ -1269,15 +1277,16 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             }) +
             blk({
                 t: 'Индекс пригодности участка', i: 'gauge-high', id: 'ppScore', body: SPIN,
-                info: ['Сводная ориентировочная оценка пригодности участка для сельскохозяйственного использования по шести факторам, 0–100 баллов.', 'Позволяет сравнивать участки между собой и сразу видеть слабое место — фактор, который тянет оценку вниз.',
-                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Почва: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Вегетация (по снимку выбранной даты): среднее оценок NDVI (100 при ≥ 0,6, 0 при ≤ 0,1), NDMI (100 при ≥ 0,3, 0 при ≤ −0,2), NBR (100 при ≥ 0,5, 0 при ≤ 0,1) и однородности NDVI (100 при вариации ≤ 10 %, 0 при ≥ 50 %); оценка зависит от сезона и облачности выбранной даты. Итог — среднее по доступным факторам.']
+                info: ['Сводная ориентировочная оценка пригодности участка для сельскохозяйственного использования по семи факторам, 0–100 баллов.', 'Позволяет сравнивать участки между собой и сразу видеть слабое место — фактор, который тянет оценку вниз.',
+                    'Рельеф: 100 при среднем уклоне ≤ 1°, линейно до 0 при ≥ 12°. Хим. анализ: среднее оценок pH (идеал 6,8; 0 при отклонении ≥ 1,8), органического C (100 при ≥ 35 г/кг), общего азота (100 при ≥ 3,5 г/кг) и CEC (100 при ≥ 30 смоль/кг). Климат: ГТК (100 при 1,1–1,6) и безморозный период (100 при ≥ 180 дней, 0 при ≤ 100). Логистика: 100 при дороге с твёрдым покрытием ≤ 500 м, 0 при ≥ 10 км (логарифмическая шкала). Форма: компактность K / 0,7. Вегетация (по снимку выбранной даты): среднее оценок NDVI (100 при ≥ 0,6, 0 при ≤ 0,1), NDMI (100 при ≥ 0,3, 0 при ≤ −0,2), NBR (100 при ≥ 0,5, 0 при ≤ 0,1) и однородности NDVI (100 при вариации ≤ 10 %, 0 при ≥ 50 %); оценка зависит от сезона и облачности выбранной даты. Классификация: доля пашни в площади участка (100 при 100 %); слой пока не подключён — фактор показан как «н/д» и в среднее не входит. Итог — среднее по доступным факторам.']
             }));
     }
     function scores() {
-        var e = D.elev, s = D.soil && D.soil.S, g = D.lg, k = D.clim, so = [], cm = [], ph = s && s.phh2o, oc = s && s.soc, ce = s && s.cec, rd = g && g.road;
+        var e = D.elev, s = D.soil && D.soil.S, g = D.lg, k = D.clim, so = [], cm = [], ph = s && s.phh2o, oc = s && s.soc, ce = s && s.cec, nn = s && s.nitrogen, rd = g && g.road, cl = D.cls, ar = D.area / 1e4;
         if (ph) so.push(100 * (1 - cl01(Math.abs(ph.mean - 6.8) / 1.8)));
         if (oc) so.push(100 * cl01(oc.mean / 35));
         if (ce) so.push(100 * cl01(ce.mean / 30));
+        if (nn) so.push(100 * cl01(nn.mean / 3.5));
         if (k && k.gtk != null) cm.push(k.gtk <= 1.6 ? 100 * cl01(k.gtk / 1.1) : 100 * cl01(1 - (k.gtk - 1.6) / 1.5));
         if (k && k.ff != null) cm.push(100 * cl01((k.ff - 100) / 80));
         var sv = [], sT = D.sat || {}, sf = function (q) { return sT[q] && sT[q].stats; }, n1 = sf('ndvi'), n2 = sf('ndmi'), n4 = sf('nbr');   // вегетация по снимку выбранной даты
@@ -1287,11 +1296,13 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var svb = sv.length ? [n1 ? 'NDVI ' + nf(n1.mean, 2) : '', n2 ? 'NDMI ' + nf(n2.mean, 2) : '', n4 ? 'NBR ' + nf(n4.mean, 2) : ''].filter(Boolean).join(', ') + (D.satSel ? ' · ' + satDay(D.satSel.day) : '') : 'нет данных — выберите дату снимка';
         return [
             { l: 'Рельеф', v: e && e.ms != null ? 100 * (1 - cl01((e.ms - 1) / 11)) : null, b: e && e.ms != null ? 'средний уклон ' + nf(e.ms, 1) + '°' : 'нет данных' },
-            { l: 'Почва', v: so.length ? avg(so) : null, b: ph || oc || ce ? [ph ? 'pH ' + nf(ph.mean, 1) : '', oc ? 'C ' + nf(oc.mean, 1) + ' г/кг' : '', ce ? 'CEC ' + nf(ce.mean, 1) : ''].filter(Boolean).join(', ') : 'нет данных' },
+            { l: 'Хим. анализ', v: so.length ? avg(so) : null, b: ph || oc || ce || nn ? [ph ? 'pH ' + nf(ph.mean, 1) : '', oc ? 'C ' + nf(oc.mean, 1) + ' г/кг' : '', nn ? 'N ' + nf(nn.mean, 2) + ' г/кг' : '', ce ? 'CEC ' + nf(ce.mean, 1) : ''].filter(Boolean).join(', ') : 'нет данных' },
             { l: 'Климат', v: cm.length ? avg(cm) : null, b: k ? (k.gtk != null ? 'ГТК ' + nf(k.gtk, 2) + ', ' : '') + 'безморозный период ' + nf(k.ff, 0) + ' дн.' : 'нет данных' },
             { l: 'Логистика', v: g ? (rd ? 100 * (1 - cl01(Math.log(Math.max(rd.d, 500) / 500) / Math.log(20))) : 0) : null, b: g ? (rd ? 'твёрдая дорога в ' + (rd.d < 1000 ? nf(rd.d, 0) + ' м' : nf(rd.d / 1000, 1) + ' км') : 'дорог в радиусе 6 км не найдено') : 'нет данных' },
             { l: 'Форма', v: D.comp != null ? 100 * cl01(D.comp / 0.7) : null, b: D.comp != null ? 'компактность K = ' + nf(D.comp, 2) : 'нет данных' },
-            { l: 'Вегетация', v: sv.length ? avg(sv) : null, b: svb }
+            { l: 'Вегетация', v: sv.length ? avg(sv) : null, b: svb },
+            // классификация: D.cls = { arable: площадь пашни, га } появится после подключения слоя; пока пусто и в итоговую оценку не входит
+            { l: 'Классификация', r: 'Классиф.', v: cl && cl.arable != null && ar > 0 ? 100 * cl01(cl.arable / ar) : null, b: cl && cl.arable != null ? 'пашня ' + nf(cl.arable, 1) + ' га' + (ar > 0 ? ' (' + nf(cl.arable / ar * 100, 0) + ' % участка)' : '') : 'нет данных — слой классификации не подключён (здесь будет площадь пашни)' }
         ];
     }
     function scoreTbl() {
@@ -1304,7 +1315,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var s = D.soil && D.soil.S, e = D.elev, g = D.lg, k = D.clim, ph = s && s.phh2o, so = s && s.soc, r = radar(scores()), fd = function (d) { return d < 1000 ? nf(d, 0) + ' м' : nf(d / 1000, 1) + ' км'; };
         var K = [['Площадь', nf(D.area / 1e4, 2) + ' га', 'ruler-combined', CC.gen, 'геодезическая площадь контура на эллипсоиде WGS-84 (Turf)'], ['Перепад высот', e ? nf(e.mx - e.mn, 0) + ' м' : '…', 'mountain', CC.rel, 'максимум минус минимум высоты по цифровой модели рельефа внутри контура'], ['Средний уклон', e && e.ms != null ? nf(e.ms, 1) + '°' : '…', 'chart-line', CC.rel, 'среднее по ячейкам модели рельефа внутри контура, по разнице высот соседних ячеек'], ['pH почвы', ph ? nf(ph.mean, 1) : '…', 'flask', CC.soil, 'SoilGrids 250 м, слой 0–5 см: среднее по ячейкам внутри контура'],
             ['Гумус (оценка)', so ? nf(so.mean * 0.1724, 1) + ' %' : '…', 'leaf', CC.soil, 'органический углерод SoilGrids (г/кг) × 0,1724 → % гумуса'], ['До дороги', g && g.road ? fd(g.road.d) : '…', 'road', CC.log, 'по прямой от границы участка до ближайшей дороги с твёрдым покрытием (OSM, радиус 6 км)'], ['ГТК', k && k.gtk != null ? nf(k.gtk, 2) : '…', 'cloud-rain', CC.clim, '10 · Σосадков / Σt за дни теплее 10 °C; ERA5, среднее за 10 лет'], ['Σ t > 10 °C', k ? nf(k.sat, 0) + ' °' : '…', 'temperature-half', CC.clim, 'сумма средних суточных температур в дни теплее 10 °C за год; ERA5, 10 лет']];
-        return '<div class="pp-score"><small>Индекс пригодности</small><div class="big" style="color:' + (r.avg == null ? '#94a3b8' : scCol(r.avg)) + '">' + (r.avg == null ? '…' : Math.round(r.avg)) + '<span>/100</span></div>' + r.svg + '<div class="pp-cap2">Как считается: среднее шести оценок 0–100 — рельеф, почва, климат, логистика, форма, вегетация по снимку выбранной даты (по доступным). Формулы — в разделе 8.</div></div>' +
+        return '<div class="pp-score"><small>Индекс пригодности</small><div class="big" style="color:' + (r.avg == null ? '#94a3b8' : scCol(r.avg)) + '">' + (r.avg == null ? '…' : Math.round(r.avg)) + '<span>/100</span></div>' + r.svg + '<div class="pp-cap2">Как считается: среднее семи оценок 0–100 — рельеф, хим. анализ почвы, климат, логистика, форма, вегетация по снимку выбранной даты, классификация (доля пашни; пока нет данных) — по доступным. Формулы — в разделе 8.</div></div>' +
             '<div class="pp-kgrid">' + K.map(function (q) { return '<div class="pp-kpi" style="--c:' + q[3] + '"><small><i class="fas fa-' + q[2] + '"></i>' + q[0] + '</small><b>' + q[1] + '</b><span class="how">' + q[4] + '</span></div>'; }).join('') + '</div>';
     }
     function summary() {
@@ -1346,9 +1357,10 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         mk3d('m3a', gj, null);
         stInit(); address(D.c, tok); if (D.satSel) stSet('sat', 'load');
         var soilFail = function (e) { SOILS.forEach(function (p) { var b = document.getElementById('ppSB_' + p); if (b && b.querySelector('.fa-spin')) b.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>'; }); };
-        var wrap = function (k, p, chk) { return p.then(function () { if (tok === seq) { var m = chk(); stSet(k, m ? 'err' : 'ok', m); } }, function (e) { if (tok === seq) stSet(k, 'err', e && e.message || 'ошибка'); throw e; }); };
+        var lastErr = {}, tries = {};
+        var wrap = function (k, p, chk) { return p.then(function () { if (tok === seq) { var m = chk(); lastErr[k] = m; stSet(k, m ? 'err' : 'ok', m); } }, function (e) { lastErr[k] = e && e.message || 'ошибка'; if (tok === seq) stSet(k, 'err', lastErr[k]); throw e; }); };
         var defs = {   // раздел: [функция расчёта, блоки на странице, проверка результата, ключ в D]
-            soil: [soilRun, SOILS.map(function (p) { return 'ppSB_' + p; }), function () { var S = D.soil && D.soil.S; return S && Object.keys(S).length ? '' : (D.soil && D.soil.err) || 'нет данных SoilGrids'; }, 'soil'],
+            soil: [soilRun, SOILS.map(function (p) { return 'ppSB_' + p; }), function () { var d = D.soil, S = d && d.S; if (!S || !Object.keys(S).length) return (d && d.err) || 'нет данных SoilGrids'; var miss = SOILS.filter(function (p) { return !d.cov[p]; }); return miss.length ? 'не загрузились слои: ' + miss.join(', ') : ''; }, 'soil'],
             elev: [elevRun, ['ppElBody', 'ppElB2', 'ppElB3', 'ppRose'], function () { return D.elev ? '' : 'данные рельефа недоступны'; }, 'elev'],
             log: [logRun, ['ppLgBody'], function () { return D.lg ? '' : 'нет данных OSM'; }, 'lg'],
             clim: [climRun, ['ppClBody'], function () { return D.clim ? '' : 'нет данных климата'; }, 'clim'],
@@ -1363,12 +1375,23 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 console.warn('Паспорт:', e); var el = document.getElementById(d[1][0]); if (el) el.innerHTML = '<div class="pp-note">Не удалось рассчитать: ' + esc(e && e.message || e) + '</div>';
             });
         };
-        var jobs = ['soil', 'elev', 'log', 'clim', 'wx'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k); });
+        var auto = function (k) {   // вместо ручного «обновить»: после паузы раздел с ошибкой загружается заново (до трёх попыток)
+            var el = document.querySelector('#ppSt [data-st="' + k + '"]');
+            if (tok !== seq || !el || !/\berr\b/.test(el.className) || /слишком большой/.test(lastErr[k] || '')) return;
+            var n = tries[k] || 0; if (n >= RETRY_WAIT.length) return;
+            tries[k] = n + 1;
+            setTimeout(function () {
+                if (tok !== seq) return;
+                var el2 = document.querySelector('#ppSt [data-st="' + k + '"]'); if (!el2 || !/\berr\b/.test(el2.className)) return;   // уже обновили вручную
+                launch(k, true).then(function () { if (tok === seq) { summary(); auto(k); } });
+            }, RETRY_WAIT[n]);
+        };
+        var jobs = ['soil', 'elev', 'log', 'clim', 'wx'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k).then(function () { auto(k); }); });
         retry = function (k) {   // повтор одного раздела по клику на его плашку статуса
             if (tok !== seq) return;
             if (k === 'addr') { stSet('addr', 'load'); var ad = document.getElementById('ppAddr'); if (ad) ad.textContent = 'определяется…'; address(D.c, tok); return; }
             if (!defs[k] || (k === 'sat' && !D.satSel)) return;
-            launch(k, true).then(function () { if (tok === seq) summary(); });
+            tries[k] = 0; launch(k, true).then(function () { if (tok === seq) { summary(); auto(k); } });
         };
         Promise.all(jobs).then(function () { if (tok === seq) summary(); });
     }
@@ -1605,7 +1628,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (ppBusy) return;
         var pane = document.getElementById('passportPane'), btn = document.getElementById('ppPrint');
         if (!pane || !body.children.length) return;
-        ppBusy = true; busy(btn, true, 'Формируем PDF…');
+        ppBusy = true; busy(btn, true, 'PDF…');
         var top = pane.scrollTop, plan = {}, snaps = null;
         var finish = function () { ppBusy = false; busy(btn, false); try { pane.scrollTop = top; } catch (e) { /* нет */ } };
         say('⏳ Формируем PDF: паспорт собирается в файл…');
@@ -1963,7 +1986,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (ppBusy) return;
         var pane = document.getElementById('passportPane'), btn = document.getElementById('ppExcel');
         if (!pane || !body.querySelector('section.pp-sec')) { say('⚠️ Нет данных паспорта для выгрузки', true); return; }
-        ppBusy = true; busy(btn, true, 'Формируем Excel…');
+        ppBusy = true; busy(btn, true, 'Excel…');
         var top = pane.scrollTop, opened = [];
         var finish = function () {
             opened.forEach(function (s) { s.classList.add('pp-col'); });

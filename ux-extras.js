@@ -162,13 +162,13 @@
     function allToggle() {
         var secs = body.querySelectorAll('.pp-sec'), col = !Array.prototype.every.call(secs, function (s) { return s.classList.contains('pp-col'); });
         Array.prototype.forEach.call(secs, function (s) { s.classList.toggle('pp-col', col); });
-        $('ppCollapseAll').innerHTML = col ? '<i class="fas fa-angles-down"></i> Развернуть все' : '<i class="fas fa-angles-up"></i> Свернуть все';
+        $('ppCollapseAll').innerHTML = col ? '<i class="fas fa-angles-down"></i> Развернуть' : '<i class="fas fa-angles-up"></i> Свернуть';
         if (!col) window.dispatchEvent(new Event('resize'));                              // карты внутри разделов подстраиваются
     }
     if (body && top) {
         var btn = document.createElement('button');
         btn.type = 'button'; btn.className = 'pp-btn'; btn.id = 'ppCollapseAll';
-        btn.innerHTML = '<i class="fas fa-angles-up"></i> Свернуть все';
+        btn.innerHTML = '<i class="fas fa-angles-up"></i> Свернуть'; btn.title = 'Свернуть / развернуть все разделы паспорта';
         top.insertBefore(btn, $('ppRefresh'));
         btn.addEventListener('click', allToggle);
         body.addEventListener('click', function (e) {
