@@ -185,6 +185,7 @@
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="help" title="Инструкции"><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="bookmarks" title="Закладки"><i class="fas fa-bookmark"></i><span>Закладки</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="support" title="Поддержка"><i class="fas fa-headset"></i><span>Поддержка</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="sources" title="Источники анализа"><i class="fas fa-database"></i><span>Источники</span></button>
         </div>
 
         <!-- ВКЛАДКА 1 «ГЛАВНАЯ»: меню разделов -->
@@ -195,7 +196,7 @@
                     <div class="sp-group-title" style="margin-top:4px">Главное</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#10b981" title="Источники анализа&#10;Раздел в разработке."><i class="fas fa-database"></i><span>Источники анализа</span></button>
+                        <button type="button" class="sp-tile" data-goto="sources" style="--c:#10b981" title="Источники анализа&#10;Что откуда берётся: снимки, рельеф, почвы, погода, дороги, адреса и кадастр — сервисы и разрешение данных."><i class="fas fa-database"></i><span>Источники анализа</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Новости&#10;Раздел в разработке."><i class="fas fa-newspaper"></i><span>Новости</span></button>
                         <button type="button" class="sp-tile" data-goto="support" style="--c:#64748b" title="Поддержка&#10;Обратная связь, рекомендации и переход в справку."><i class="fas fa-headset"></i><span>Поддержка</span></button>
                         <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
@@ -442,6 +443,53 @@
                 <label class="sup-chk"><input type="checkbox" id="supHints"> Показывать всплывающие подсказки на карте</label>
             </div>
         </div><!-- /tab-pane support -->
+
+        <!-- ВКЛАДКА «ИСТОЧНИКИ АНАЛИЗА»: что откуда берётся (открывается плиткой на «Главной») -->
+        <div class="tab-pane" data-pane="sources" role="tabpanel">
+            <div class="section src">
+                <div class="src-intro">Все данные открытые и подключаются напрямую из браузера, без личных ключей (кроме слоёв OpenWeatherMap). Нажмите на группу, чтобы увидеть детали.</div>
+                <details open style="--c:#ec4899"><summary><i class="fas fa-satellite"></i>Спутниковые снимки и индексы</summary><div class="src-b"><ul>
+                    <li><b>Снимки, NDVI, NDMI, NBR</b> — Sentinel-2 L2A (ESA Copernicus), 10 м. Каталог снимков: STAC Earth Search (Element84), сами файлы COG — с AWS S3. Индексы считаются по спектральным каналам; доступны естественные и ложные цвета (CIR).</li>
+                    <li><b>Классификация земель</b> — Esri Sentinel-2 10m Land Cover (ArcGIS ImageServer).</li>
+                    <li><b>Ускорение</b> — локальный прокси <code>serve_site.py</code> кэширует снимки на диске, повторное открытие быстрее.</li>
+                </ul></div></details>
+                <details style="--c:#3b82f6"><summary><i class="fas fa-layer-group"></i>Подложки карты</summary><div class="src-b"><ul>
+                    <li><b>Базовые</b> — OpenStreetMap, OpenTopoMap, HOT, CyclOSM, Google, 2ГИС.</li>
+                    <li><b>Спутниковые</b> — Esri World Imagery (в т. ч. Clarity и Firefly), Bing, EOX Sentinel-2 cloudless 2023, NASA GIBS (VIIRS).</li>
+                </ul></div></details>
+                <details style="--c:#14b8a6"><summary><i class="fas fa-mountain"></i>Рельеф и высоты</summary><div class="src-b"><ul>
+                    <li><b>Профиль рельефа, гипсометрия, 3D-рельеф</b> — тайлы Terrarium DEM (AWS Terrain Tiles); высоты читаются из этих же тайлов.</li>
+                </ul></div></details>
+                <details style="--c:#a855f7"><summary><i class="fas fa-flask"></i>Почвы</summary><div class="src-b"><ul>
+                    <li><b>pH, углерод, азот, глина, песок и др.</b> — ISRIC SoilGrids, 250 м (CC BY 4.0), сервис maps.isric.org.</li>
+                    <li><b>Контуры и коды почв</b> — векторная почвенная карта 1:2,5 млн (файл <code>soil.geojson</code> сайта).</li>
+                </ul></div></details>
+                <details style="--c:#0ea5e9"><summary><i class="fas fa-cloud-sun-rain"></i>Погода и климат</summary><div class="src-b"><ul>
+                    <li><b>Текущая погода и прогноз на 7 дней</b> — Open-Meteo; резерв — MET Norway (если Open-Meteo недоступен).</li>
+                    <li><b>Климат за 10 лет, ГТК, суммы температур, заморозки</b> — архив Open-Meteo (реанализ ERA5).</li>
+                    <li><b>Радар осадков</b> — RainViewer; <b>облака, температура, ветер, давление</b> — слои OpenWeatherMap (нужен бесплатный ключ, запросится при включении).</li>
+                </ul></div></details>
+                <details style="--c:#f59e0b"><summary><i class="fas fa-road"></i>Дороги, водоёмы, здания</summary><div class="src-b"><ul>
+                    <li><b>Логистический анализ</b> — данные OpenStreetMap через Overpass API (несколько зеркал: overpass-api.de, kumi.systems, private.coffee, maps.mail.ru).</li>
+                    <li><b>3D-здания</b> — векторные тайлы OpenFreeMap (данные OpenStreetMap).</li>
+                </ul></div></details>
+                <details style="--c:#ef4444"><summary><i class="fas fa-route"></i>Маршруты и расстояния</summary><div class="src-b"><ul>
+                    <li><b>Расстояния по дорогам, логистика, «Матрица расстояний»</b> — OSRM (router.project-osrm.org).</li>
+                    <li><b>Маршруты «отсюда / сюда»</b> — OSRM (router.project-osrm.org, routing.openstreetmap.de).</li>
+                    <li><small>Публичный сервер OSRM считает по автодорогам; при частых запросах может ограничивать скорость.</small></li>
+                </ul></div></details>
+                <details style="--c:#6366f1"><summary><i class="fas fa-map-location-dot"></i>Адреса и кадастр</summary><div class="src-b"><ul>
+                    <li><b>Поиск адресов и «Что здесь?»</b> — Nominatim (OpenStreetMap).</li>
+                    <li><b>Кадастровые кварталы, участки, здания</b> — НСПД (nspd.gov.ru). Для ознакомления, не заменяет выписку ЕГРН.</li>
+                    <li><b>Моё местоположение</b> — браузер; если недоступно, примерно по IP (ipwho.is).</li>
+                </ul></div></details>
+                <details style="--c:#10b981"><summary><i class="fas fa-folder-open"></i>Ваши данные</summary><div class="src-b"><ul>
+                    <li><b>Контуры участков и точки</b> — KML, GeoJSON, Excel, XML Росреестра: читаются прямо в браузере.</li>
+                    <li><b>Закладки, свои слои, отчёты</b> — хранятся в браузере (localStorage) на вашем устройстве.</li>
+                </ul></div></details>
+                <div class="src-intro">Данные носят справочный характер: точность зависит от разрешения и актуальности исходных источников.</div>
+            </div>
+        </div><!-- /tab-pane sources -->
 
         <!-- ВКЛАДКА 5 «ИНСТРУКЦИИ» (аккордеон по блокам карты; тексты — черновик) -->
         <div class="tab-pane" data-pane="help" role="tabpanel">

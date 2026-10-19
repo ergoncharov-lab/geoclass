@@ -1844,3 +1844,17 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .gh-tour .gh-nav button:disabled { opacity: .4; cursor: default; }
 .gh-c::after { display: none; }
 .gh-t::after { left: var(--ax, 20px); bottom: -5px; margin-left: -6px; }
+
+/* Вкладка «Источники анализа» */
+.src { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.src-intro { font-size: 11px; line-height: 1.45; color: #64748b; }
+.src details { border: 1px solid var(--sc-line); border-radius: 10px; background: var(--sc-white); overflow: hidden; }
+.src summary { display: flex; align-items: center; gap: 8px; padding: 7px 9px; font-size: 12px; font-weight: 700; color: var(--sc-ink); cursor: pointer; list-style: none; }
+.src summary::-webkit-details-marker { display: none; }
+.src summary i { width: 16px; text-align: center; color: var(--c, var(--sc-green)); }
+.src details[open] summary { border-bottom: 1px solid var(--sc-line); }
+.src-b { padding: 4px 10px 8px; font-size: 11px; line-height: 1.45; color: var(--sc-ink); }
+.src-b ul { margin: 0; padding-left: 16px; }
+.src-b li { margin: 4px 0; }
+.src-b small { color: #64748b; }
+.src-b code { font-size: 10px; background: #f1f5f9; padding: 0 4px; border-radius: 4px; }

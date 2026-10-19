@@ -12,7 +12,7 @@
         cadastre: 'ly-cadastre', userlayers: 'ly-user', catalog: 'ly-catalog',
         weather: 'wx-forecast', climate: 'wx-climate', gdd: 'wx-gdd', frost: 'wx-frost', windwork: 'wx-wind'
     };
-    var TAB = { analysis: 'an-site', reports: 'st-reports', catalog: 'ly-catalog', bookmarks: 'st-bm' };
+    var TAB = { analysis: 'an-site', reports: 'st-reports', catalog: 'ly-catalog', bookmarks: 'st-bm', sources: 'src' };
 
     var st = document.createElement('style');
     st.textContent = '.sp-help-btn{margin-left:auto;flex:none;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .15s,background .15s,border-color .15s}' +
