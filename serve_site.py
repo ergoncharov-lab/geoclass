@@ -194,6 +194,12 @@ def soil_load():
             props = {k: v for k, v in p.items() if v != -9999 and v is not None}
             feats.append((x0, y0, x1, y1, props, out))
         del gj
+        grid = {}      # сетка 1°x1° для быстрого поиска полигонов в окне
+        for idx, ft in enumerate(feats):
+            for ix in range(int(ft[0] // 1), int(ft[2] // 1) + 1):
+                for iy in range(int(ft[1] // 1), int(ft[3] // 1) + 1):
+                    grid.setdefault((ix, iy), []).append(idx)
+        SOIL['grid'] = grid
         SOIL['feats'] = feats
         SOIL['state'] = 'ready'
         print('Почвенная карта загружена: %d полигонов за %.0f с' % (len(feats), time.time() - t0))
@@ -203,34 +209,56 @@ def soil_load():
         print('Ошибка загрузки soil.geojson:', e)
 
 
+SOIL_SIMPL = {}                      # кэш упрощённой геометрии: (номер полигона, масштаб) -> координаты
+
+
+def soil_simplify(idx, polys, tol):
+    """Прореживает точки (шаг не меньше ~1 пикселя экрана); None, если контур слишком мал."""
+    mp = []
+    for rings in polys:
+        rr = []
+        for a in rings:
+            pts, lx, ly = [], None, None
+            for i in range(0, len(a), 2):
+                x, y = a[i], a[i + 1]
+                if lx is None or abs(x - lx) > tol or abs(y - ly) > tol:
+                    pts.append([round(x, 5), round(y, 5)]); lx, ly = x, y
+            if len(pts) >= 3:
+                if pts[0] != pts[-1]:
+                    pts.append(pts[0])
+                if len(pts) >= 4:
+                    rr.append(pts)
+        if rr:
+            mp.append(rr)
+    return mp or None
+
+
 def soil_query(w, s, e, n, z):
-    """Полигоны в окне; точки прореживаются по масштабу (минимальный шаг ~ 1 пиксель), мелкие контуры пропускаются."""
+    """Полигоны в окне: поиск по сетке, крупные контуры в приоритете, упрощение по масштабу с кэшем."""
     tol = 360.0 / (256 * 2 ** z) * 1.2
-    res, cut = [], False
-    for x0, y0, x1, y1, props, polys in SOIL['feats']:
+    feats, grid = SOIL['feats'], SOIL['grid']
+    cand = set()
+    for ix in range(max(int(w // 1), -181), min(int(e // 1), 180) + 1):
+        for iy in range(max(int(s // 1), -91), min(int(n // 1), 90) + 1):
+            cand.update(grid.get((ix, iy), ()))
+    sel = []
+    for i in cand:
+        x0, y0, x1, y1 = feats[i][:4]
         if x1 < w or x0 > e or y1 < s or y0 > n or (x1 - x0 < tol and y1 - y0 < tol):
             continue
-        mp = []
-        for rings in polys:
-            rr = []
-            for a in rings:
-                pts, lx, ly = [], None, None
-                for i in range(0, len(a), 2):
-                    x, y = a[i], a[i + 1]
-                    if lx is None or abs(x - lx) > tol or abs(y - ly) > tol:
-                        pts.append([round(x, 5), round(y, 5)]); lx, ly = x, y
-                if len(pts) >= 3:
-                    if pts[0] != pts[-1]:
-                        pts.append(pts[0])
-                    if len(pts) >= 4:
-                        rr.append(pts)
-            if rr:
-                mp.append(rr)
+        sel.append((-(x1 - x0) * (y1 - y0), i))
+    sel.sort()
+    cut = len(sel) > SOIL_MAX
+    if len(SOIL_SIMPL) > 150000:
+        SOIL_SIMPL.clear()
+    res = []
+    for _, i in sel[:SOIL_MAX]:
+        key = (i, z)
+        if key not in SOIL_SIMPL:
+            SOIL_SIMPL[key] = soil_simplify(i, feats[i][5], tol)
+        mp = SOIL_SIMPL[key]
         if mp:
-            res.append({'type': 'Feature', 'properties': props, 'geometry': {'type': 'MultiPolygon', 'coordinates': mp}})
-            if len(res) >= SOIL_MAX:
-                cut = True
-                break
+            res.append({'type': 'Feature', 'properties': feats[i][4], 'geometry': {'type': 'MultiPolygon', 'coordinates': mp}})
     return {'type': 'FeatureCollection', 'features': res, 'truncated': cut}
 
 

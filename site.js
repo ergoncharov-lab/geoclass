@@ -328,7 +328,7 @@
     var TITLES = {
         tab: { analysis: 'Анализ участка', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
         bp: { userlayers: 'Свои слои', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
-              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', shape: 'Границы и форма', agro: 'Агрокалькулятор', change: 'Сравнение снимков', catalog: 'Каталог данных' }
+              weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', shape: 'Границы и форма', agro: 'Агрокалькулятор', matrix: 'Матрица расстояний', change: 'Сравнение снимков', catalog: 'Каталог данных' }
     };
     function setView(v, title) {
         panel.setAttribute('data-view', v);
@@ -1400,4 +1400,298 @@
         var t = document.querySelector('#mainPanel .sp-tile[data-bp="draw"]'); if (t) t.click();
         if (window.gcRailMark) window.gcRailMark('tools');
     });
+})();
+
+/* «Матрица расстояний»: расстояния и время по дорогам (OSRM) между точками «Откуда» и «Куда» — матрица «все со всеми» или K ближайших.
+   Точки: Excel / CSV (название, X-долгота, Y-широта) или KML, ввод вручную, клик по карте. Полное достроение до точек, стоимость, экспорт в Excel. */
+(function () {
+    'use strict';
+    var pane = document.querySelector('[data-bp-pane="matrix"]');
+    if (!pane || typeof map === 'undefined') return;
+    var esc = gcSite.esc;
+    var P = { from: [], to: [] }, S = null, R = [], G = {}, busy = false, stop = false, pick = null, hl = null, fileT = 'from';
+    var COL = { from: '#059669', to: '#3b82f6' }, NAME = { from: 'Откуда', to: 'Куда' };
+    var layer = L.featureGroup().addTo(map), pts = L.featureGroup().addTo(map);
+    var q = function (k) { return pane.querySelector('[data-mx="' + k + '"]'); };
+    var ll = function (c) { return [c[1], c[0]]; };
+    var f2 = function (n) { return n.toFixed(2).replace('.', ','); };
+    var rd = function (n) { return Math.round(n * 100) / 100; };
+    var cut = function (s) { s = String(s); return s.length > 16 ? s.slice(0, 15) + '…' : s; };
+    var num = function (v) { var x = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/\s/g, '')); return isFinite(x) ? x : NaN; };
+
+    var st = document.createElement('style');
+    st.textContent = '.bp-mx .mx-in{flex:1;min-width:0;height:26px;border:1px solid #cbd5e1;border-radius:8px;padding:0 8px;font:inherit;font-size:12px;box-sizing:border-box;background:#fff}' +
+        '.bp-mx .mx-list{max-height:108px;overflow:auto;margin-top:4px}' +
+        '.bp-mx .mx-pt{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 4px;border-bottom:1px solid #eef2f7}' +
+        '.bp-mx .mx-pt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+        '.bp-mx .mx-pt small{color:#64748b;font-size:9px}' +
+        '.bp-mx .mx-pt button{border:0;background:none;color:#94a3b8;cursor:pointer}' +
+        '.bp-mx .mx-pt button:hover{color:#dc2626}' +
+        '.bp-mx .mx-n{background:#e2e8f0;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px}' +
+        '.bp-mx .mx-bar{height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-top:6px}' +
+        '.bp-mx .mx-bar i{display:block;height:100%;width:0;background:#10b981;transition:width .2s}' +
+        '.bp-mx .mx-tw{overflow:auto;max-height:320px;margin-top:6px}' +
+        '.bp-mx table{border-collapse:separate;border-spacing:0;font-size:10px}' +
+        '.bp-mx th,.bp-mx td{border:1px solid #e2e8f0;padding:2px 5px;white-space:nowrap;text-align:right;background:#fff}' +
+        '.bp-mx th{background:#f8fafc;text-align:left}' +
+        '.bp-mx thead th{position:sticky;top:0;z-index:2}.bp-mx tbody th{position:sticky;left:0;z-index:1}.bp-mx thead th:first-child{left:0;z-index:3}' +
+        '.bp-mx [data-r]{cursor:pointer}.bp-mx [data-r]:hover td,.bp-mx td[data-r]:hover{background:#ecfdf5}.bp-mx td.mn{background:#dcfce7;font-weight:700}';
+    document.head.appendChild(st);
+
+    function blk(t) {
+        return '<div class="dw-block"><div class="dw-title">Точки «' + NAME[t] + '» <span class="mx-n" data-mx="n-' + t + '">0</span></div>' +
+            '<div class="dw-act-grid"><button class="dw-act" type="button" data-mx="file" data-t="' + t + '" title="Excel / CSV: название, долгота (X), широта (Y); либо KML"><i class="fas fa-file-import"></i><span>Загрузить файл</span></button>' +
+            '<button class="dw-act" type="button" data-mx="pick" data-t="' + t + '" title="Режим: каждый клик по карте добавляет точку"><i class="fas fa-location-crosshairs"></i><span>Указать на карте</span></button></div>' +
+            '<div class="mx-list" data-mx="list-' + t + '"></div></div>';
+    }
+    var row = function (l, h) { return '<div class="dw-row"><label>' + l + '</label>' + h + '</div>'; };
+    pane.innerHTML = blk('from') + blk('to') +
+        '<input type="file" data-mx="inf" accept=".xlsx,.xls,.csv,.kml" style="display:none">' +
+        '<div class="dw-block"><div class="dw-title">Добавить вручную</div>' +
+        row('Название', '<input type="text" class="mx-in" data-mx="nm" placeholder="Например: Ферма 1">') +
+        row('Долгота', '<input type="text" class="mx-in" data-mx="lon" placeholder="X, например 37.6173">') +
+        row('Широта', '<input type="text" class="mx-in" data-mx="lat" placeholder="Y, например 55.7558">') +
+        '<div class="dw-act-grid"><button class="dw-act" type="button" data-mx="addman" data-t="from"><i class="fas fa-plus"></i><span>В «Откуда»</span></button>' +
+        '<button class="dw-act" type="button" data-mx="addman" data-t="to"><i class="fas fa-plus"></i><span>В «Куда»</span></button>' +
+        '<button class="dw-act dw-danger" type="button" data-mx="clear" style="grid-column:1/-1"><i class="fas fa-trash"></i><span>Очистить все точки</span></button></div></div>' +
+        '<div class="dw-block"><div class="dw-title">Настройки</div>' +
+        row('Режим', '<select data-mx="mode"><option value="matrix">Матрица (все со всеми)</option><option value="nearest">Ближайшие</option></select>') +
+        '<div class="dw-row" data-mx="kRow" style="display:none"><label>Ближайших</label><input type="text" class="mx-in" data-mx="k" value="1" title="Сколько ближайших точек «Куда» оставить для каждой точки «Откуда»"></div>' +
+        row('Транспорт', '<select data-mx="veh"><option value="driving">Автомобиль</option><option value="walking">Пешком</option><option value="bike">Велосипед</option></select>') +
+        row('Задержка', '<select data-mx="delay"><option value="100">100 мс</option><option value="200" selected>200 мс</option><option value="500">500 мс</option></select>') +
+        '<label class="dw-check" title="Добавляет прямые от точки «Откуда» до дороги и от дороги до точки «Куда»; общее расстояние = прямая + дорога + прямая"><input type="checkbox" data-mx="ext"> Полное достроение до точек (прямые от точки до дороги)</label>' +
+        '<label class="dw-check"><input type="checkbox" data-mx="draw" checked> Рисовать маршруты на карте</label></div>' +
+        '<div class="dw-block"><div class="dw-title">Стоимость перевозки</div>' +
+        row('Расход, л/100км', '<input type="text" class="mx-in" data-mx="fuel" value="10">') +
+        row('Цена, ₽/л', '<input type="text" class="mx-in" data-mx="price" value="55">') +
+        row('Доп., ₽/км', '<input type="text" class="mx-in" data-mx="extra" value="0" title="Амортизация, зарплата водителя, прочее">') +
+        '<div class="m3-hint" data-mx="cpk"></div></div>' +
+        '<div class="dw-block"><div class="dw-act-grid"><button class="dw-act" type="button" data-mx="calc"><i class="fas fa-play"></i><span>Рассчитать</span></button>' +
+        '<button class="dw-act dw-danger" type="button" data-mx="abort" disabled><i class="fas fa-stop"></i><span>Прервать</span></button>' +
+        '<button class="dw-act" type="button" data-mx="export" disabled style="grid-column:1/-1"><i class="fas fa-file-excel"></i><span>Экспорт в Excel</span></button></div>' +
+        '<div class="mx-bar" data-mx="bar" style="display:none"><i></i></div><div class="m3-hint" data-mx="msg"></div></div>' +
+        '<div class="dw-block" data-mx="res" style="display:none"><div class="dw-title">Результаты</div><div class="m3-hint" data-mx="stat"></div><div class="mx-tw" data-mx="out"></div></div>';
+    pane.classList.add('bp-mx');
+
+    function say(m, w) { var e = q('msg'); e.textContent = m; e.style.color = w ? '#dc2626' : ''; if (typeof updateStatus === 'function') updateStatus(m, w); }
+    function cpk() { var v = (num(q('fuel').value) || 0) * (num(q('price').value) || 0) / 100 + (num(q('extra').value) || 0); q('cpk').textContent = 'Итого: ' + f2(v) + ' ₽/км'; return v; }
+
+    /* ---- точки ---- */
+    function refresh() {
+        ['from', 'to'].forEach(function (t) {
+            q('n-' + t).textContent = P[t].length;
+            q('list-' + t).innerHTML = P[t].map(function (p, i) {
+                return '<div class="mx-pt" title="' + esc(p.name) + '"><span>' + esc(p.name) + '</span><small>' + p.lat.toFixed(4) + ', ' + p.lon.toFixed(4) + '</small><button type="button" data-mx="del" data-t="' + t + '" data-i="' + i + '"><i class="fas fa-xmark"></i></button></div>';
+            }).join('') || '<div class="m3-hint">Нет точек</div>';
+        });
+        pts.clearLayers();
+        ['from', 'to'].forEach(function (t) {
+            P[t].forEach(function (p) { L.circleMarker([p.lat, p.lon], { radius: 6, color: '#fff', weight: 2, fillColor: COL[t], fillOpacity: 1 }).bindTooltip(NAME[t] + ': ' + p.name).addTo(pts); });
+        });
+    }
+    function fit() { if (pts.getLayers().length) map.fitBounds(pts.getBounds().pad(0.2), { maxZoom: 14 }); }
+    function add(t, p) {
+        if (!(p.lon >= -180 && p.lon <= 180 && p.lat >= -90 && p.lat <= 90)) return false;
+        P[t].push(p); return true;
+    }
+    function addManual(t) {
+        var lon = num(q('lon').value), lat = num(q('lat').value);
+        if (!isFinite(lon) || !isFinite(lat) || !add(t, { name: q('nm').value.trim() || ('Точка ' + (P[t].length + 1)), lon: lon, lat: lat })) { say('Укажите корректные координаты: долгота X (−180…180), широта Y (−90…90)', true); return; }
+        q('nm').value = q('lon').value = q('lat').value = '';
+        refresh(); fit(); say('Добавлена точка в «' + NAME[t] + '»');
+    }
+    function setPick(t) {
+        pick = (t && pick !== t) ? t : null;
+        pane.querySelectorAll('[data-mx="pick"]').forEach(function (b) { b.classList.toggle('pf-on', b.getAttribute('data-t') === pick); });
+        map.getContainer().style.cursor = pick ? 'crosshair' : '';
+        if (pick) say('Кликайте по карте — точки добавляются в «' + NAME[pick] + '». Повторное нажатие кнопки выключит режим.');
+    }
+    map.on('click', function (e) {
+        if (!pick || !pane.classList.contains('active')) return;
+        add(pick, { name: 'Точка ' + (P[pick].length + 1), lon: e.latlng.lng, lat: e.latlng.lat }); refresh();
+    });
+    document.addEventListener('click', function (e) {
+        var t = e.target.closest && e.target.closest('.bp-tab, .panel-tab');
+        if (t && pick && t.getAttribute('data-bp-tab') !== 'matrix') setPick(null);
+    });
+    function readFile(file, t) {
+        var ext = (file.name.split('.').pop() || '').toLowerCase(), rdr = new FileReader();
+        rdr.onerror = function () { say('Не удалось прочитать файл', true); };
+        rdr.onload = function (ev) {
+            var out = [];
+            try {
+                if (ext === 'kml') {
+                    var gj = (window.toGeoJSON || window.togeojson).kml(new DOMParser().parseFromString(ev.target.result, 'text/xml'));
+                    (gj.features || []).forEach(function (f, i) {
+                        if (!f.geometry) return;
+                        var c = f.geometry.type === 'Point' ? f.geometry.coordinates : turf.centroid(f).geometry.coordinates;
+                        out.push({ name: (f.properties && f.properties.name) || ('Точка ' + (i + 1)), lon: c[0], lat: c[1] });
+                    });
+                } else {
+                    var wb = XLSX.read(ev.target.result, { type: 'array' }), rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+                    var h = (rows[0] || []).map(function (v) { return String(v == null ? '' : v).toLowerCase(); });
+                    var ci = function (re, d) { var k = h.findIndex(function (s) { return re.test(s); }); return k < 0 ? d : k; };
+                    var iN = ci(/наимен|назв|name/, 0), iX = ci(/коорд\S*\s*x|долг|lon|^x$/, 1), iY = ci(/коорд\S*\s*y|широт|lat|^y$/, 2);
+                    rows.forEach(function (r) {
+                        var lon = num(r[iX]), lat = num(r[iY]);
+                        if (r[iN] != null && r[iN] !== '' && isFinite(lon) && isFinite(lat)) out.push({ name: String(r[iN]), lon: lon, lat: lat });
+                    });
+                }
+            } catch (err) { say('Ошибка чтения файла: ' + err.message, true); return; }
+            var n = 0; out.forEach(function (p) { if (add(t, p)) n++; });
+            refresh(); fit(); say('Загружено точек в «' + NAME[t] + '»: ' + n + ' (' + file.name + ')', !n);
+        };
+        if (ext === 'kml') rdr.readAsText(file); else rdr.readAsArrayBuffer(file);
+    }
+
+    /* ---- маршруты (OSRM) ---- */
+    function hv(lo1, la1, lo2, la2) {
+        var r = Math.PI / 180, dLa = (la2 - la1) * r, dLo = (lo2 - lo1) * r;
+        var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    function nearIdx(g, lon, lat) {
+        var m = Infinity, k = 0;
+        for (var i = 0; i < g.length; i++) { var d = hv(g[i][0], g[i][1], lon, lat); if (d < m) { m = d; k = i; } }
+        return { i: k, d: m };
+    }
+    function extend(g, a, b) {
+        var s = nearIdx(g, a.lon, a.lat), e = nearIdx(g, b.lon, b.lat);
+        var part = s.i <= e.i ? g.slice(s.i, e.i + 1) : g.slice(e.i, s.i + 1).reverse(), rdist = 0;
+        for (var i = 0; i < part.length - 1; i++) rdist += hv(part[i][0], part[i][1], part[i + 1][0], part[i + 1][1]);
+        return {
+            km: s.d + rdist + e.d, r: rdist, s: s.d, e: e.d, geom: [[a.lon, a.lat]].concat(part, [[b.lon, b.lat]]),
+            seg: [s.d > 0.01 ? [[a.lat, a.lon], [g[s.i][1], g[s.i][0]]] : null, e.d > 0.01 ? [[g[e.i][1], g[e.i][0]], [b.lat, b.lon]] : null]
+        };
+    }
+    function osrm(a, b, veh) {
+        var ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 25000);
+        return fetch('https://router.project-osrm.org/route/v1/' + veh + '/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson', { signal: ctl.signal })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { return d && d.code === 'Ok' && d.routes && d.routes[0] ? { km: d.routes[0].distance / 1000, min: d.routes[0].duration / 60, geom: d.routes[0].geometry.coordinates } : null; })
+            .catch(function () { return null; })
+            .then(function (x) { clearTimeout(tm); return x; });
+    }
+    function drawRoute(r) {
+        L.polyline(r.geom.map(ll), { color: '#059669', weight: 3, opacity: 0.85 }).addTo(layer);
+        if (r.seg) [['#f59e0b', r.seg[0]], ['#8b5cf6', r.seg[1]]].forEach(function (s) { if (s[1]) L.polyline(s[1], { color: s[0], weight: 3, dashArray: '8,6' }).addTo(layer); });
+    }
+    function highlight(r) {
+        if (hl) { map.removeLayer(hl); hl = null; }
+        if (!r || !r.geom) return;
+        hl = L.polyline(r.geom.map(ll), { color: '#2563eb', weight: 6, opacity: 0.95 }).addTo(map);
+        map.fitBounds(hl.getBounds(), { padding: [60, 60] });
+        say('Маршрут: ' + S.from[r.f].name + ' → ' + S.to[r.t].name + ' — ' + f2(r.km) + ' км, ' + Math.round(r.min) + ' мин');
+    }
+    function setBusy(b) {
+        q('calc').disabled = b; q('abort').disabled = !b; q('export').disabled = b || !R.length;
+        q('bar').style.display = b ? '' : 'none';
+    }
+    function resetRes() {
+        R = []; G = {}; S = null; layer.clearLayers();
+        if (hl) { map.removeLayer(hl); hl = null; }
+        q('res').style.display = 'none'; q('export').disabled = true;
+    }
+    async function calc() {
+        if (busy) return;
+        var from = P.from.slice(), to = (P.to.length ? P.to : P.from).slice();
+        if (!from.length || !to.length) { say('Добавьте точки «Откуда» и «Куда»', true); return; }
+        var mode = q('mode').value, veh = q('veh').value, delay = +q('delay').value || 200, k = Math.max(1, parseInt(q('k').value, 10) || 1);
+        var ext = q('ext').checked, draw = q('draw').checked;
+        resetRes(); busy = true; stop = false;
+        S = { from: from, to: to, mode: mode, cpk: cpk() };
+        var total = from.length * to.length, done = 0, ok = 0;
+        setBusy(true);
+        for (var fi = 0; fi < from.length && !stop; fi++) {
+            var rowR = [];
+            for (var ti = 0; ti < to.length && !stop; ti++) {
+                if (from[fi] === to[ti]) { done++; continue; }
+                var rt = await osrm(from[fi], to[ti], veh), r = { f: fi, t: ti, ok: !!rt };
+                if (rt) {
+                    var x = ext ? extend(rt.geom, from[fi], to[ti]) : null;
+                    r.km = x ? x.km : rt.km; r.min = rt.min; r.geom = x ? x.geom : rt.geom;
+                    r.s = x ? x.s : 0; r.r = x ? x.r : rt.km; r.e = x ? x.e : 0; r.seg = x ? x.seg : null; ok++;
+                }
+                rowR.push(r); done++;
+                q('bar').firstChild.style.width = (done / total * 100) + '%';
+                say('Расчёт: ' + done + ' / ' + total + ' (успешно ' + ok + ')');
+                if (done < total && !stop) await new Promise(function (res) { setTimeout(res, delay); });
+            }
+            if (mode === 'nearest') rowR = rowR.filter(function (z) { return z.ok; }).sort(function (a, b) { return a.km - b.km; }).slice(0, k);
+            rowR.forEach(function (z) { z.i = R.push(z) - 1; G[z.f + '_' + z.t] = z; if (draw && z.ok) drawRoute(z); });
+        }
+        busy = false; setBusy(false); render();
+        if (draw && layer.getLayers().length) map.fitBounds(layer.getBounds().pad(0.1));
+        say((stop ? 'Прервано. ' : 'Готово. ') + 'Маршрутов найдено: ' + R.filter(function (z) { return z.ok; }).length, !ok);
+    }
+
+    /* ---- результаты и экспорт ---- */
+    function render() {
+        var okR = R.filter(function (z) { return z.ok; }), res = q('res');
+        res.style.display = '';
+        if (!okR.length) { q('stat').textContent = ''; q('out').innerHTML = '<div class="m3-hint">Нет результатов</div>'; return; }
+        var kms = okR.map(function (z) { return z.km; }), sum = kms.reduce(function (a, b) { return a + b; }, 0);
+        q('stat').innerHTML = 'Маршрутов: <b>' + okR.length + '</b> · средн. <b>' + f2(sum / okR.length) + '</b> км · мин. <b>' + f2(Math.min.apply(null, kms)) + '</b> · макс. <b>' + f2(Math.max.apply(null, kms)) + '</b> · стоимость всех: <b>' + Math.round(sum * S.cpk).toLocaleString('ru-RU') + ' ₽</b>. Нажмите на ячейку — маршрут подсветится на карте.';
+        var h;
+        if (S.mode === 'matrix') {
+            h = '<table><thead><tr><th>Откуда \\ Куда</th>' + S.to.map(function (p) { return '<th title="' + esc(p.name) + '">' + esc(cut(p.name)) + '</th>'; }).join('') + '</tr></thead><tbody>';
+            S.from.forEach(function (p, fi) {
+                var min = Infinity;
+                S.to.forEach(function (_, ti) { var z = G[fi + '_' + ti]; if (z && z.ok && z.km < min) min = z.km; });
+                h += '<tr><th title="' + esc(p.name) + '">' + esc(cut(p.name)) + '</th>';
+                S.to.forEach(function (_, ti) {
+                    var z = G[fi + '_' + ti];
+                    if (S.from[fi] === S.to[ti]) h += '<td>0</td>';
+                    else if (!z) h += '<td>–</td>';
+                    else if (!z.ok) h += '<td title="Маршрут не найден">✕</td>';
+                    else h += '<td data-r="' + z.i + '" class="' + (z.km === min ? 'mn' : '') + '" title="' + Math.round(z.min) + ' мин · ' + Math.round(z.km * S.cpk) + ' ₽">' + f2(z.km) + '</td>';
+                });
+                h += '</tr>';
+            });
+            h += '</tbody></table>';
+        } else {
+            h = '<table><thead><tr><th>Откуда</th><th>Куда</th><th>км</th><th>мин</th><th>₽</th></tr></thead><tbody>' + okR.map(function (z) {
+                return '<tr data-r="' + z.i + '"><th>' + esc(S.from[z.f].name) + '</th><th>' + esc(S.to[z.t].name) + '</th><td>' + f2(z.km) + '</td><td>' + Math.round(z.min) + '</td><td>' + Math.round(z.km * S.cpk) + '</td></tr>';
+            }).join('') + '</tbody></table>';
+        }
+        q('out').innerHTML = h;
+    }
+    function exportXls() {
+        if (!R.length || !S) { say('Нет данных для экспорта', true); return; }
+        var near = {};
+        R.forEach(function (z) { if (z.ok && (near[z.f] == null || z.km < R[near[z.f]].km)) near[z.f] = z.i; });
+        var rows = [['№', 'Откуда', 'Куда', 'Прямая от «Откуда» (км)', 'По дорогам (км)', 'Прямая до «Куда» (км)', 'Общее расстояние (км)', 'Время (мин)', 'Стоимость (₽)', 'Ближайший', 'Достроение']];
+        R.forEach(function (z, i) {
+            var a = S.from[z.f].name, b = S.to[z.t].name;
+            rows.push(z.ok ? [i + 1, a, b, rd(z.s), rd(z.r), rd(z.e), rd(z.km), Math.round(z.min), Math.round(z.km * S.cpk), near[z.f] === z.i ? '⭐' : '', (z.s > 0.01 || z.e > 0.01) ? 'да' : ''] : [i + 1, a, b, '', '', '', '', '', '', '', 'ошибка']);
+        });
+        var mat = [['Откуда \\ Куда'].concat(S.to.map(function (p) { return p.name; }))];
+        S.from.forEach(function (p, fi) {
+            mat.push([p.name].concat(S.to.map(function (_, ti) { var z = G[fi + '_' + ti]; return S.from[fi] === S.to[ti] ? 0 : (z && z.ok ? rd(z.km) : ''); })));
+        });
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Маршруты');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mat), 'Матрица');
+        XLSX.writeFile(wb, 'матрица_расстояний_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xlsx');
+        say('Экспортировано маршрутов в Excel: ' + R.length);
+    }
+
+    /* ---- события ---- */
+    pane.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-mx],[data-r]'); if (!b) return;
+        if (b.hasAttribute('data-r')) { highlight(R[+b.getAttribute('data-r')]); return; }
+        var a = b.getAttribute('data-mx'), t = b.getAttribute('data-t');
+        if (a === 'file') { fileT = t; q('inf').value = ''; q('inf').click(); }
+        else if (a === 'pick') setPick(t);
+        else if (a === 'addman') addManual(t);
+        else if (a === 'del') { P[t].splice(+b.getAttribute('data-i'), 1); refresh(); }
+        else if (a === 'clear') { P.from = []; P.to = []; resetRes(); refresh(); say('Все точки удалены'); }
+        else if (a === 'calc') calc();
+        else if (a === 'abort') { stop = true; }
+        else if (a === 'export') exportXls();
+    });
+    q('inf').addEventListener('change', function () { if (this.files && this.files[0]) readFile(this.files[0], fileT); });
+    q('mode').addEventListener('change', function () { q('kRow').style.display = this.value === 'nearest' ? '' : 'none'; });
+    ['fuel', 'price', 'extra'].forEach(function (k) { q(k).addEventListener('input', cpk); });
+    cpk(); refresh();
 })();

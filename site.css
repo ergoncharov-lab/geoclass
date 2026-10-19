@@ -1823,8 +1823,8 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .pp-dyn-tw { overflow-x: auto; }
 
 /* Виджет «Слои» на карте */
-#layersWidgetPanel .ovl-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-width: 76px; height: 64px; padding: 6px; box-sizing: border-box; border: 2px solid var(--sc-line); border-radius: 10px; background: var(--sc-white); cursor: pointer; font-size: 11px; color: var(--sc-ink); text-align: center; user-select: none; }
-#layersWidgetPanel .ovl-chip i { font-size: 18px; color: var(--c, var(--sc-green)); }
+#layersWidgetPanel .ovl-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; min-width: 56px; height: 46px; padding: 3px; box-sizing: border-box; border: 1px solid var(--sc-line); border-radius: 8px; background: var(--sc-white); cursor: pointer; font-size: 10px; color: var(--sc-ink); text-align: center; user-select: none; }
+#layersWidgetPanel .ovl-chip i { font-size: 14px; color: var(--c, var(--sc-green)); }
 #layersWidgetPanel .ovl-chip:hover { background: #f0fdf4; }
 #layersWidgetPanel .ovl-chip.active { border-color: var(--sc-green); background: #ecfdf5; }
 /* «Снимки»: скрины по датам убраны */

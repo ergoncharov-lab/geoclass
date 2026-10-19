@@ -1123,7 +1123,7 @@
     var lastF = null, MINZ = 6, names = {}, on = false, timer = null, ctl = null, retry = null;
     var tg = document.getElementById('soilToggle'), op = document.getElementById('soilOp'), st = document.getElementById('soilStatus'), fo = 0.5;
     var say = function (t) { if (st) st.textContent = t; if (typeof updateStatus === 'function') updateStatus(t); };
-    fetch('soil_codes.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { names = j || {}; gl.setStyle(gl.options.style); renderLegend(lastF); }).catch(function () { /* файла нет — показываем коды */ });
+    fetch('soil_codes.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { names = j || {}; if (cur) cur.setStyle(opts.style); renderLegend(lastF); }).catch(function () { /* файла нет — показываем коды */ });
     var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
     var nm = function (c) { var d = names[c]; return c === undefined ? '' : (d ? esc(d.n) + (d.s ? ' <span style="color:#94a3b8">(' + esc(d.s) + ')</span>' : '') : 'код ' + c); };
     var ZH = [['тундр', 190, 'Тундры'], ['тайги', 140, 'Тайга и хвойно-широколиственные леса'], ['широколиствен', 100, 'Широколиственные леса и лесостепи'], ['сухих степей', 35, 'Сухие степи и полупустыни'], ['степей', 55, 'Степи'], ['субтропик', 15, 'Субтропики'], ['Гидроморф', 220, 'Гидроморфные почвы'], ['Засолен', 300, 'Засоленные и солонцеватые почвы'], ['Пойменн', 170, 'Пойменные и маршевые почвы'], ['горных', 270, 'Горные территории'], ['Комплексы', 335, 'Комплексы почв (мерзлотные, полупустынные)']];
@@ -1150,8 +1150,11 @@
         }
         lg.innerHTML = html;
     }
-    var gl = L.geoJSON(null, {
-        renderer: L.canvas({ padding: 0.3 }),
+    var cur = null, loaded = null, reqN = 0;
+    // почвы рисуются в слое плиток (tilePane) со своим z-index 300: выше подложки, ниже плиток кадастра (z-index 450+); так порядок слоёв не ломается
+    var rend = L.canvas({ padding: 0.3, pane: 'tilePane' });
+    var opts = {
+        renderer: rend,
         style: function (f) { var c = f.properties.SOIL0; return { color: '#4b5563', weight: 0.5, fillColor: c === undefined ? '#9ca3af' : col(c), fillOpacity: fo }; },
         onEachFeature: function (f, l) {
             l.on('click', function (e) {
@@ -1162,30 +1165,38 @@
                 L.popup({ maxWidth: 320 }).setLatLng(e.latlng).setContent('<b>Почвенная карта</b><table style="font-size:12px">' + rows.map(function (r) { return '<tr><td style="color:#64748b;padding-right:8px;vertical-align:top">' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>').openOn(map);
             });
         }
-    });
-    function load() {
+    };
+    var inside = function (o, i) { return o[0] <= i[0] && o[1] <= i[1] && o[2] >= i[2] && o[3] >= i[3]; };
+    // слой меняется целиком за один такт (новый добавляется, старый снимается) — без «мигания»; пока ответ не пришёл, старые контуры остаются
+    function load(force) {
         if (!on) return;
-        if (map.getZoom() < MINZ) { gl.clearLayers(); say('Почвы: приблизьте карту (с масштаба z' + MINZ + ', сейчас z' + map.getZoom() + ')'); return; }
+        var z = map.getZoom();
+        if (z < MINZ) { if (cur) { map.removeLayer(cur); cur = null; } loaded = null; say('Почвы: приблизьте карту (с масштаба z' + MINZ + ', сейчас z' + z + ')'); return; }
+        var b = map.getBounds(), v = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        if (!force && loaded && loaded.z === z && inside(loaded.box, v)) return;     // при небольшом сдвиге карты данные уже есть
+        var dx = (v[2] - v[0]) * 0.4, dy = (v[3] - v[1]) * 0.4, box = [v[0] - dx, v[1] - dy, v[2] + dx, v[3] + dy], my = ++reqN;
         if (ctl) ctl.abort();
         ctl = window.AbortController ? new AbortController() : null;
-        var b = map.getBounds();
-        fetch('/soilgeo?bbox=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(function (v) { return v.toFixed(4); }).join(',') + '&z=' + map.getZoom(), ctl ? { signal: ctl.signal } : {})
+        fetch('/soilgeo?bbox=' + box.map(function (x) { return x.toFixed(3); }).join(',') + '&z=' + z, ctl ? { signal: ctl.signal } : {})
             .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(function (j) {
-                if (!on) return;
+                if (!on || my !== reqN) return;
                 if (j.loading !== undefined || j.error) {
                     if (j.error) { say('Почвы: ' + j.error); setOn(false); return; }
-                    say('Почвы: сервер читает soil.geojson, подождите…'); clearTimeout(retry); retry = setTimeout(load, 3000); return;
+                    say('Почвы: сервер читает soil.geojson, подождите…'); clearTimeout(retry); retry = setTimeout(function () { load(true); }, 3000); return;
                 }
-                gl.clearLayers(); gl.addData(j.features); lastF = j.features; renderLegend(lastF);
-                say(j.truncated ? 'Почвы: показана часть контуров — приблизьте карту' : 'Почвы: клик по контуру — коды почв');
+                var nl = L.geoJSON(j.features, opts).addTo(map);
+                if (rend._container) rend._container.style.zIndex = 300;
+                if (cur) map.removeLayer(cur);
+                cur = nl; loaded = { box: box, z: z }; lastF = j.features; renderLegend(lastF);
+                say(j.truncated ? 'Почвы: показана часть контуров — приблизьте карту' : 'Почвы: клик по контуру — сведения о почве');
             })
             .catch(function (e) { if (e && e.name !== 'AbortError') say('Почвы: нет ответа сервера. Запустите python serve_site.py и откройте http://localhost:8000'); });
     }
-    map.on('moveend', function () { clearTimeout(timer); timer = setTimeout(load, 250); });
+    map.on('moveend', function () { clearTimeout(timer); timer = setTimeout(load, 400); });
     function setOn(v) {
         on = v; chip.classList.toggle('active', on); if (tg) tg.checked = on;
-        if (on) { gl.addTo(map); load(); } else { if (ctl) ctl.abort(); clearTimeout(retry); map.removeLayer(gl); gl.clearLayers(); lastF = null; renderLegend(null); }
+        if (on) { load(true); } else { reqN++; if (ctl) ctl.abort(); clearTimeout(retry); if (cur) map.removeLayer(cur); cur = null; loaded = null; lastF = null; renderLegend(null); }
     }
     chip.addEventListener('click', function (e) {
         e.stopPropagation(); setOn(!on);
@@ -1193,7 +1204,7 @@
     });
     renderLegend(null);
     if (tg) tg.addEventListener('change', function () { setOn(tg.checked); });
-    if (op) op.addEventListener('input', function () { fo = op.value / 100; gl.setStyle({ fillOpacity: fo }); });
+    if (op) op.addEventListener('input', function () { fo = op.value / 100; if (cur) cur.setStyle({ fillOpacity: fo }); });
 })();
 
 /* Виджет «Слои» на карте (под подложками): кадастровые слои и «Свои слои». Включение слоя открывает его панель. */
