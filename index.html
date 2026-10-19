@@ -96,7 +96,7 @@
     </nav>
     <!-- ОКНО «СПРАВКА»: открывается на всю карту (как паспорт участка); содержимое — help.html + help.css -->
     <div class="gc-help-win" id="gcHelpWin" hidden role="dialog" aria-label="Справка">
-        <div class="pp-top"><button class="pp-btn" id="gcHelpClose" title="Вернуться к карте" type="button"><i class="fas fa-arrow-left"></i> К карте</button><h2>Справка</h2></div>
+        <div class="pp-top"><button class="pp-btn" id="gcHelpClose" title="Вернуться к карте" type="button"><i class="fas fa-arrow-left"></i> К карте</button><h2>Справка по карте GeoClass</h2><span class="gc-help-sub">интерфейс · функционал · шаги по вкладкам · источники данных</span></div>
         <iframe class="gc-help-body" src="help.html" title="Справка" loading="lazy"></iframe>
     </div>
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
@@ -172,6 +172,7 @@
             <div class="sp-back" id="spBack" hidden>
                 <button type="button" class="sp-back-btn" id="spBackBtn" title="Назад"><i class="fas fa-arrow-left"></i></button>
                 <span class="sp-back-title" id="spBackTitle"></span>
+                <button type="button" class="sp-help-btn" id="spHelpBtn" title="Справка по этому разделу" hidden><i class="fas fa-circle-question"></i></button>
             </div>
         </div>
 
@@ -1639,5 +1640,6 @@
 <script src="site.js"></script>
 <script src="ux-extras.js"></script>
 <script src="agrocalc.js"></script>
+<script src="help-links.js"></script>
 </body>
 </html>

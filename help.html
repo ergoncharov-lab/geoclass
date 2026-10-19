@@ -12,8 +12,7 @@
 
 <!-- МЕНЮ ПО БЛОКАМ -->
 <nav class="h-nav" id="hNav">
-    <div class="h-brand"><i class="fas fa-book-open"></i><div>Справка<small>GeoClass · карта и анализ</small></div></div>
-    <input class="h-search" id="hSearch" type="search" placeholder="Поиск по разделам…" autocomplete="off">
+    <div class="h-sbox"><input class="h-search" id="hSearch" type="search" placeholder="Поиск по разделам…" autocomplete="off"></div>
     <a href="#start"><b><i class="fas fa-flag-checkered"></i></b>Быстрый старт</a>
     <div class="h-group">1 · Интерфейс</div>
     <a href="#ui"><b><i class="fas fa-window-maximize"></i></b>Интерфейс карты</a>
@@ -42,6 +41,7 @@
     <div class="h-group">5 · Классификация</div>
     <a href="#cls"><b><i class="fas fa-wheat-awn"></i></b>Классификация</a>
     <div class="h-group">Дополнительно</div>
+    <a href="#keys"><b><i class="fas fa-keyboard"></i></b>Горячие клавиши</a>
     <a href="#files"><b><i class="fas fa-file-import"></i></b>Форматы файлов</a>
     <a href="#tips"><b><i class="fas fa-lightbulb"></i></b>Советы и типичные ошибки</a>
     <a href="#faq"><b><i class="fas fa-circle-question"></i></b>Вопросы и ответы</a>
@@ -49,11 +49,6 @@
 </nav>
 
 <main class="h-main" id="hMain">
-<header class="h-hero">
-    <h1>Справка по карте GeoClass</h1>
-    <p>Как устроена карта, что она умеет, как работать с каждой вкладкой и откуда берутся данные. Начните с быстрого старта или выберите блок в меню слева.</p>
-    <div class="h-chips"><a href="#ui">Интерфейс</a><a href="#func">Функционал</a><a href="#steps">Шаги по вкладкам</a><a href="#src-s2">Спутник Sentinel-2</a><a href="#faq">Вопросы</a></div>
-</header>
 
 <!-- БЫСТРЫЙ СТАРТ -->
 <section class="h-sec" id="start">
@@ -99,6 +94,7 @@
     </table></div>
 
     <h3 class="h-sub" id="ui-mouse"><i class="fas fa-computer-mouse">&#8203;</i>Мышь и клавиши</h3>
+    <p>Основное — ниже. Полный список клавиш — в разделе <a href="#keys">«Горячие клавиши»</a>.</p>
     <div class="h-tw"><table>
         <tr><th>Действие</th><th>Результат</th></tr>
         <tr><td>Колесо мыши</td><td>Масштаб</td></tr>
@@ -145,66 +141,141 @@
     </ol>
 
     <h3 class="h-sub" id="st-analysis"><i>📊</i>Анализ</h3>
-    <div class="h-card"><h3>Анализ участка</h3>
+    <div class="h-card" id="an-site"><h3>Анализ участка</h3>
         <ol class="h-steps">
             <li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li>
             <li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li>
             <li>Нажмите «Запустить анализ участка» — отчёт появится в «Отчётах».</li>
         </ol></div>
-    <div class="h-card"><h3>Профиль рельефа</h3>
+    <div class="h-card" id="an-profile"><h3>Профиль рельефа</h3>
         <ol class="h-steps">
             <li>Режим «По линии»: нарисуйте линию — получите график высот, перепад и уклоны, линия окрашивается по крутизне.</li>
             <li>Режим «По площади»: нарисуйте полигон — гипсометрическая кривая, ступени высот и тепловая карта.</li>
             <li>Выгрузите результат в CSV или PNG.</li>
         </ol><p>Данные: Terrarium DEM.</p></div>
-    <div class="h-card"><h3>Логистика</h3>
+    <div class="h-card" id="an-logistics"><h3>Логистика</h3>
         <ol class="h-steps">
             <li>Задайте точку или фигуру и радиус буфера.</li>
             <li>«Буфер и анализ» — дороги и водоёмы OSM внутри буфера.</li>
             <li>«Рассчитать расстояния» — ближайшие дорога и водоём по прямой и по маршруту (OSRM).</li>
         </ol></div>
-    <div class="h-card"><h3>Почвенный анализ</h3>
+    <div class="h-card" id="an-soil"><h3>Почвенный анализ</h3>
         <ol class="h-steps">
             <li>Нарисуйте фигуру — слой показателя появится сразу, цвет зависит от значения.</li>
             <li>Выберите показатель (pH, углерод, азот, глина, песок и др.), изучите легенду и графики.</li>
             <li>Задайте число зон для деления поля и скачайте GeoTIFF.</li>
         </ol><p>Данные: ISRIC SoilGrids, 250 м.</p></div>
-    <div class="h-card"><h3>Границы и форма · NDVI-динамика</h3>
+    <div class="h-card" id="an-shape"><h3>Границы и форма · NDVI-динамика</h3>
         <p>«Границы и форма» — площадь, периметр, габариты, компактность, координаты вершин и адрес. «Динамика NDVI» — отдельный раздел: сравнение NDVI по снимкам за период от посева до сбора урожая с кратким анализом.</p></div>
 
     <h3 class="h-sub" id="st-images"><i>🛰️</i>Снимки</h3>
-    <ol class="h-steps">
-        <li>Откройте плитку индекса (NDVI, NDMI, NBR) или «Снимки».</li>
-        <li>Выберите дату в календаре — слой включается только после выбора даты. Рядом показаны превью и облачность.</li>
-        <li>Нарисуйте область, чтобы получить статистику индекса и зоны для дифференцированного внесения (число категорий задаётся вручную, по умолчанию 3).</li>
-        <li>Скачайте GeoTIFF или векторный слой зон.</li>
-        <li>«Сравнение снимков»: выберите две даты — карта делится на две части, снизу дата, календарь и статистика каждой половины.</li>
-    </ol>
-    <div class="h-note"><b>NBR</b> считается по ближнему и коротковолновому ИК и показывает состояние покрова: сухую биомассу, угнетённые посевы, голую почву; сравнение дат показывает динамику.</div>
+    <div class="h-card" id="im-dates"><h3>Снимки (Sentinel-2)</h3>
+        <ol class="h-steps">
+            <li>Откройте плитку «Снимки» и выберите дату в календаре — слой включается только после выбора даты. Рядом показаны превью и облачность.</li>
+            <li>Переключайте естественные цвета и ложные (CIR).</li>
+            <li>Нарисуйте область и скачайте цветной GeoTIFF.</li>
+        </ol></div>
+    <div class="h-card" id="im-ndvi"><h3>NDVI — вегетационный индекс</h3>
+        <ol class="h-steps">
+            <li>Выберите дату снимка и нарисуйте фигуру. Правка и добавление вершин — как в «Анализе участка»; вершины видны при повторном выборе фигуры.</li>
+            <li>Нажмите «Рассчитать по фигуре» — получите статистику индекса и зоны для дифференцированного внесения (число категорий по умолчанию 3, можно изменить).</li>
+            <li>Слой зон показывается на карте и скачивается; подложка меняется на обычные снимки Sentinel, чтобы цвета не сливались. В пределах участка отмечаются точки с аномальными выбросами NDVI.</li>
+        </ol></div>
+    <div class="h-card" id="im-ndmi"><h3>NDMI — влажность растительности</h3>
+        <ol class="h-steps">
+            <li>Выберите дату и посмотрите превью.</li>
+            <li>Нарисуйте область — получите статистику индекса.</li>
+            <li>Скачайте GeoTIFF. Низкие значения указывают на засуху и водный стресс.</li>
+        </ol></div>
+    <div class="h-card" id="im-nbr"><h3>NBR — состояние покрова</h3>
+        <ol class="h-steps">
+            <li>Выберите дату и область так же, как для NDVI.</li>
+            <li>Сравните две даты: индекс показывает динамику сухой биомассы, угнетённых посевов и голой почвы.</li>
+        </ol></div>
+    <div class="h-card" id="im-change"><h3>Сравнение снимков</h3>
+        <ol class="h-steps">
+            <li>Выберите две даты — карта делится на две части (шторка).</li>
+            <li>Под каждой половиной три ряда: ключевые показатели, график и календарь выбора снимка (кнопка с датой вверху панели).</li>
+            <li>Кнопка обновления на каждой половине пересчитывает данные по снимкам.</li>
+        </ol></div>
 
     <h3 class="h-sub" id="st-tools"><i>🧰</i>Инструменты</h3>
-    <ol class="h-steps">
-        <li><b>Рисование:</b> выберите инструмент, задайте цвет, толщину и заливку, нарисуйте. Выделите фигуру — доступны вершины; перетаскивание перемещает только выделенную.</li>
-        <li><b>Импорт/экспорт:</b> везде, где есть рисование, доступны загрузка и выгрузка контура (KML и др.); правый клик по фигуре открывает меню.</li>
-        <li><b>3D:</b> «Настройки 3D» — включение режима, освещение, готовые модели (трактор и др.), импорт GLB/GLTF, вращение модели вокруг оси.</li>
-        <li><b>Экспорт карты:</b> формат → лист и разрешение → элементы (легенда, масштаб, север, сетка, рамка) → предпросмотр → «Экспорт».</li>
-        <li><b>Агрокалькулятор:</b> введите площадь (или возьмите с карты) и статьи затрат — получите выручку и прибыль.</li>
-    </ol>
+    <div class="h-card" id="tl-draw"><h3>Рисование</h3>
+        <ol class="h-steps">
+            <li>Выберите инструмент (фигура, линия, значок, текст), задайте цвет, толщину и заливку, нарисуйте.</li>
+            <li>Выделите фигуру — доступны правка и добавление вершин; перетаскивание перемещает только выделенную.</li>
+            <li>Правый клик по фигуре: копировать, удалить, экспорт в векторные форматы, перенос границ в анализы. Загрузка контура — через импорт.</li>
+        </ol></div>
+    <div class="h-card" id="tl-measure"><h3>Измерения</h3>
+        <ol class="h-steps">
+            <li>Выберите режим: расстояние, площадь или координаты.</li>
+            <li>Ставьте точки кликами; <kbd>Enter</kbd> или двойной клик завершает, <kbd>Backspace</kbd> убирает последнюю точку.</li>
+            <li>Результат остаётся на карте до нажатия «Очистить».</li>
+        </ol></div>
+    <div class="h-card" id="tl-3d"><h3>Настройки 3D</h3>
+        <ol class="h-steps">
+            <li>Нажмите чёрную кнопку «Включить 3D» — карта приблизится, здания станут объёмными, деревья включатся автоматически.</li>
+            <li>Добавьте готовые модели (трактор и др.) или импортируйте GLB/GLTF; выделенную модель можно двигать и вращать вокруг оси.</li>
+            <li>Для сравнения с плоской картой включите «Шторку» и переключайте 3D/2D на каждой половине.</li>
+        </ol></div>
+    <div class="h-card" id="tl-export"><h3>Экспорт карты</h3>
+        <ol class="h-steps">
+            <li>Выберите формат (PDF, PNG, JPEG, WebP, GeoTIFF), лист, ориентацию и разрешение.</li>
+            <li>Отметьте элементы: легенда, масштаб, север, сетка, рамка.</li>
+            <li>Проверьте предпросмотр и нажмите «Экспорт».</li>
+        </ol></div>
+    <div class="h-card" id="tl-agro"><h3>Агрокалькулятор</h3>
+        <ol class="h-steps">
+            <li>Возьмите площадь с нарисованного участка или введите вручную.</li>
+            <li>Укажите статьи затрат: семена, удобрения, средства защиты, топливо и машинное время, прочее.</li>
+            <li>Получите выручку и прибыль.</li>
+        </ol></div>
 
     <h3 class="h-sub" id="st-layers"><i>🗺️</i>Слои и каталог данных</h3>
-    <ol class="h-steps">
-        <li>«Кадастр» включает границы участков и номера (НСПД).</li>
-        <li>«Свои слои»: вставьте ссылку WMS/WFS/WMTS/XYZ/ArcGIS/GeoJSON — слой сохранится в браузере.</li>
-        <li>Для аналитических слоёв внизу панели показывается легенда с кратким описанием источника.</li>
-        <li>«Каталог геоданных»: раскройте группу (векторы OSM, снимки, готовые карты), выберите набор; оформление заказа — в разработке.</li>
-    </ol>
+    <div class="h-card" id="ly-cadastre"><h3>Кадастр</h3>
+        <ol class="h-steps">
+            <li>Включите слой — на карте появятся границы участков и кадастровые номера (НСПД).</li>
+            <li>Клик по объекту выделяет его и показывает сведения; <kbd>Ctrl</kbd> + клик выбирает несколько. Участок можно найти по кадастровому номеру.</li>
+            <li>Границы можно перенести в разделы анализа или скачать в KML.</li>
+        </ol><p>Границы — для ознакомления и не заменяют выписку ЕГРН.</p></div>
+    <div class="h-card" id="ly-user"><h3>Свои слои</h3>
+        <ol class="h-steps">
+            <li>Выберите тип (WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON), введите название и ссылку.</li>
+            <li>Подключённые слои сохраняются в браузере и возвращаются при следующем открытии.</li>
+        </ol></div>
+    <div class="h-card" id="ly-catalog"><h3>Каталог геоданных</h3>
+        <ol class="h-steps">
+            <li>Раскройте группу (векторы OSM, снимки, готовые карты) и выберите набор.</li>
+            <li>Оформление заказа — в разработке.</li>
+        </ol><p>Для аналитических подложек легенда с кратким описанием источника показывается под картой.</p></div>
 
     <h3 class="h-sub" id="st-weather"><i>⛅</i>Погода</h3>
-    <ol class="h-steps">
-        <li>Нарисуйте участок или оставьте текущий экстент карты.</li>
-        <li>Выберите плитку: прогноз, климат, тепло и вегетация, заморозки, ветер и окна работ.</li>
-        <li>Отметьте «Анимированный ветер на карте», если нужна визуализация потоков.</li>
-    </ol>
+<p>Нарисуйте участок или оставьте текущий экстент карты и откройте нужную плитку.</p>
+    <div class="h-card" id="wx-forecast"><h3>Прогноз погоды</h3>
+        <ol class="h-steps">
+            <li>Текущая погода и прогноз на 7 дней: температура, осадки, влажность, ветер.</li>
+            <li>Отметьте «Анимированный ветер на карте» для визуализации потоков.</li>
+        </ol></div>
+    <div class="h-card" id="wx-climate"><h3>Климат участка</h3>
+        <ol class="h-steps">
+            <li>Климатограмма за 10 лет (ERA5): температура и осадки по месяцам.</li>
+            <li>ГТК Селянинова показывает степень увлажнения.</li>
+        </ol></div>
+    <div class="h-card" id="wx-gdd"><h3>Тепло и вегетация</h3>
+        <ol class="h-steps">
+            <li>Суммы температур выше 5 и 10 °C, период вегетации.</li>
+            <li>Список культур, подходящих участку по теплу.</li>
+        </ol></div>
+    <div class="h-card" id="wx-frost"><h3>Заморозки</h3>
+        <ol class="h-steps">
+            <li>Безморозный период, даты последнего весеннего и первого осеннего заморозков.</li>
+            <li>Риск заморозков по датам.</li>
+        </ol></div>
+    <div class="h-card" id="wx-wind"><h3>Ветер и окна работ</h3>
+        <ol class="h-steps">
+            <li>Роза ветров за 10 лет.</li>
+            <li>Окна для опрыскивания и полевых работ на 7 дней вперёд.</li>
+        </ol></div>
 
     <h3 class="h-sub" id="st-reports"><i>📄</i>Отчёты и паспорт участка</h3>
     <ol class="h-steps">
@@ -236,15 +307,15 @@
         <div class="h-fact"><b>≈786 км</b><span>высота орбиты</span></div>
         <div class="h-fact"><b>≈100 мин</b><span>один виток вокруг Земли</span></div>
     </div>
-    <svg class="h-orbit" viewBox="0 0 520 250" role="img" aria-label="Схема орбиты Sentinel-2">
+    <svg class="h-orbit" viewBox="0 0 520 304" role="img" aria-label="Схема орбиты Sentinel-2">
         <defs><radialGradient id="eg" cx="40%" cy="35%"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#0369a1"/></radialGradient></defs>
-        <ellipse cx="260" cy="125" rx="235" ry="105" fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="6 6" transform="rotate(-12 260 125)"/>
+        <g transform="translate(0,32)"><ellipse cx="260" cy="125" rx="235" ry="105" fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="6 6" transform="rotate(-12 260 125)"/>
         <circle cx="260" cy="125" r="62" fill="url(#eg)"/>
         <path d="M200 112q30-22 60-6t60 4" fill="none" stroke="#ffffff55" stroke-width="6" stroke-linecap="round"/>
         <g fill="#0c1110"><rect x="448" y="62" width="26" height="11" rx="2"/><rect x="48" y="173" width="26" height="11" rx="2"/></g>
-        <g fill="#34d399"><circle cx="461" cy="67" r="4"/><circle cx="61" cy="178" r="4"/></g>
-        <text x="260" y="22" text-anchor="middle" font-size="13" fill="#64748b">Солнечно-синхронная полярная орбита (наклонение ≈98,6°)</text>
-        <text x="260" y="240" text-anchor="middle" font-size="12" fill="#64748b">Два спутника на одной орбите, сдвиг на 180°</text>
+        <g fill="#34d399"><circle cx="461" cy="67" r="4"/><circle cx="61" cy="178" r="4"/></g></g>
+        <text x="260" y="16" text-anchor="middle" font-size="13" fill="#64748b">Солнечно-синхронная полярная орбита (наклонение ≈98,6°)</text>
+        <text x="260" y="298" text-anchor="middle" font-size="12" fill="#64748b">Два спутника на одной орбите, сдвиг на 180°</text>
     </svg>
     <h3 style="margin:14px 0 6px">Как это устроено</h3>
     <ul>
@@ -314,6 +385,73 @@
 </section>
 
 <!-- ДОПОЛНИТЕЛЬНО -->
+<section class="h-sec" id="keys">
+    <h2><span class="n"><i class="fas fa-keyboard"></i></span>Горячие клавиши</h2>
+    <p class="h-lead">Клавиши работают, когда курсор не стоит в поле ввода. Для буквенных клавиш раскладка не важна: они привязаны к физическому положению клавиши (на русской раскладке P — «З», C — «С», L — «Д»). На Mac вместо <kbd>Ctrl</kbd> используйте <kbd>⌘</kbd>.</p>
+<h3 class="h-sub" style="font-size:16px">Общие</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>Esc</kbd></td><td>Закрыть справку, паспорт участка, контекстное меню карты; отменить активный инструмент; закрыть обзорные подсказки</td></tr>
+<tr><td><kbd>Enter</kbd> в поиске</td><td>Найти введённый адрес, город или координаты</td></tr>
+<tr><td><kbd>Enter</kbd> в поле маршрута</td><td>Построить маршрут между заданными точками</td></tr>
+<tr><td><kbd>Esc</kbd> при выборе точки маршрута</td><td>Отменить выбор точки на карте</td></tr>
+</table></div>
+<h3 class="h-sub" style="font-size:16px">Рисование контура участка (раздел «Анализ участка»)</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>P</kbd></td><td>Полигон</td></tr>
+<tr><td><kbd>C</kbd></td><td>Круг</td></tr>
+<tr><td><kbd>L</kbd></td><td>Линия</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Завершить текущую фигуру</td></tr>
+<tr><td><kbd>Backspace</kbd></td><td>Удалить последнюю поставленную точку</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Отменить рисование и выйти из инструмента</td></tr>
+</table></div>
+<div class="h-note"><b>Когда не работают.</b> Буквенные клавиши P, C, L отключены в 3D-режиме, при открытом паспорте участка, если карта не видна на экране и при зажатых <kbd>Ctrl</kbd>, <kbd>Alt</kbd> или <kbd>Shift</kbd>.</div>
+<h3 class="h-sub" style="font-size:16px">Инструмент «Рисование» (фигуры, значки, текст)</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>Enter</kbd></td><td>Завершить фигуру</td></tr>
+<tr><td><kbd>Backspace</kbd></td><td>Удалить последнюю точку</td></tr>
+<tr><td><kbd>Delete</kbd></td><td>Удалить выделенный объект (когда инструмент не выбран)</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Отключить инструмент рисования</td></tr>
+<tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>Отменить действие</td></tr>
+<tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd> или <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Повторить отменённое</td></tr>
+</table></div>
+<p style="font-size:13px;color:var(--muted)">Отмена и повтор работают, пока открыта вкладка рисования.</p>
+<h3 class="h-sub" style="font-size:16px">Измерения</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>Enter</kbd> или двойной клик</td><td>Завершить измерение длины или площади</td></tr>
+<tr><td><kbd>Backspace</kbd></td><td>Убрать последнюю точку</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Остановить измерение</td></tr>
+</table></div>
+<h3 class="h-sub" style="font-size:16px">Профиль рельефа</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>Enter</kbd></td><td>Построить профиль по нарисованной линии</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Сбросить построение</td></tr>
+</table></div>
+<h3 class="h-sub" style="font-size:16px">3D-режим</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td><kbd>Delete</kbd></td><td>Удалить выделенную 3D-модель</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Снять выделение с модели или отменить размещение новой</td></tr>
+<tr><td>Левая кнопка мыши</td><td>Сдвиг карты</td></tr>
+<tr><td>Правая кнопка или <kbd>Ctrl</kbd> + левая</td><td>Поворот и наклон сцены</td></tr>
+<tr><td>Колесо мыши</td><td>Масштаб</td></tr>
+</table></div>
+<h3 class="h-sub" style="font-size:16px">Мышь и прочее</h3>
+<div class="h-tw"><table>
+<tr><th style="width:42%">Клавиши</th><th>Действие</th></tr>
+<tr><td>Колесо мыши</td><td>Масштаб карты</td></tr>
+<tr><td><kbd>Shift</kbd> + колесо</td><td>Поворот карты (стрелка севера возвращает север вверх)</td></tr>
+<tr><td><kbd>Ctrl</kbd> + клик по участку кадастра</td><td>Выбрать несколько объектов; повторный клик убирает объект из выбора</td></tr>
+<tr><td>Правый клик по карте или фигуре</td><td>Контекстное меню: «Что здесь?», маршрут, закладка, копирование, экспорт</td></tr>
+<tr><td><kbd>←</kbd> / <kbd>→</kbd> в обзорных подсказках</td><td>Предыдущий и следующий слайд</td></tr>
+</table></div>
+<div class="h-tip"><b>Подсказка.</b> Пока страница «захватывает» прокрутку над картой, клавиши <kbd>PageUp</kbd>, <kbd>PageDown</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Пробел</kbd> и стрелки вверх и вниз не прокручивают страницу, чтобы случайно не уйти с карты. Для перехода к каталогу ниже используйте клик мышью.</div>
+</section>
+
 <section class="h-sec" id="files">
     <h2><span class="n"><i class="fas fa-file-import"></i></span>Форматы файлов</h2>
     <div class="h-tw"><table>
@@ -372,15 +510,24 @@
 (function () {
     var main = document.getElementById('hMain'), nav = document.getElementById('hNav'), top = document.getElementById('hTop');
     var links = [].slice.call(nav.querySelectorAll('a')), secs = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+    var last = -1;
+    function centerNav(a) {
+        var nr = nav.getBoundingClientRect(), ar = a.getBoundingClientRect();
+        if (nav.scrollHeight > nav.clientHeight + 2) nav.scrollTo({ top: nav.scrollTop + ar.top - nr.top - nav.clientHeight / 2 + ar.height / 2, behavior: 'smooth' });
+        else nav.scrollTo({ left: nav.scrollLeft + ar.left - nr.left - nav.clientWidth / 2 + ar.width / 2, behavior: 'smooth' });
+    }
     function spy() {
-        var y = main.scrollTop + 80, cur = 0;
-        secs.forEach(function (s, i) { if (s && s.offsetTop <= y) cur = i; });
+        var cur = 0;
+        secs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top - main.getBoundingClientRect().top <= 90) cur = i; });
         links.forEach(function (a, i) { a.classList.toggle('on', i === cur); });
+        if (cur !== last) { last = cur; centerNav(links[cur]); }
         top.classList.toggle('show', main.scrollTop > 500);
     }
     main.addEventListener('scroll', spy); spy();
-    links.forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); var s = document.getElementById(a.getAttribute('href').slice(1)); if (s) main.scrollTo({ top: s.offsetTop - 8, behavior: 'smooth' }); }); });
-    [].forEach.call(document.querySelectorAll('.h-chips a'), function (a) { a.addEventListener('click', function (e) { e.preventDefault(); var s = document.getElementById(a.getAttribute('href').slice(1)); if (s) main.scrollTo({ top: s.offsetTop - 8, behavior: 'smooth' }); }); });
+    window.addEventListener('message', function (e) { if (e.data && e.data.gcHelpGoto) go(e.data.gcHelpGoto); });
+    if (location.hash.length > 1) setTimeout(function () { go(location.hash.slice(1)); }, 50);
+    function go(id) { var s = document.getElementById(id); if (s) main.scrollTo({ top: main.scrollTop + s.getBoundingClientRect().top - main.getBoundingClientRect().top - 8, behavior: 'smooth' }); }
+    links.forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); go(a.getAttribute('href').slice(1)); }); });
     top.addEventListener('click', function () { main.scrollTo({ top: 0, behavior: 'smooth' }); });
     document.getElementById('hSearch').addEventListener('input', function () {
         var q = this.value.trim().toLowerCase();
