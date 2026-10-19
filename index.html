@@ -94,10 +94,10 @@
         <span class="gc-rail-sp"></span>
         <button type="button" class="gc-rail-btn" data-rail="help" title="Справка"><i class="fas fa-circle-question"></i><span>Справка</span></button>
     </nav>
-    <!-- ОКНО «СПРАВКА»: открывается на всю карту (как паспорт участка); пока пустое -->
+    <!-- ОКНО «СПРАВКА»: открывается на всю карту (как паспорт участка); содержимое — help.html + help.css -->
     <div class="gc-help-win" id="gcHelpWin" hidden role="dialog" aria-label="Справка">
         <div class="pp-top"><button class="pp-btn" id="gcHelpClose" title="Вернуться к карте" type="button"><i class="fas fa-arrow-left"></i> К карте</button><h2>Справка</h2></div>
-        <div class="gc-help-body">Раздел в разработке</div>
+        <iframe class="gc-help-body" src="help.html" title="Справка" loading="lazy"></iframe>
     </div>
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
     <div class="panel" id="mainPanel" data-view="home">

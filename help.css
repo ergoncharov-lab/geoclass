@@ -1,0 +1,113 @@
+/* Справка GeoClass: стили отдельной страницы help.html (подключается в окно справки через iframe) */
+:root {
+    --bg: #eef1f4; --card: #ffffff; --card2: #f8fafc; --line: #e2e8f0; --ink: #1e293b; --dark: #0c1110; --muted: #64748b;
+    --green: #059669; --green-d: #047857; --mint: #34d399; --soft: #ecfdf5; --softline: #a7f3d0; --gold: #d97706;
+    --warn-bg: #fffbeb; --warn-t: #92400e; --blue: #0ea5e9; --r: 14px; --shadow: 0 6px 22px rgba(15,23,42,.08);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font: 14.5px/1.6 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); overflow: hidden; }
+a { color: var(--green-d); }
+h1, h2, h3, h4 { margin: 0; line-height: 1.25; color: var(--dark); }
+p { margin: 0 0 10px; }
+ul, ol { margin: 0 0 10px; padding-left: 20px; }
+li { margin: 3px 0; }
+code, kbd { font: 12.5px/1 ui-monospace, Consolas, monospace; background: #e8edf2; border-radius: 5px; padding: 2px 6px; }
+kbd { border-bottom: 2px solid #cbd5e1; background: #fff; }
+
+.h-layout { display: grid; grid-template-columns: 270px 1fr; height: 100%; gap: 0; }
+
+/* боковое меню */
+.h-nav { background: var(--dark); color: #cbd5e1; overflow-y: auto; padding: 18px 12px 24px; }
+.h-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; color: #fff; font-weight: 700; font-size: 16px; }
+.h-brand i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(135deg, var(--green), var(--mint)); font-style: normal; }
+.h-brand small { display: block; font-weight: 400; font-size: 11.5px; color: #94a3b8; }
+.h-search { width: 100%; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; border: 1px solid #263238; background: #151c1b; color: #e2e8f0; font: inherit; font-size: 13px; outline: none; }
+.h-search:focus { border-color: var(--green); }
+.h-group { margin: 14px 8px 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #64748b; font-weight: 700; }
+.h-nav a { display: flex; align-items: center; gap: 9px; padding: 7px 10px; margin: 1px 0; border-radius: 9px; color: #cbd5e1; text-decoration: none; font-size: 13.5px; transition: background .15s, color .15s; }
+.h-nav a:hover { background: #1a2321; color: #fff; }
+.h-nav a.on { background: var(--green); color: #fff; font-weight: 600; }
+.h-nav a.sub { padding-left: 36px; font-size: 12.8px; color: #94a3b8; }
+.h-nav a.sub.on { color: #fff; }
+.h-nav a b { width: 20px; text-align: center; font-weight: 400; }
+.h-nav a.hide { display: none; }
+
+/* контент */
+.h-main { --pad: clamp(16px, 4vw, 48px); overflow-y: auto; scroll-behavior: smooth; padding: 0 var(--pad) 60px; }
+.h-hero { margin: 0 calc(var(--pad) * -1) 28px; padding: 38px var(--pad) 34px; color: #fff; background: radial-gradient(1200px 300px at 85% -40%, rgba(52,211,153,.45), transparent), linear-gradient(135deg, #0c1110, #12332a); }
+.h-hero h1 { color: #fff; font-size: clamp(24px, 3.2vw, 34px); }
+.h-hero p { max-width: 720px; margin: 10px 0 0; color: #cbd5e1; font-size: 15px; }
+.h-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.h-chips a { color: #fff; text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 99px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); }
+.h-chips a:hover { background: rgba(255,255,255,.22); }
+
+.h-sec { scroll-margin-top: 14px; padding: 26px 0 8px; max-width: 1020px; }
+.h-sec > h2 { display: flex; align-items: center; gap: 12px; font-size: 24px; margin-bottom: 6px; }
+.h-sec > h2 .n { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--green); color: #fff; font-size: 16px; flex: none; }
+.h-lead { color: var(--muted); margin-bottom: 16px; max-width: 760px; }
+.h-sub { scroll-margin-top: 14px; margin: 24px 0 10px; font-size: 18px; display: flex; align-items: center; gap: 9px; }
+.h-sub i { font-style: normal; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--soft); border: 1px solid var(--softline); font-size: 14px; }
+
+.h-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; box-shadow: var(--shadow); margin: 0 0 14px; }
+.h-card h3 { font-size: 15.5px; margin-bottom: 6px; }
+.h-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 14px; }
+.h-grid .h-card { margin: 0; }
+.h-ic { font-size: 22px; margin-bottom: 4px; display: block; }
+
+.h-note, .h-warn, .h-tip { border-radius: 12px; padding: 11px 14px; margin: 12px 0; font-size: 13.8px; border: 1px solid; }
+.h-note { background: #f0f9ff; border-color: #bae6fd; color: #0c4a6e; }
+.h-tip { background: var(--soft); border-color: var(--softline); color: #065f46; }
+.h-warn { background: var(--warn-bg); border-color: #fde68a; color: var(--warn-t); }
+.h-note b, .h-tip b, .h-warn b { margin-right: 4px; }
+
+/* шаги */
+ol.h-steps { list-style: none; counter-reset: s; padding: 0; margin: 8px 0 12px; }
+ol.h-steps li { counter-increment: s; position: relative; padding: 6px 0 6px 40px; margin: 0; min-height: 34px; }
+ol.h-steps li::before { content: counter(s); position: absolute; left: 0; top: 4px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); border: 1.5px solid var(--green); color: var(--green-d); font-weight: 700; font-size: 13px; }
+
+/* таблицы */
+.h-tw { overflow-x: auto; margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+th { background: var(--card2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.b-hi { background: #d1fae5; color: #065f46; } .b-mid { background: #fef3c7; color: #92400e; } .b-low { background: #fee2e2; color: #991b1b; }
+
+/* спутник: ключевые цифры и орбита */
+.h-facts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 12px 0 16px; }
+.h-fact { background: linear-gradient(160deg, #0c1110, #12332a); color: #fff; border-radius: 13px; padding: 14px; }
+.h-fact b { display: block; font-size: 24px; color: var(--mint); line-height: 1.1; }
+.h-fact span { font-size: 12.5px; color: #cbd5e1; }
+.h-orbit { display: block; margin: 8px auto 6px; max-width: 520px; width: 100%; }
+.h-tl { position: relative; margin: 10px 0 14px; padding-left: 22px; border-left: 2px solid var(--softline); }
+.h-tl div { position: relative; margin: 0 0 12px; }
+.h-tl div::before { content: ''; position: absolute; left: -29px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--green); border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--green); }
+.h-tl b { color: var(--green-d); }
+.bands i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+details.h-q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; margin: 0 0 8px; }
+details.h-q summary { cursor: pointer; padding: 11px 0; font-weight: 600; }
+details.h-q[open] { border-color: var(--softline); }
+.h-soon { text-align: center; padding: 26px 18px; border: 2px dashed var(--softline); border-radius: var(--r); background: var(--soft); }
+.h-foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.h-top { position: fixed; right: 22px; bottom: 22px; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--green); color: #fff; font-size: 18px; cursor: pointer; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.h-top.show { opacity: 1; pointer-events: auto; }
+mark { background: #fde68a; border-radius: 3px; }
+
+@media (max-width: 860px) {
+    .h-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .h-nav { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 10px; white-space: nowrap; }
+    .h-brand, .h-group, .h-search, .h-nav a.sub { display: none; }
+    .h-nav a { flex: none; background: #1a2321; }
+    .h-hero { margin-bottom: 20px; padding-top: 26px; padding-bottom: 26px; }
+}
+@media print { body { overflow: visible; } .h-nav, .h-top { display: none; } .h-layout { display: block; height: auto; } .h-main { overflow: visible; } }
+
+/* карточки источников */
+.h-src .h-by { color: var(--green-d); font-size: 12.8px; font-weight: 600; margin: -2px 0 8px; }
+.h-src dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; margin: 0; }
+.h-src dt { font-weight: 600; color: var(--muted); font-size: 13px; }
+.h-src dd { margin: 0; }
+@media (max-width: 640px) { .h-src dl { grid-template-columns: 1fr; gap: 0; } .h-src dd { margin-bottom: 8px; } }
