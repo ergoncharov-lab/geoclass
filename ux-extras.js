@@ -1114,6 +1114,88 @@
     renderTree(); hint();
 })();
 
+/* Почвы: векторная почвенная карта (soil.geojson) через serve_site.py (/soilgeo) — полигоны по границам экрана, цвет по коду почвы (SOIL0).
+   Необязательный файл soil_codes.json вида {"307": "Название почвы", ...} добавляет расшифровку кодов в попапе. */
+(function () {
+    'use strict';
+    var chip = document.querySelector('.ovl-chip[data-soil]');
+    if (!chip || typeof map === 'undefined') return;
+    var lastF = null, MINZ = 6, names = {}, on = false, timer = null, ctl = null, retry = null;
+    var tg = document.getElementById('soilToggle'), op = document.getElementById('soilOp'), st = document.getElementById('soilStatus'), fo = 0.5;
+    var say = function (t) { if (st) st.textContent = t; if (typeof updateStatus === 'function') updateStatus(t); };
+    fetch('soil_codes.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { names = j || {}; gl.setStyle(gl.options.style); renderLegend(lastF); }).catch(function () { /* файла нет — показываем коды */ });
+    var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var nm = function (c) { var d = names[c]; return c === undefined ? '' : (d ? esc(d.n) + (d.s ? ' <span style="color:#94a3b8">(' + esc(d.s) + ')</span>' : '') : 'код ' + c); };
+    var ZH = [['тундр', 190, 'Тундры'], ['тайги', 140, 'Тайга и хвойно-широколиственные леса'], ['широколиствен', 100, 'Широколиственные леса и лесостепи'], ['сухих степей', 35, 'Сухие степи и полупустыни'], ['степей', 55, 'Степи'], ['субтропик', 15, 'Субтропики'], ['Гидроморф', 220, 'Гидроморфные почвы'], ['Засолен', 300, 'Засоленные и солонцеватые почвы'], ['Пойменн', 170, 'Пойменные и маршевые почвы'], ['горных', 270, 'Горные территории'], ['Комплексы', 335, 'Комплексы почв (мерзлотные, полупустынные)']];
+    var zoneOf = function (c) { var d = names[c], z = d && d.z; if (!z) return -1; for (var i = 0; i < ZH.length; i++) if (z.indexOf(ZH[i][0]) >= 0) return i; return ZH.length; };
+    // цвет: оттенок по почвенной зоне, светлота по коду; без расшифровки — по коду
+    var col = function (c) {
+        var d = names[c], h = null, z = d && d.z;
+        if (z) { for (var i = 0; i < ZH.length; i++) if (z.indexOf(ZH[i][0]) >= 0) { h = ZH[i][1]; break; } if (h === null) return c === 307 ? '#60a5fa' : '#9ca3af'; return 'hsl(' + h + ',55%,' + (38 + (c * 13) % 26) + '%)'; }
+        return 'hsl(' + ((c * 47) % 360) + ',55%,52%)';
+    };
+    // ---- легенда в панели: зоны всегда, а почвы — только те, что видны в текущем окне ----
+    var lg = document.getElementById('soilLegend');
+    var row = function (c, t) { return '<div class="cad-lr"><i style="background:' + c + '"></i><span>' + t + '</span></div>'; };
+    function renderLegend(feats) {
+        if (!lg) return;
+        var html = '<div style="font-size:11px;color:#64748b;margin-bottom:3px">Цвет — почвенная зона</div>' + ZH.map(function (z) { return row('hsl(' + z[1] + ',55%,50%)', z[2]); }).join('') + row('#60a5fa', 'Вода') + row('#9ca3af', 'Прочие непочвенные образования');
+        if (feats && feats.length) {
+            var seen = {}, groups = {};
+            feats.forEach(function (f) { var c = f.properties.SOIL0; if (c === undefined || seen[c] || !names[c]) return; seen[c] = 1; (groups[zoneOf(c)] = groups[zoneOf(c)] || []).push(c); });
+            var keys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+            if (keys.length) html += '<div style="font-size:11px;color:#64748b;margin:8px 0 3px">В текущем окне карты</div>' + keys.map(function (k) {
+                return '<details><summary style="cursor:pointer;font-size:12px">' + (k >= 0 && k < ZH.length ? ZH[k][2] : 'Прочее') + ' (' + groups[k].length + ')</summary>' + groups[k].sort(function (a, b) { return names[a].n < names[b].n ? -1 : 1; }).map(function (c) { return row(col(c), esc(names[c].n)); }).join('') + '</details>';
+            }).join('');
+        }
+        lg.innerHTML = html;
+    }
+    var gl = L.geoJSON(null, {
+        renderer: L.canvas({ padding: 0.3 }),
+        style: function (f) { var c = f.properties.SOIL0; return { color: '#4b5563', weight: 0.5, fillColor: c === undefined ? '#9ca3af' : col(c), fillOpacity: fo }; },
+        onEachFeature: function (f, l) {
+            l.on('click', function (e) {
+                var p = f.properties, d0 = names[p.SOIL0], zi = zoneOf(p.SOIL0), rows = [['Почва', d0 ? esc(d0.n) : 'нет расшифровки']];
+                if (zi >= 0 && zi < ZH.length) rows.push(['Зона', ZH[zi][2]]);
+                var more = ['SOIL1', 'SOIL2', 'SOIL3'].map(function (k) { return names[p[k]] ? esc(names[p[k]].n) : ''; }).filter(Boolean);
+                if (more.length) rows.push(['Также', more.join('<br>')]);
+                L.popup({ maxWidth: 320 }).setLatLng(e.latlng).setContent('<b>Почвенная карта</b><table style="font-size:12px">' + rows.map(function (r) { return '<tr><td style="color:#64748b;padding-right:8px;vertical-align:top">' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>').openOn(map);
+            });
+        }
+    });
+    function load() {
+        if (!on) return;
+        if (map.getZoom() < MINZ) { gl.clearLayers(); say('Почвы: приблизьте карту (с масштаба z' + MINZ + ', сейчас z' + map.getZoom() + ')'); return; }
+        if (ctl) ctl.abort();
+        ctl = window.AbortController ? new AbortController() : null;
+        var b = map.getBounds();
+        fetch('/soilgeo?bbox=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(function (v) { return v.toFixed(4); }).join(',') + '&z=' + map.getZoom(), ctl ? { signal: ctl.signal } : {})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (j) {
+                if (!on) return;
+                if (j.loading !== undefined || j.error) {
+                    if (j.error) { say('Почвы: ' + j.error); setOn(false); return; }
+                    say('Почвы: сервер читает soil.geojson, подождите…'); clearTimeout(retry); retry = setTimeout(load, 3000); return;
+                }
+                gl.clearLayers(); gl.addData(j.features); lastF = j.features; renderLegend(lastF);
+                say(j.truncated ? 'Почвы: показана часть контуров — приблизьте карту' : 'Почвы: клик по контуру — коды почв');
+            })
+            .catch(function (e) { if (e && e.name !== 'AbortError') say('Почвы: нет ответа сервера. Запустите python serve_site.py и откройте http://localhost:8000'); });
+    }
+    map.on('moveend', function () { clearTimeout(timer); timer = setTimeout(load, 250); });
+    function setOn(v) {
+        on = v; chip.classList.toggle('active', on); if (tg) tg.checked = on;
+        if (on) { gl.addTo(map); load(); } else { if (ctl) ctl.abort(); clearTimeout(retry); map.removeLayer(gl); gl.clearLayers(); lastF = null; renderLegend(null); }
+    }
+    chip.addEventListener('click', function (e) {
+        e.stopPropagation(); setOn(!on);
+        if (on) { var rail = document.querySelector('#gcRail [data-rail="layers"]'); if (rail) rail.click(); setTimeout(function () { var t = document.querySelector('.sp-tile[data-bp="soil"]'); if (t) t.click(); }, 40); }
+    });
+    renderLegend(null);
+    if (tg) tg.addEventListener('change', function () { setOn(tg.checked); });
+    if (op) op.addEventListener('input', function () { fo = op.value / 100; gl.setStyle({ fillOpacity: fo }); });
+})();
+
 /* Виджет «Слои» на карте (под подложками): кадастровые слои и «Свои слои». Включение слоя открывает его панель. */
 (function () {
     'use strict';

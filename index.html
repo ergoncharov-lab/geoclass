@@ -233,7 +233,7 @@
                 <div class="sp-group" data-group="layers">
                     <div class="sp-group-title" style="margin-top:4px">Слои</div>
                     <div class="sp-grid">
-                        <button type="button" class="sp-tile sp-stub" style="--c:#84cc16" title="Почвы&#10;Раздел в разработке."><i class="fas fa-seedling"></i><span>Почвы</span></button>
+                        <button type="button" class="sp-tile" data-bp="soil" style="--c:#84cc16" title="Почвы&#10;Векторная почвенная карта 1:2,5 млн: контуры почв и коды, клик по контуру — сведения."><i class="fas fa-seedling"></i><span>Почвы</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#ef4444" title="Границы&#10;Раздел в разработке."><i class="fas fa-border-all"></i><span>Границы</span></button>
                         <button type="button" class="sp-tile" data-bp="cadastre" style="--c:#6366f1" title="Кадастр&#10;Кадастровая карта НСПД: границы участков и кадастровые номера."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#16a34a" title="Лес&#10;Раздел в разработке."><i class="fas fa-tree"></i><span>Лес</span></button>
@@ -515,6 +515,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="cadastre" title="Кадастр: слой НСПД"><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="soil" title="Почвы: векторная почвенная карта"><i class="fas fa-seedling"></i><span>Почвы</span></button>
           </div>
 
           <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
@@ -1021,6 +1022,20 @@
               </div>
           </div>
 
+          <!-- ПОЧВЫ: векторная почвенная карта (soil.geojson) через serve_site.py -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-cad" data-bp-pane="soil" role="tabpanel">
+              <div class="dw-block">
+                  <div class="dw-title">Почвенная карта 1:2,5 млн</div>
+                  <label class="cad-it"><input type="checkbox" id="soilToggle"><span class="cad-sw" style="background:#a16207"></span><span class="cad-nm">Контуры почв</span></label>
+                  <div class="dw-row"><label>Прозрачность</label><input type="range" id="soilOp" min="10" max="90" value="50"></div>
+                  <div class="m3-hint" id="soilStatus">Отметьте слой. Контуры видны с масштаба z6; клик по контуру показывает коды почв.</div>
+              </div>
+              <div class="dw-block">
+                  <div class="dw-title">Легенда</div>
+                  <div id="soilLegend"></div>
+              </div>
+          </div>
+
           <!-- ЗАГЛУШКИ ОСТАЛЬНЫХ ВКЛАДОК (наполнение — позже) -->
           <div class="bottom-panel-body bp-pane" data-bp-pane="dates" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-calendar-days"></i><div><p>Снимки</p><span>Загрузка раздела…</span></div></div>
@@ -1298,6 +1313,7 @@
                         <div class="ovl-chip" data-cad="q" style="--c:#7c3aed" title="Кадастровые кварталы НСПД"><i class="fas fa-border-all"></i><span>Кварталы</span></div>
                         <div class="ovl-chip" data-cad="z" style="--c:#f59e0b" title="Земельные участки из ЕГРН (НСПД)"><i class="fas fa-map-location-dot"></i><span>Участки</span></div>
                         <div class="ovl-chip" data-cad="o" style="--c:#2563eb" title="Здания и ОКС (НСПД)"><i class="fas fa-building"></i><span>Здания</span></div>
+                        <div class="ovl-chip" data-soil="1" style="--c:#a16207" title="Почвенная карта 1:2,5 млн (soil.geojson): клик по контуру — коды почв"><i class="fas fa-seedling"></i><span>Почвы</span></div>
                         <div class="ovl-chip" data-open="userlayers" style="--c:#0d9488" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></div>
                     </div>
                 </div>

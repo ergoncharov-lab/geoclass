@@ -154,9 +154,89 @@ def ucache_ttl_days(is_nspd, cached_headers):
     return UCACHE_DAYS_NSPD_JSON if is_json else UCACHE_DAYS_NSPD_TILE
 
 
+# ---------- Почвенная карта: soil.geojson (122 МБ) читается один раз и отдаётся кусками по границам экрана ----------
+SITE_DIR = os.path.dirname(os.path.abspath(__file__))
+SOIL_FILE = os.path.join(SITE_DIR, 'soil.geojson')
+SOIL = {'feats': None, 'state': 'idle', 'err': ''}
+SOIL_MAX = 6000                      # предел числа полигонов в одном ответе
+
+
+def soil_load():
+    """Читает soil.geojson, сдвигает долготы >180 (Чукотка) в -180..180, хранит кольца компактными массивами float32."""
+    from array import array
+    SOIL['state'] = 'loading'
+    t0 = time.time()
+    try:
+        with open(SOIL_FILE, encoding='utf-8') as f:
+            gj = json.load(f)
+        feats = []
+        for ft in gj['features']:
+            g = ft.get('geometry')
+            if not g or not g.get('coordinates'):
+                continue
+            polys = g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']]
+            out, x0, y0, x1, y1 = [], 1e9, 1e9, -1e9, -1e9
+            for poly in polys:
+                rings = []
+                for ring in poly:
+                    a = array('f')
+                    for x, y in ring:
+                        if x > 180:
+                            x -= 360
+                        a.append(x); a.append(y)
+                        if x < x0: x0 = x
+                        if x > x1: x1 = x
+                        if y < y0: y0 = y
+                        if y > y1: y1 = y
+                    rings.append(a)
+                out.append(rings)
+            p = ft.get('properties') or {}
+            props = {k: v for k, v in p.items() if v != -9999 and v is not None}
+            feats.append((x0, y0, x1, y1, props, out))
+        del gj
+        SOIL['feats'] = feats
+        SOIL['state'] = 'ready'
+        print('Почвенная карта загружена: %d полигонов за %.0f с' % (len(feats), time.time() - t0))
+    except Exception as e:
+        SOIL['state'] = 'error'
+        SOIL['err'] = ('нет файла soil.geojson рядом с serve_site.py' if isinstance(e, FileNotFoundError) else str(e))[:200]
+        print('Ошибка загрузки soil.geojson:', e)
+
+
+def soil_query(w, s, e, n, z):
+    """Полигоны в окне; точки прореживаются по масштабу (минимальный шаг ~ 1 пиксель), мелкие контуры пропускаются."""
+    tol = 360.0 / (256 * 2 ** z) * 1.2
+    res, cut = [], False
+    for x0, y0, x1, y1, props, polys in SOIL['feats']:
+        if x1 < w or x0 > e or y1 < s or y0 > n or (x1 - x0 < tol and y1 - y0 < tol):
+            continue
+        mp = []
+        for rings in polys:
+            rr = []
+            for a in rings:
+                pts, lx, ly = [], None, None
+                for i in range(0, len(a), 2):
+                    x, y = a[i], a[i + 1]
+                    if lx is None or abs(x - lx) > tol or abs(y - ly) > tol:
+                        pts.append([round(x, 5), round(y, 5)]); lx, ly = x, y
+                if len(pts) >= 3:
+                    if pts[0] != pts[-1]:
+                        pts.append(pts[0])
+                    if len(pts) >= 4:
+                        rr.append(pts)
+            if rr:
+                mp.append(rr)
+        if mp:
+            res.append({'type': 'Feature', 'properties': props, 'geometry': {'type': 'MultiPolygon', 'coordinates': mp}})
+            if len(res) >= SOIL_MAX:
+                cut = True
+                break
+    return {'type': 'FeatureCollection', 'features': res, 'truncated': cut}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     # префикс пути -> имя метода-обработчика; всё остальное — статические файлы сайта
-    ROUTES = (('/s3/', 'proxy'), ('/isric?', 'isric'), ('/ucache?', 'ucache'), ('/nspdcheck', 'nspdcheck'))
+    ROUTES = (('/s3/', 'proxy'), ('/isric?', 'isric'), ('/ucache?', 'ucache'), ('/nspdcheck', 'nspdcheck'), ('/soilgeo', 'soilgeo'))
 
     def do_GET(self):
         for prefix, handler in self.ROUTES:
@@ -221,6 +301,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     cache_put(key, None, status, headers, data)
         self.reply(status, [('Content-Type', headers.get('content-type', 'application/octet-stream')), ('Content-Length', str(len(data))),
                             ('Cache-Control', 'public, max-age=%d' % (604800 if is_nspd else 86400))], data)
+
+    # ---------- /soilgeo: почвенная карта по границам экрана ----------
+    def soilgeo(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if SOIL['feats'] is None:
+            if SOIL['state'] == 'idle':
+                SOIL['state'] = 'loading'
+                threading.Thread(target=soil_load, daemon=True).start()
+            body = json.dumps({'loading': SOIL['state'] != 'error', 'error': SOIL['err']}).encode()
+        else:
+            try:
+                w, s_, e, n = [float(v) for v in q.get('bbox', [''])[0].split(',')]
+                z = max(0, min(22, int(float(q.get('z', ['8'])[0]))))
+                body = json.dumps(soil_query(w, s_, e, n, z), separators=(',', ':')).encode()
+            except Exception as ex:
+                self.send_error(400, 'bad request', str(ex))
+                return
+        self.reply(200, [('Content-Type', 'application/json'), ('Content-Length', str(len(body))), ('Cache-Control', 'no-store')], body)
 
     # ---------- /nspdcheck: диагностика слоя НСПД ----------
     def nspd_probe_tile(self):
@@ -318,6 +416,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     threading.Thread(target=cache_prune, daemon=True).start()
+    if os.path.exists(SOIL_FILE):
+        threading.Thread(target=soil_load, daemon=True).start()   # почвенная карта грузится в фоне при старте
     print('Сайт: http://localhost:%d   (Ctrl+C — остановить)' % PORT)
     print('Кэш снимков: %s' % CACHE_DIR)
     print('Прокси для НСПД: %s' % (NSPD_PROXY or 'нет (напрямую)'))
