@@ -1249,6 +1249,7 @@
         { s: '#gcRail [data-rail="images"]', p: 'r', t: 'Снимки', d: 'Sentinel-2 по датам, индексы NDVI, NDMI, NBR и сравнение двух снимков.' },
         { s: '#gcRail [data-rail="tools"]', p: 'r', t: 'Инструменты', d: 'Рисование, экспорт карты, 3D, агрокалькулятор, профиль рельефа и логистика.' },
         { s: '#gcRail [data-rail="layers"]', p: 'r', t: 'Слои', d: 'Кадастр НСПД и свои слои. Включённый слой открывает свою панель.' },
+        { s: '#gcRail [data-rail="weather"]', p: 'r', t: 'Погода', d: 'Прогноз, климат, сумма температур, заморозки и ветер по участку.' },
         { s: '#toggleDrawerBtn', p: 'r', t: 'Боковая панель', d: 'Сворачивает и разворачивает панель с инструментами, чтобы освободить карту.' },
         { s: '#mapClearBtn', p: 'r', t: 'Очистить карту', d: 'Убирает рисунки, замеры, маршрут и результаты анализов одним нажатием.' },
         { s: '#drawMapBtn', p: 'b', t: 'Рисование', d: 'Фигуры, линии, значки и текст. Параметры открываются в нижней панели.' },
@@ -1268,10 +1269,18 @@
         { s: '#fullscreenBtn', p: 'l', t: 'На весь экран', d: 'Карта раскроется вместе с боковой панелью.' },
         { s: null, p: 'c', t: 'Правая кнопка мыши', d: 'Щёлкните правой кнопкой по карте: «Что здесь?», маршрут, закладка. На кадастровом участке — перенос границ в разделы анализа и скачивание в KML, GeoJSON, SHP, DXF.' }
     ];
-    var list = [], i = 0, bub = null, tgt = null;
+    var list = [], i = 0, bub = null, tgt = null, seq = 0, SECT = /data-rail="(analysis|images|tools|layers|weather)"/;
+    function tgtOf(st) { return st.el || (st.s ? document.querySelector(st.s) : null); }
+    function openRail(st) {   // открывает вкладку левого меню шага; true — если пришлось открывать (нужна пауза на анимацию)
+        if (!st.rail) return false;
+        var g = document.querySelector('#mainPanel .sp-group[data-group="' + st.rail + '"]');
+        if (g && g.classList.contains('on') && vis(g)) return false;
+        var rb = document.querySelector('#gcRail [data-rail="' + st.rail + '"]'); if (rb) rb.click();
+        return true;
+    }
     function clearHl() { if (tgt) { tgt.classList.remove('gh-pulse'); tgt.style.animationIterationCount = ''; tgt = null; } }
     function stop() {
-        clearHl(); if (bub) { bub.remove(); bub = null; }
+        seq++; clearHl(); if (bub) { bub.remove(); bub = null; }
         document.removeEventListener('keydown', onKey, true);
     }
     function onKey(e) {
@@ -1279,12 +1288,13 @@
         else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
     }
-    function show() {
+    function show() { var tk = ++seq; if (openRail(list[i])) setTimeout(function () { if (tk === seq) draw(); }, 380); else draw(); }
+    function draw() {
         var st = list[i]; clearHl();
         document.querySelectorAll('.widget-panel.active').forEach(function (p) { p.classList.remove('active'); });
         document.querySelectorAll('.widget-btn.active').forEach(function (b) { b.classList.remove('active'); });
         if (bub) bub.remove();
-        var t = st.s ? document.querySelector(st.s) : null;
+        var t = tgtOf(st); if (t && st.el && t.scrollIntoView) t.scrollIntoView({ block: 'nearest' });
         bub = document.createElement('div'); bub.className = 'gh gh-tour gh-' + st.p;
         bub.innerHTML = '<button type="button" class="gh-x" aria-label="Закончить курс">×</button><span class="gt-cnt2">Шаг ' + (i + 1) + ' из ' + list.length + '</span><b>' + st.t + '</b>' + st.d +
             '<div class="gh-nav"><button type="button" class="gh-prev"' + (i ? '' : ' disabled') + '>Назад</button><button type="button" class="gh-next">' + (i === list.length - 1 ? 'Готово' : 'Далее') + '</button></div>';
@@ -1304,7 +1314,7 @@
     }
     function go(d) {
         var n = i + d;
-        while (n >= 0 && n < list.length && list[n].s && !vis(document.querySelector(list[n].s))) n += d;   // скрытые элементы пропускаем
+        while (n >= 0 && n < list.length && list[n].s && !list[n].rail && !vis(tgtOf(list[n]))) n += d;   // скрытые элементы пропускаем
         if (n < 0 || n >= list.length) { if (d > 0) stop(); return; }
         i = n; show();
     }
@@ -1312,7 +1322,17 @@
         stop();
         var pc = document.getElementById('ppClose'); if (app.classList.contains('passport-open') && pc) pc.click();
         var hw = document.getElementById('gcHelpWin'); if (hw && !hw.hidden) { var hc = document.getElementById('gcHelpClose'); if (hc) hc.click(); }
-        list = STEPS.filter(function (s) { return !s.s || vis(document.querySelector(s.s)); });
+        list = [];
+        STEPS.forEach(function (s) {
+            if (s.s && !vis(document.querySelector(s.s))) return;
+            var m = s.s && s.s.match(SECT);
+            if (!m) { list.push(s); return; }
+            var k = m[1], c = {}; for (var q in s) c[q] = s[q]; c.rail = k; list.push(c);   // вкладка меню + её разделы по порядку
+            document.querySelectorAll('#mainPanel .sp-group[data-group="' + k + '"] .sp-tile:not(.sp-stub)').forEach(function (el) {
+                var p = (el.getAttribute('title') || '').split('\n'), nm = (p.shift() || '').trim();
+                if (nm) list.push({ el: el, rail: k, p: 'r', t: gcUx.esc(nm), d: gcUx.esc(p.join(' ').trim()) || 'Раздел боковой панели.' });
+            });
+        });
         if (!list.length) return;
         i = 0; show();
         document.addEventListener('keydown', onKey, true);

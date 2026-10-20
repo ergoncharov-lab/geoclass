@@ -144,9 +144,40 @@
         app.classList.toggle('passport-open', on);
         if (on) document.dispatchEvent(new Event('passport-open'));
     }
+    // демо-участок ≈150 га (Московская область, сельхозугодья) — открывается демо-отчётом без регистрации
+    var GC_DEMO_CAD = '50:21:0000000:1234';
+    var GC_DEMO_GJ = { type: 'Feature', properties: { cad_number: GC_DEMO_CAD, name: 'Демо-участок' }, geometry: { type: 'Polygon', coordinates: [[[38.54726, 54.83082], [38.560671, 54.829557], [38.57207, 54.831792], [38.573243, 54.837722], [38.562012, 54.840054], [38.549271, 54.838499], [38.54726, 54.83082]]] } };
+    // для демо подбираем самый чистый (малооблачный) снимок Sentinel-2 середины последнего лета (20 июня — 10 августа) — без даты спутниковые блоки паспорта не считаются
+    var demoSatP = null;
+    function demoSat() {
+        if (demoSatP) return demoSatP;
+        var now = new Date(), yr = now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1, from = new Date(Date.UTC(yr, 5, 20)), to = new Date(Date.UTC(yr, 7, 10, 23, 59, 59)), mid = Date.UTC(yr, 6, 15), bb = [38.54, 54.828, 38.576, 54.842];
+        if (typeof updateStatus === 'function') updateStatus('⏳ Подбираем снимок Sentinel-2 для демо-участка…');
+        demoSatP = fetch(((typeof SENTINEL !== 'undefined' && SENTINEL.stacUrl) || 'https://earth-search.aws.element84.com/v1') + '/search', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox: bb, limit: 200, datetime: from.toISOString().slice(0, 19) + 'Z/' + to.toISOString().slice(0, 19) + 'Z', fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover'] } })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            var by = {};
+            (j.features || []).forEach(function (f) {
+                var p = f.properties || {}; if (!p.datetime || p['eo:cloud_cover'] == null) return;
+                var d = p.datetime.slice(0, 10); (by[d] = by[d] || { day: d, scenes: [] }).scenes.push({ id: f.id, cc: Math.round(p['eo:cloud_cover']) });
+            });
+            var best = null;
+            Object.keys(by).forEach(function (k) {
+                var g = by[k]; g.scenes.sort(function (a, b) { return a.cc - b.cc; });
+                g.cc = Math.round(g.scenes.reduce(function (s, x) { return s + x.cc; }, 0) / g.scenes.length);
+                if (!best || g.cc < best.cc || (g.cc === best.cc && Math.abs(Date.parse(g.day) - mid) < Math.abs(Date.parse(best.day) - mid))) best = g;   // меньше облаков, при равенстве — ближе к 15 июля
+            });
+            return best;
+        }).catch(function () { return null; }).then(function (b) { if (!b) demoSatP = null; return b; });   // не получилось — при следующем открытии попробуем ещё раз
+        return demoSatP;
+    }
     // паспорт раскрывается по клику на отчёт во вкладке «Отчёты»
     Array.prototype.forEach.call(document.querySelectorAll('[data-open-passport]'), function (el) {
-        el.addEventListener('click', function () { setPassport(true); });
+        el.addEventListener('click', function () {
+            if (!window.ppShow) { setPassport(true); return; }   // демо-паспорт: участок ≈150 га в сельхозместности Московской области
+            demoSat().then(function (sat) { window.ppShow(GC_DEMO_GJ, { cad: GC_DEMO_CAD, sat: sat }); });
+        });
     });
     // меню на вкладке «Главная» переключает вкладки боковой панели
     Array.prototype.forEach.call(document.querySelectorAll('[data-goto]'), function (el) {

@@ -425,7 +425,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#passportPane .pp-top .pp-tb.pri{background:linear-gradient(135deg,#6366f1,#2563eb);color:#fff}#passportPane .pp-top .pp-tb.pdf{background:linear-gradient(135deg,#f97316,#dc2626);color:#fff}',
         '#passportPane .pp-top .pp-tb.sec{background:#fff;color:#334155;border-color:#cbd5e1}#passportPane .pp-top .pp-tb.sec i{color:#2563eb}',
         '#passportPane .pp-top .pp-tbs{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:5px;order:5;margin-left:auto}#passportPane .pp-top .pp-tbs .pp-tb{width:auto;height:26px;flex:0 0 auto}#passportPane .pp-top .pp-tb i{font-size:11px}',
-        '#passportPane .pp-top .pp-tb.xls{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}#passportPane .pp-top .pp-tb:disabled{opacity:.7;cursor:progress;transform:none}',
+        '#passportPane .pp-top .pp-tb.xls{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}#passportPane .pp-top .pp-tb.htm{background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff}#passportPane .pp-top .pp-tb:disabled{opacity:.7;cursor:progress;transform:none}',
         '@media print{#ppSt{display:none}}'
     ].join('');
     function ppCss() { if (!document.getElementById('ppStCss')) { var cs = document.createElement('style'); cs.id = 'ppStCss'; cs.textContent = ST_CSS; document.head.appendChild(cs); } }
@@ -467,12 +467,14 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var q = function (id) { return document.getElementById(id); }, set = function (el, cls, ic, tx) { if (!el) return; el.classList.add('pp-tb', cls); if (tx) el.innerHTML = '<i class="fas fa-' + ic + '"></i> ' + tx; };
         var rf = q('ppRefresh'), pr = q('ppPrint');
         var px = q('ppExcel'); if (!px && pr) { px = document.createElement('button'); px.type = 'button'; px.id = 'ppExcel'; px.className = 'pp-btn'; pr.parentNode.insertBefore(px, pr.nextSibling); }
+        var ph = q('ppHtml'); if (!ph && px) { ph = document.createElement('button'); ph.type = 'button'; ph.id = 'ppHtml'; ph.className = 'pp-btn'; px.parentNode.insertBefore(ph, px.nextSibling); }
+        if (ph && !ph.disabled) set(ph, 'htm', 'file-code', 'HTML'); if (ph) ph.title = 'Паспорт в HTML — отдельная страница в том же оформлении';
         set(rf, 'pri', 'rotate', 'Обновить'); set(pr, 'pdf', 'file-pdf', 'PDF'); if (px && !px.disabled) set(px, 'xls', 'file-excel', 'Excel');
         if (rf) rf.title = 'Обновить паспорт по фигуре'; if (pr) pr.title = 'Весь паспорт в PDF'; if (px) px.title = 'Паспорт в Excel';
         var ca = q('ppCollapseAll'); set(ca, 'sec');   // значок и подпись меняет ux-extras.js
         Array.prototype.forEach.call(top.querySelectorAll('button, a'), function (e) { if (!e.classList.contains('pp-tb') && e.textContent.trim().length < 20 && /К карте/.test(e.textContent)) set(e, 'sec', 'map-location-dot', 'К карте'); });
-        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); if (ca) w.appendChild(ca); w.appendChild(rf); if (pr) w.appendChild(pr); if (px) w.appendChild(px); }
-        var sd = q('ppSide'); if (sd && ca && ca.parentNode !== sd) sd.insertBefore(ca, sd.firstChild); if (sd && px && px.parentNode !== sd) sd.appendChild(px);
+        if (rf && !q('ppSide')) { var w = document.createElement('div'); w.id = 'ppSide'; w.className = 'pp-tbs'; rf.parentNode.insertBefore(w, rf); if (ca) w.appendChild(ca); w.appendChild(rf); if (pr) w.appendChild(pr); if (px) w.appendChild(px); if (ph) w.appendChild(ph); }
+        var sd = q('ppSide'); if (sd && ca && ca.parentNode !== sd) sd.insertBefore(ca, sd.firstChild); if (sd && px && px.parentNode !== sd) sd.appendChild(px); if (sd && ph && ph.parentNode !== sd) sd.appendChild(ph);
     }
     function stInit() {
         var top = document.querySelector('#passportPane .pp-top'); if (!top) return;
@@ -2018,6 +2020,78 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         });
     }
     document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('#ppExcel'); if (b && !b.disabled) ppExcel(); });
+    // ----- HTML: отдельная страница с тем же оформлением (стили сайта, мини-карты и 3D — снимками), скачивается файлом -----
+    function ppCssText() {   // все стили страницы одним текстом; чужие таблицы (Font Awesome и др.) подключаются ссылками
+        var css = [], links = [];
+        Array.prototype.forEach.call(document.styleSheets, function (sh) {
+            var rules, base = sh.href || location.href;
+            try { rules = sh.cssRules; } catch (e) { rules = null; }
+            if (!rules) { if (sh.href) links.push(sh.href); return; }
+            var txt = Array.prototype.map.call(rules, function (r) { return r.cssText; }).join('\n');
+            txt = txt.replace(/url\(\s*(['"]?)(?!data:|https?:|\/\/|#)([^)'"]+)\1\s*\)/g, function (m, q, u) { try { return 'url("' + new URL(u, base).href + '")'; } catch (e) { return m; } });
+            css.push(txt);
+        });
+        return { css: css.join('\n'), links: links };
+    }
+    function ppHtmlBuild(pane, snaps) {
+        var cp = pane.cloneNode(true), W = Math.round(pane.getBoundingClientRect().width) || 1200;
+        var live = pane.querySelectorAll('svg'), dup = cp.querySelectorAll('svg');
+        Array.prototype.forEach.call(live, function (s, i) { if (dup[i] && svgOk(s)) { try { inlineSvg(s, dup[i], true); } catch (e) { /* пропуск */ } } });
+        var put = function (sel, s) {
+            var el = cp.querySelector(sel); if (!el || !s) return;
+            el.innerHTML = ''; el.style.position = 'relative'; el.style.overflow = 'hidden';
+            var im = document.createElement('img'); im.src = s.url; im.style.cssText = 'display:block;position:absolute;left:0;top:0;width:100%;height:100%';
+            el.appendChild(im);
+        };
+        Object.keys(snaps.map).forEach(function (k) { put('[data-map="' + k + '"]', snaps.map[k]); });
+        Object.keys(snaps.m3).forEach(function (k) { put('[data-map3="' + k + '"]', snaps.m3[k]); });
+        Array.prototype.forEach.call(cp.querySelectorAll('.leaflet-control-container, .pp-dl, .pp-cal, #ppSt, .pp-top .pp-tbs, .pp-top button, [data-pp-all]'), function (e) { if (e.parentNode) e.parentNode.removeChild(e); });
+        cp.removeAttribute('style');
+        var cs = ppCssText(), d = new Date(), ttl = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '');
+        var extra = 'html.pp-printing,html.pp-printing body{overflow:auto!important}html.pp-printing body{padding:18px 0 30px}' +
+            'html.pp-printing #ppPrintHost{width:100%!important;max-width:' + W + 'px;margin:0 auto!important}' +
+            '.pp-gen{max-width:' + W + 'px;margin:14px auto 0;padding:0 26px;color:#64748b;font:12px/1.4 system-ui,sans-serif;text-align:right}';
+        var js = '(function(){document.addEventListener("click",function(e){var h=e.target.closest&&e.target.closest(".pp-sec-h");if(h){h.closest(".pp-sec").classList.toggle("pp-col");return}' +
+            'var b=e.target.closest&&e.target.closest(".pp-i-btn");if(b){b.closest(".pp-sub").classList.toggle("closed")}})})();';
+        return '<!DOCTYPE html>\n<html lang="ru" class="pp-printing"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<title>' + ttl.replace(/</g, '&lt;') + ' · TerraClass</title>' +
+            cs.links.map(function (h) { return '<link rel="stylesheet" href="' + h + '">'; }).join('') +
+            '<style>' + cs.css.replace(/<\/style/gi, '<\\/style') + '</style><style>' + extra + '</style></head><body>' +
+            '<div id="ppPrintHost" class="passport-open">' + cp.outerHTML + '</div>' +
+            '<div class="pp-gen">Сформировано в TerraClass · ' + d.toLocaleString('ru-RU') + '</div><script>' + js + '<\/script></body></html>';
+    }
+    function ppHtml() {
+        if (ppBusy) return;
+        var pane = document.getElementById('passportPane'), btn = document.getElementById('ppHtml');
+        if (!pane || !body.querySelector('section.pp-sec')) { say('⚠️ Нет данных паспорта для выгрузки', true); return; }
+        ppBusy = true; busy(btn, true, 'HTML…');
+        var top = pane.scrollTop, opened = [];
+        var finish = function () {
+            opened.forEach(function (s) { s.classList.add('pp-col'); });
+            if (opened.length) { invalidateMinis(); window.dispatchEvent(new Event('resize')); }
+            ppBusy = false; busy(btn, false); try { pane.scrollTop = top; } catch (e) { /* нет */ }
+        };
+        say('⏳ Формируем HTML: собираем страницу паспорта…');
+        waitIdle(60000).then(function () {
+            Array.prototype.forEach.call(body.querySelectorAll('.pp-sec.pp-col'), function (s) { s.classList.remove('pp-col'); opened.push(s); });   // у скрытых карт нет размеров — снимок невозможен
+            if (!opened.length) return null;
+            invalidateMinis(); window.dispatchEvent(new Event('resize'));
+            var t0 = Date.now();
+            return sleep(900).then(function poll() {
+                if (!body.querySelector('.leaflet-tile-loading') || Date.now() - t0 > 7000) return sleep(400);
+                return sleep(300).then(poll);
+            });
+        }).then(function () { pane.scrollTop = 0; return sleep(100); }).then(snapAll).then(function (snaps) {
+            var html = ppHtmlBuild(pane, snaps);
+            save(new Blob([html], { type: 'text/html;charset=utf-8' }), fileStem() + '.html');
+            say('✅ HTML сформирован и скачан');
+            finish();
+        }).catch(function (e) {
+            console.warn('Паспорт HTML:', e); finish();
+            say('⚠️ Не удалось сформировать HTML: ' + (e && e.message || e), true);
+        });
+    }
+    document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('#ppHtml'); if (b && !b.disabled) ppHtml(); });
     document.addEventListener('passport-open', function () { setTimeout(function () { needH2C().catch(function () { /* без CDN — запасная печать */ }); }, 2500); });   // заранее подгружаем библиотеку для PDF
 
     // ---------- типографика: число с единицей, день с месяцем, однобуквенные предлоги и тире не разрываются переносом строки ----------

@@ -226,7 +226,7 @@
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
                         <button type="button" class="sp-tile" data-goto="sources" style="--c:#10b981" title="Источники анализа&#10;Что откуда берётся: снимки, рельеф, почвы, погода, дороги, адреса и кадастр — сервисы и разрешение данных."><i class="fas fa-database"></i><span>Источники анализа</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#8b5cf6" title="Новости&#10;Раздел в разработке."><i class="fas fa-newspaper"></i><span>Новости</span></button>
+                        <button type="button" class="sp-tile sp-hero" data-goto="analysis" style="--c:#059669" title="Анализ участка&#10;Загрузите или нарисуйте контур и запустите анализ — получите паспорт участка: рельеф, почва, климат, логистика."><i class="fas fa-magnifying-glass-chart"></i><span>Анализ участка</span></button>
                         <button type="button" class="sp-tile" data-goto="support" style="--c:#64748b" title="Поддержка&#10;Обратная связь, рекомендации и переход в справку."><i class="fas fa-headset"></i><span>Поддержка</span></button>
                         <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
                     </div>
@@ -399,7 +399,7 @@
                 <div id="rpList" class="hm-menu" style="margin-bottom:8px"></div>
                 <button type="button" class="rp-item" data-open-passport>
                     <i class="fas fa-file-pdf"></i>
-                    <span><b>Участок № 50:21:0000000:1234</b><small>14.7 га · пашня 57% · анализ от — (шаблон)</small></span>
+                    <span><b>Участок № 50:21:0000000:1234</b><small>150 га · Московская область · демо-паспорт с границами участка</small></span>
                     <span class="s-demo">Демо</span>
                 </button>
             </div>
@@ -1256,10 +1256,6 @@
                             <span>Gray</span>
                             <div class="layer-thumb" data-thumb="esri_gray"></div>
                         </div>
-                        <div class="layer-chip" data-layer="esri_hillshade" title="Esri World Hillshade — теневая отмывка рельефа">
-                            <span>Рельеф</span>
-                            <div class="layer-thumb" data-thumb="esri_hillshade"></div>
-                        </div>
                         <div class="layer-chip" data-layer="esri_street" title="Esri World Street Map — классическая уличная карта с подписями">
                             <span>Esri Street</span>
                             <div class="layer-thumb" data-thumb="esri_street"></div>
@@ -1267,14 +1263,6 @@
                         <div class="layer-chip" data-layer="esri_dark" title="Esri Dark Gray Canvas — тёмно-серая основа с подписями, хороша для ярких данных">
                             <span>Esri Dark</span>
                             <div class="layer-thumb" data-thumb="esri_dark"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="osm_hot" title="Humanitarian OpenStreetMap — карта для гуманитарных задач, крупно показаны дороги, здания и водные объекты">
-                            <span>OSM HOT</span>
-                            <div class="layer-thumb" data-thumb="osm_hot"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="cyclosm" title="CyclOSM — карта для велосипедистов: веломаршруты, уклоны, покрытие дорог">
-                            <span>CyclOSM</span>
-                            <div class="layer-thumb" data-thumb="cyclosm"></div>
                         </div>
                         <div class="layer-chip" data-layer="esri_transport" title="Esri Транспорт — светлая основа с дорожной сетью и названиями для логистики">
                             <span>Транспорт</span>
@@ -1306,10 +1294,6 @@
                             <span>Esri Гибрид</span>
                             <div class="layer-thumb" data-thumb="esri_hybrid"></div>
                         </div>
-                        <div class="layer-chip" data-layer="esri_clarity" title="Esri World Imagery Clarity — улучшенная чёткость снимков Esri">
-                            <span>Esri Clarity</span>
-                            <div class="layer-thumb" data-thumb="esri_clarity"></div>
-                        </div>
                         <div class="layer-chip" data-layer="esri_firefly" title="Esri Imagery Firefly — приглушённая тёмная версия снимков Esri, удобна для наложения данных">
                             <span>Firefly</span>
                             <div class="layer-thumb" data-thumb="esri_firefly"></div>
@@ -1317,18 +1301,6 @@
                         <div class="layer-chip" data-layer="sentinel2" title="Sentinel-2 — мультиспектральные снимки ESA, 10 м на пиксель">
                             <span>S2</span>
                             <div class="layer-thumb" data-thumb="sentinel2"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="landsat8" title="Landsat 8 — мультиспектральные снимки NASA/USGS, 30 м на пиксель">
-                            <span>L8</span>
-                            <div class="layer-thumb" data-thumb="landsat8"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="eox_s2" title="Sentinel-2 Cloudless (EOX, 2023) — безоблачная мозаика Sentinel-2 на весь мир">
-                            <span>S2 Cloudless</span>
-                            <div class="layer-thumb" data-thumb="eox_s2"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="nasa_viirs" title="NASA VIIRS True Color — почти ежедневные снимки Земли (250 м), помогают увидеть погоду и пожары">
-                            <span>NASA VIIRS</span>
-                            <div class="layer-thumb" data-thumb="nasa_viirs"></div>
                         </div>
                         <div class="layer-chip" data-layer="bing_sat" title="Bing Aerial — спутниковые и аэроснимки Microsoft Bing">
                             <span>Bing</span>
