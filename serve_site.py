@@ -301,7 +301,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         Заодно работает с серверами с самоподписанным сертификатом."""
         u = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('u', [''])[0]
         pu = urllib.parse.urlparse(u)
-        if pu.scheme not in ('http', 'https') or not pu.hostname or pu.hostname in ('localhost', '127.0.0.1', '::1'):
+        if pu.scheme not in ('http', 'https') or not pu.hostname or pu.hostname in ('localhost', '0.0.0.0', '::1'):
             self.send_error(403, 'forbidden')
             return
         key = 'u|' + u

@@ -19,7 +19,7 @@
     burger.addEventListener('click', function () { nav.classList.toggle('open'); });
 
     // ---- позиции блоков: каждый блок — на весь экран; переход между ними одинаков (колесо -> стрелка -> ещё раз колесо) ----
-    var ORDER = ['top', 'map-section', 'data-catalog', 'features', 'how', 'report', 'pricing', 'sources', 'faq', 'contacts'];
+    var ORDER = ['top', 'map-section', 'data-catalog', 'features', 'how', 'sources', 'contacts'];
     var BLK = {}; ORDER.forEach(function (id) { BLK[id] = document.getElementById(id); });
     function pos() {
         var p = { top: 0 }, hh = header.offsetHeight;
@@ -37,7 +37,7 @@
     // ---- листание с приглашением: колесо -> кнопка -> ещё раз колесо или клик -> переход ----
     var prompt = document.getElementById('sPrompt');
     var pText = document.getElementById('sPromptT'), pIcon = document.getElementById('sPromptI');
-    var LABEL = { 'top': 'На главную', 'map-section': 'К карте', 'data-catalog': 'Каталог данных', 'features': 'Возможности', 'how': 'Как это работает', 'report': 'Отчёт', 'pricing': 'Тарифы', 'sources': 'Источники данных', 'faq': 'Частые вопросы', 'contacts': 'Контакты' };
+    var LABEL = { 'top': 'На главную', 'map-section': 'К карте', 'data-catalog': 'Каталог данных', 'features': 'Возможности', 'how': 'Как это работает', 'sources': 'Источники данных', 'faq': 'Частые вопросы', 'contacts': 'Вопросы и контакты' };
     var armed = null, armTimer = 0, lastWheel = 0, lockUntil = 0;
     var desktop = window.matchMedia('(min-width: 961px)');
 
@@ -1694,4 +1694,17 @@
     q('mode').addEventListener('change', function () { q('kRow').style.display = this.value === 'nearest' ? '' : 'none'; });
     ['fuel', 'price', 'extra'].forEach(function (k) { q(k).addEventListener('input', cpk); });
     cpk(); refresh();
+})();
+
+/* Главная: кнопки «Полный анализ» и «Справка» — переход к карте и открытие нужного раздела */
+(function () {
+    function q(s) { return document.querySelector(s); }
+    var full = document.getElementById('heroFull'), help = document.getElementById('heroHelp');
+    if (full) full.addEventListener('click', function () {
+        var rb = q('#gcRail [data-rail="analysis"]'), tb = q('.panel-tab[data-tab="analysis"]');
+        if (rb) rb.click(); if (tb) tb.click();
+    });
+    if (help) help.addEventListener('click', function () {
+        setTimeout(function () { var win = document.getElementById('gcHelpWin'), rb = q('.gc-rail-btn[data-rail="help"]'); if (win && win.hidden && rb) rb.click(); }, 700);
+    });
 })();

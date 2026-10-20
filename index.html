@@ -40,8 +40,8 @@
       <a href="#data-catalog">Каталог данных</a>
       <a href="#features">Возможности</a>
       <a href="#how">Как это работает</a>
-      <a href="#faq">Частые вопросы</a>
-      <a href="#contacts">Контакты</a>
+      <a href="#sources">Данные</a>
+      <a href="#contacts">Вопросы и контакты</a>
       <a href="#map-section" class="s-cta" id="siteFullAnalysis"><i class="fas fa-file-lines"></i> Полный анализ</a>
     </nav>
   </div>
@@ -49,6 +49,24 @@
 
 <!-- ============ БЛОК 1: ГЛАВНАЯ (на всю страницу, фон — картинка, блоки полупрозрачные) ============ -->
 <section class="s-hero" id="top">
+  <div class="s-orbit" aria-hidden="true">
+  <svg viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#34d399" stroke-width="1">
+    <defs><radialGradient id="orbG"><stop offset="0" stop-color="#34d399" stop-opacity=".28"/><stop offset="1" stop-color="#34d399" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="260" cy="260" r="220" fill="url(#orbG)" stroke="none"/>
+    <g class="o-spin"><circle cx="260" cy="260" r="215" stroke-dasharray="2 9" opacity=".55"/><circle cx="260" cy="260" r="165" stroke-dasharray="14 10" opacity=".3"/></g>
+    <g class="o-spin r"><circle cx="260" cy="260" r="115" stroke-dasharray="3 7" opacity=".5"/></g>
+    <circle cx="260" cy="260" r="72" opacity=".8"/>
+    <ellipse cx="260" cy="260" rx="72" ry="26" opacity=".45"/><ellipse cx="260" cy="260" rx="72" ry="50" opacity=".25"/>
+    <g class="o-spin slow"><ellipse cx="260" cy="260" rx="26" ry="72" opacity=".45"/><ellipse cx="260" cy="260" rx="50" ry="72" opacity=".25"/></g>
+    <circle class="o-pulse" cx="260" cy="260" r="72" stroke-width="1.5"/><circle class="o-pulse d" cx="260" cy="260" r="72" stroke-width="1.5"/>
+    <g transform="rotate(-25 260 260)"><path id="orb1" d="M30,260 a230,80 0 1,0 460,0 a230,80 0 1,0 -460,0" opacity=".5"/>
+      <g fill="#bef264" stroke="none"><rect x="-6" y="-3" width="12" height="6" rx="1"/><rect x="-14" y="-1.5" width="7" height="3"/><rect x="7" y="-1.5" width="7" height="3"/><animateMotion dur="16s" repeatCount="indefinite" rotate="auto"><mpath href="#orb1"/></animateMotion></g></g>
+    <g transform="rotate(38 260 260)"><path id="orb2" d="M50,260 a210,60 0 1,0 420,0 a210,60 0 1,0 -420,0" opacity=".35" stroke-dasharray="5 6"/>
+      <g fill="#34d399" stroke="none"><rect x="-5" y="-2.5" width="10" height="5" rx="1"/><rect x="-12" y="-1" width="6" height="2"/><rect x="6" y="-1" width="6" height="2"/><animateMotion dur="23s" repeatCount="indefinite" rotate="auto" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#orb2"/></animateMotion></g></g>
+    <g class="o-net" stroke-width=".8"><polyline points="190,215 232,250 262,222 318,262 296,312 238,300 232,250" opacity=".6"/><line x1="262" y1="222" x2="296" y2="312" opacity=".35"/></g>
+    <g fill="#bef264" stroke="none"><circle class="o-node" cx="190" cy="215" r="3"/><circle class="o-node d1" cx="232" cy="250" r="3"/><circle class="o-node d2" cx="262" cy="222" r="3"/><circle class="o-node d3" cx="318" cy="262" r="3"/><circle class="o-node d4" cx="296" cy="312" r="3"/><circle class="o-node d5" cx="238" cy="300" r="3"/></g>
+  </svg>
+</div>
   <div class="s-wrap">
     <div class="s-hero-main s-glass">
       <div class="s-hero-tag"><i class="fas fa-wheat-awn"></i> Геоаналитика для агро</div>
@@ -56,7 +74,15 @@
       <p class="lead">Исследуйте поля и территорию, анализируйте данные дистанционного зондирования, принимайте обоснованные решения.</p>
       <div class="s-hero-actions">
         <a class="s-btn s-btn-primary" href="#map-section">Начать работу <i class="fas fa-arrow-right"></i></a>
+        <a class="s-btn s-btn-line s-hero-full" id="heroFull" href="#map-section"><i class="fas fa-file-lines"></i> Полный анализ</a>
+        <a class="s-btn s-btn-ghost" id="heroHelp" href="#map-section"><i class="fas fa-circle-question"></i> Справка</a>
         <a class="s-btn s-btn-ghost" href="#features"><i class="far fa-circle-play"></i> Узнать больше</a>
+      </div>
+      <div class="s-facts">
+        <div><b>10 м</b><span>разрешение снимков Sentinel-2</span></div>
+        <div><b>5 суток</b><span>частота съёмки территории</span></div>
+        <div><b>8</b><span>открытых источников данных</span></div>
+        <div><b>3</b><span>паспорта участка бесплатно</span></div>
       </div>
     </div>
     <aside class="s-hero-about s-glass">
@@ -67,6 +93,8 @@
         <li><b>Бесплатно:</b> карта, слои, измерения, профили рельефа</li>
         <li><b>Полный анализ:</b> рельеф, вода, инфраструктура, спутниковые индексы, классификация земель</li>
         <li><b>Результат:</b> паспорт участка и отчёт в PDF</li>
+        <li><b>Платно только:</b> полный анализ с паспортом (первые три бесплатно), классификация земли и массовое скачивание данных</li>
+        <li><b>Подходит</b> для первичной оценки перед покупкой, арендой и планированием работ</li>
       </ul>
     </aside>
     <div class="s-tiles">
@@ -1560,121 +1588,97 @@
 <!-- ============ БЛОК 3: О СЕРВИСЕ ============ -->
 <div class="s-after" id="about">
 <!-- ============ ВОЗМОЖНОСТИ ============ -->
-<section class="site-sec" id="features">
+<section class="site-sec s-features" id="features">
   <div class="s-wrap">
-    <div class="s-head"><div class="s-eyebrow">Возможности</div><h2>Всё для первичной оценки участка</h2><p>Тексты-заготовки: позже заменим на финальные формулировки.</p></div>
-    <div class="s-grid c4">
-      <div class="s-card"><div class="s-ico"><i class="fas fa-layer-group"></i></div><h3>Подложки и спутник</h3><p>Схемы, топокарты, спутниковые снимки и гибриды — переключение в один клик.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="gc-pent"></i></div><h3>Участок и измерения</h3><p>Нарисуйте или загрузите контур (KML, GeoJSON, Excel, XML Росреестра), измерьте длину и площадь.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-mountain"></i></div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия полигона, уклоны.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-cube"></i></div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-route"></i></div><h3>Логистика</h3><p>Буфер вокруг участка, дороги и водоёмы OSM, расстояния до ближайших.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-chart-area"></i></div><h3>Аналитические слои</h3><p>Land Cover, NDVI и почвенные карты.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней по экстенту карты.</p></div>
-      <div class="s-card"><div class="s-ico"><i class="fas fa-file-export"></i></div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с пространственной привязкой.</p></div>
+    <div class="s-head"><div class="s-eyebrow">Возможности</div><h2>Всё для первичной оценки участка</h2><p>Большую часть анализа можно сделать самостоятельно и бесплатно. Платными остаются только три вещи — они выделены ниже.</p></div>
+    <div class="s-flabel"><i class="fas fa-circle-check"></i> Бесплатно и самостоятельно</div>
+    <div class="s-fgrid">
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-layer-group"></i></div><div><h3>Подложки и спутник</h3><p>Схемы, топокарты, спутник и гибриды — в один клик.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="gc-pent"></i></div><div><h3>Участок и измерения</h3><p>Рисуйте или загружайте контур (KML, GeoJSON, Excel, XML Росреестра), меряйте длину и площадь.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-mountain"></i></div><div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия и уклоны.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cube"></i></div><div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-route"></i></div><div><h3>Логистика</h3><p>Буфер, дороги и водоёмы OSM, расстояния до ближайших.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-chart-area"></i></div><div><h3>Аналитические слои</h3><p>Land Cover, NDVI и почвенные карты.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-file-export"></i></div><div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с привязкой.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-satellite"></i></div><div><h3>Снимки и индексы</h3><p>NDVI, NDMI, NBR по датам и сравнение изменений.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-flask"></i></div><div><h3>Почвенный анализ</h3><p>pH, углерод, азот и гранулометрия по данным SoilGrids.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-landmark"></i></div><div><h3>Кадастр</h3><p>Границы и сведения об участках из НСПД.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-temperature-half"></i></div><div><h3>Агро и климат</h3><p>Сумма температур, заморозки и климатическая справка.</p></div></div>
+    </div>
+    <div class="s-flabel gold"><i class="fas fa-star"></i> Платно</div>
+    <div class="s-fgrid c3">
+      <div class="s-fcard s-paid"><div class="s-ico"><i class="fas fa-id-card"></i></div><div><h3>Полный анализ участка</h3><p>Паспорт участка со всеми модулями анализа и PDF.</p><b>Первые 3 паспорта — бесплатно</b></div></div>
+      <div class="s-fcard s-paid"><div class="s-ico"><i class="fas fa-seedling"></i></div><div><h3>Классификация земли</h3><p>Определение пашни, леса и других типов земель по спутниковым данным.</p><b>Платная функция</b></div></div>
+      <div class="s-fcard s-paid"><div class="s-ico"><i class="fas fa-database"></i></div><div><h3>Данные для скачивания</h3><p>Массовая выгрузка на вкладке «Данные» на карте — в удобном формате.</p><b>Платная функция</b></div></div>
     </div>
   </div>
 </section>
 
 <!-- ============ КАК ЭТО РАБОТАЕТ ============ -->
-<section class="site-sec alt" id="how">
+<section class="site-sec s-howrep" id="how">
+  <i class="fas fa-file-lines s-wm s-wm1"></i><i class="fas fa-map-location-dot s-wm s-wm2"></i><i class="fas fa-chart-line s-wm s-wm3"></i>
   <div class="s-wrap">
     <div class="s-head"><div class="s-eyebrow">Как это работает</div><h2>От участка до готового отчёта</h2></div>
     <div class="s-steps">
-      <div class="s-step"><i class="fas fa-magnifying-glass-location"></i><h3>Найдите участок</h3><p>Поиск по адресу или загрузка контура.</p></div>
-      <div class="s-step"><i class="fas fa-map"></i><h3>Изучите карту</h3><p>Слои, рельеф, OSM и спутник — бесплатно.</p></div>
-      <div class="s-step"><i class="fas fa-play"></i><h3>Запустите анализ</h3><p>Кнопка «Полный анализ участка».</p></div>
-      <div class="s-step"><i class="fas fa-gears"></i><h3>Обработка в фоне</h3><p>Статус заказа виден в личном кабинете.</p></div>
-      <div class="s-step"><i class="fas fa-file-pdf"></i><h3>Получите отчёт</h3><p>Страница отчёта и PDF для скачивания.</p></div>
+        <div class="s-step"><i class="fas fa-magnifying-glass-location"></i><h3>Найдите участок</h3><p>Поиск по адресу или загрузка контура.</p></div>
+        <div class="s-step"><i class="fas fa-map"></i><h3>Изучите карту</h3><p>Слои, рельеф, OSM и спутник — бесплатно.</p></div>
+        <div class="s-step"><i class="fas fa-play"></i><h3>Запустите анализ</h3><p>Кнопка «Полный анализ участка».</p></div>
+        <div class="s-step"><i class="fas fa-gears"></i><h3>Обработка в фоне</h3><p>Статус заказа виден в личном кабинете.</p></div>
+        <div class="s-step"><i class="fas fa-file-pdf"></i><h3>Получите отчёт</h3><p>Страница отчёта и PDF для скачивания.</p></div>
     </div>
-  </div>
-</section>
-
-<!-- ============ ОТЧЁТ ============ -->
-<section class="site-sec" id="report">
-  <div class="s-wrap s-report">
-    <div>
-      <div class="s-eyebrow">Полный аналитический отчёт</div>
-      <h2 style="font-size:30px;line-height:1.2;color:var(--dark);margin-bottom:10px">Что входит в отчёт</h2>
-      <p style="font-size:15px;line-height:1.6;color:var(--muted)">Отчёт собирается из независимых модулей, поэтому набор показателей легко расширять.</p>
-      <div class="s-chips">
-        <span class="s-chip"><i class="fas fa-id-card"></i> Паспорт</span>
-        <span class="s-chip"><i class="fas fa-mountain"></i> Рельеф</span>
-        <span class="s-chip"><i class="fas fa-droplet"></i> Вода</span>
-        <span class="s-chip"><i class="fas fa-road"></i> Инфраструктура</span>
-        <span class="s-chip"><i class="fas fa-building"></i> Застройка</span>
-        <span class="s-chip"><i class="fas fa-seedling"></i> Землепользование</span>
-        <span class="s-chip"><i class="fas fa-satellite"></i> Спутник</span>
-        <span class="s-chip"><i class="fas fa-clock-rotate-left"></i> Динамика</span>
-        <span class="s-chip"><i class="fas fa-triangle-exclamation"></i> Ограничения</span>
-        <span class="s-chip"><i class="fas fa-book"></i> Источники</span>
-      </div>
-      <div class="s-note"><b>Факты и интерпретации разделены.</b> «Средний уклон 8,4°» — измерение; «может ограничивать механизированные работы» — интерпретация, и в отчёте она помечена отдельно.</div>
+    <div class="s-modlabel"><i class="fas fa-list-check"></i> Что входит в отчёт</div>
+    <div class="s-mods">
+        <div class="s-mod"><i class="fas fa-id-card"></i><div><h3>Паспорт участка</h3><p>Площадь, периметр, форма границ и ключевые показатели на одной странице.</p></div></div>
+        <div class="s-mod"><i class="fas fa-mountain"></i><div><h3>Рельеф</h3><p>Перепад высот, средний уклон, гипсометрия и профиль высот.</p></div></div>
+        <div class="s-mod"><i class="fas fa-road"></i><div><h3>Окружение и логистика</h3><p>Ближайшие дороги, водоёмы и здания, расстояния до них.</p></div></div>
+        <div class="s-mod"><i class="fas fa-flask"></i><div><h3>Почвы</h3><p>pH, органический углерод, азот, глина и песок по данным SoilGrids.</p></div></div>
+        <div class="s-mod"><i class="fas fa-seedling"></i><div><h3>Землепользование</h3><p>Land Cover и классификация земли — доля пашни и других типов.</p></div></div>
+        <div class="s-mod"><i class="fas fa-satellite"></i><div><h3>Снимки и индексы</h3><p>NDVI, NDMI и NBR по выбранным датам Sentinel-2.</p></div></div>
+        <div class="s-mod"><i class="fas fa-clock-rotate-left"></i><div><h3>Динамика</h3><p>Сравнение снимков и динамика NDVI за сезон.</p></div></div>
+        <div class="s-mod"><i class="fas fa-cloud-sun"></i><div><h3>Погода и климат</h3><p>Прогноз, климат, сумма температур, заморозки и ветер с графиками и картами.</p></div></div>
+        <div class="s-mod"><i class="fas fa-gauge-high"></i><div><h3>Индекс пригодности</h3><p>Сводная оценка участка по почве, снимкам и классификации.</p></div></div>
+        <div class="s-mod"><i class="fas fa-triangle-exclamation"></i><div><h3>Ограничения и источники</h3><p>Что может ограничивать работу на участке и откуда взяты данные.</p></div></div>
     </div>
-    <div class="s-paper">
-      <div class="s-paper-top"><span>Паспорт участка</span><span class="s-demo">Демо-данные</span></div>
-      <table>
-        <tr><td>Площадь</td><td>— га</td></tr>
-        <tr><td>Перепад высот</td><td>— м</td></tr>
-        <tr><td>Средний уклон</td><td>8,4°</td></tr>
-        <tr><td>Ближайшая дорога</td><td>— м</td></tr>
-        <tr><td>NDVI (среднее)</td><td>—</td></tr>
-        <tr><td>Дата анализа</td><td>—</td></tr>
-      </table>
-      <div class="interp"><b>Интерпретация:</b> текст-заготовка. Рельефные ограничения будут описаны здесь.</div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ ТАРИФЫ ============ -->
-<section class="site-sec alt" id="pricing">
-  <div class="s-wrap">
-    <div class="s-head"><div class="s-eyebrow">Тарифы</div><h2>Начните бесплатно</h2><p>Цены — заготовки, финальные значения определим позже.</p></div>
-    <div class="s-grid c3">
-      <div class="s-card s-price"><h3>Бесплатно</h3><div class="amount">0 ₽</div>
-        <ul><li>Карта, подложки, спутник</li><li>Рисование и измерения</li><li>Профиль рельефа</li><li>Экспорт карты</li></ul>
-        <a class="s-btn s-btn-line s-btn-block" href="#map-section">Открыть карту</a></div>
-      <div class="s-card s-price hot"><h3>Полный отчёт</h3><div class="amount">— ₽ <small>за участок</small></div>
-        <ul><li>Все модули анализа</li><li>Классификация земель</li><li>Отчёт и PDF</li><li>История в личном кабинете</li></ul>
-        <a class="s-btn s-btn-primary s-btn-block" href="#contacts">Заказать</a></div>
-      <div class="s-card s-price"><h3>Для бизнеса</h3><div class="amount">По запросу</div>
-        <ul><li>Пакеты отчётов</li><li>Свои территории и модули</li><li>Приоритетная обработка</li><li>Доступ по API</li></ul>
-        <a class="s-btn s-btn-line s-btn-block" href="#contacts">Связаться</a></div>
-    </div>
+    <div class="s-note"><b>Факты и интерпретации разделены.</b> «Средний уклон 8,4°» — измерение; «может ограничивать механизированные работы» — интерпретация, и в отчёте она помечена отдельно.</div>
   </div>
 </section>
 
 <!-- ============ ИСТОЧНИКИ ДАННЫХ ============ -->
-<section class="site-sec" id="sources">
+<section class="site-sec s-sources" id="sources">
   <div class="s-wrap">
-    <div class="s-head"><div class="s-eyebrow">Данные</div><h2>На чём строится анализ</h2></div>
-    <div class="s-src">
-      <span class="s-chip"><i class="fas fa-map"></i> OpenStreetMap</span>
-      <span class="s-chip"><i class="fas fa-satellite"></i> Sentinel-1 / Sentinel-2</span>
-      <span class="s-chip"><i class="fas fa-mountain"></i> DEM (Terrarium)</span>
-      <span class="s-chip"><i class="fas fa-flask"></i> ISRIC SoilGrids</span>
-      <span class="s-chip"><i class="fas fa-cloud-sun"></i> Open-Meteo</span>
-      <span class="s-chip"><i class="fas fa-route"></i> OSRM</span>
+    <div class="s-head"><div class="s-eyebrow">Данные</div><h2>На чём строится анализ</h2><p>Только открытые источники. Каждый блок — со ссылкой на подробное описание в справке.</p></div>
+    <div class="s-srcgrid">
+      <a class="s-srccard" href="help.html#src-s2"><i class="fas fa-satellite"></i><h3>Sentinel-2</h3><p>Оптические снимки ESA/Copernicus: 10 м на пиксель, повтор до 5 суток. Дополняет радар Sentinel-1.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-bands"><i class="fas fa-chart-line"></i><h3>Каналы и индексы</h3><p>NDVI, NDMI, NBR и ложные цвета считаются из каналов Sentinel-2 — состояние посевов и влага.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-dem"><i class="fas fa-mountain"></i><h3>Рельеф — DEM</h3><p>Модель высот Terrarium (≈30 м): профиль, уклоны, гипсометрия и 3D.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-soil"><i class="fas fa-flask"></i><h3>Почвы — SoilGrids</h3><p>Карты ISRIC: pH, органический углерод, азот, глина и песок.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-osm"><i class="fas fa-map"></i><h3>OpenStreetMap</h3><p>Дороги, водоёмы и здания — открытые данные, запрашиваются в момент работы.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-wx"><i class="fas fa-cloud-sun"></i><h3>Погода — Open-Meteo</h3><p>Прогноз по координатам участка, сумма температур и риск заморозков.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-climate"><i class="fas fa-temperature-half"></i><h3>Климат — ERA5</h3><p>Многолетние наблюдения Copernicus / ECMWF для климатической справки.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-osrm"><i class="fas fa-route"></i><h3>Маршруты — OSRM</h3><p>Расчёт дорожных маршрутов и времени в пути для логистики.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
+      <a class="s-srccard" href="help.html#src-cadastre"><i class="fas fa-landmark"></i><h3>Кадастр — НСПД</h3><p>Границы и сведения об участках из публичной кадастровой карты.</p><span>Подробнее в справке <i class="fas fa-arrow-right"></i></span></a>
     </div>
   </div>
 </section>
 
-<!-- ============ FAQ ============ -->
-<section class="site-sec alt" id="faq">
+<!-- ============ ВОПРОСЫ И КОНТАКТЫ ============ -->
+<section class="site-sec s-faqct" id="contacts">
+  <i class="fas fa-circle-question s-wm s-wm1"></i><i class="fas fa-envelope s-wm s-wm2"></i><i class="fas fa-seedling s-wm s-wm3"></i>
   <div class="s-wrap">
-    <div class="s-head"><div class="s-eyebrow">FAQ</div><h2>Частые вопросы</h2></div>
-    <div class="s-faq">
-      <details open><summary>Нужно ли платить, чтобы пользоваться картой?</summary><p>Нет. Карта и бесплатные инструменты доступны без заказа отчёта. Платным является только полный анализ.</p></details>
-      <details><summary>Сколько времени занимает анализ?</summary><p>Текст-заготовка: анализ выполняется в фоне, статус виден в личном кабинете.</p></details>
-      <details><summary>Какие форматы участков можно загрузить?</summary><p>KML, GeoJSON, Excel и XML Росреестра.</p></details>
-      <details><summary>Насколько точны результаты?</summary><p>Текст-заготовка: точность зависит от разрешения исходных данных; в отчёте указаны источники и версии алгоритмов.</p></details>
-    </div>
-  </div>
-</section>
-
-<!-- ============ КОНТАКТЫ ============ -->
-<section class="site-sec" id="contacts">
-  <div class="s-wrap s-contact">
+    <div class="s-head"><div class="s-eyebrow">FAQ и контакты</div><h2>Вопросы и контакты</h2></div>
+    <div class="s-contact">
+    <div class="s-faq"><div class="s-faq-in">
+      <details><summary>Нужно ли платить, чтобы пользоваться картой?</summary><p>Нет. Карта, подложки, рисование и измерения, рельеф, погода, снимки и индексы, почвы, кадастр и экспорт доступны бесплатно. Платными остаются только полный анализ участка с паспортом, классификация земли и массовое скачивание данных.</p></details>
+      <details><summary>Сколько паспортов участка бесплатно?</summary><p>Первые три паспорта для каждого пользователя — бесплатно. Дальше полный анализ участка с паспортом оплачивается.</p></details>
+      <details><summary>Что именно платное?</summary><p>Три вещи: полный анализ участка с получением паспорта (после трёх бесплатных), классификация земли и данные для массового скачивания на вкладке «Данные» на карте.</p></details>
+      <details><summary>Какие форматы участков можно загрузить?</summary><p>KML, GeoJSON, Excel и XML Росреестра. Участок можно и просто нарисовать на карте.</p></details>
+      <details><summary>Откуда берутся данные?</summary><p>Из открытых источников: Sentinel-2, модель рельефа, SoilGrids, OpenStreetMap, Open-Meteo, ERA5, OSRM и НСПД. Подробности — в блоке «На чём строится анализ» и в справке.</p></details>
+      <details><summary>Насколько точны результаты?</summary><p>Точность зависит от разрешения исходных данных: у снимков Sentinel-2 это 10 м, у модели рельефа около 30 м. В отчёте указаны источники данных.</p></details>
+      <details><summary>Как часто обновляются спутниковые снимки?</summary><p>Sentinel-2 снимает одну и ту же территорию примерно раз в 5 суток, но из-за облаков пригодных дат меньше. Дата снимка — это дата пролёта спутника, а не публикации.</p></details>
+      <details><summary>Нужно ли ждать результат полного анализа?</summary><p>Анализ выполняется в фоне, поэтому окно можно закрыть. Статус и готовый паспорт участка доступны в личном кабинете.</p></details>
+    </div></div>
+      <div class="s-ct-right">
     <div>
       <div class="s-eyebrow">Контакты</div>
       <h2 style="font-size:30px;line-height:1.2;color:var(--dark);margin-bottom:10px">Остались вопросы?</h2>
@@ -1692,6 +1696,8 @@
       <button class="s-btn s-btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Отправить</button>
       <div class="s-form-ok" id="contactOk" hidden>Спасибо! (форма-заготовка, отправка пока не подключена)</div>
     </form>
+      </div>
+    </div>
   </div>
 <footer class="s-footer">
   <div class="s-wrap"><span>© <span id="siteYear"></span> GeoClass</span><span><a href="#top">Наверх ↑</a></span></div>
