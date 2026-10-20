@@ -2069,3 +2069,25 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .sp-grid .sp-tile.sp-hero i { width: 58px; height: 58px; font-size: 24px; margin: -4px 0 -1px; box-shadow: 0 0 0 3px rgba(5,150,105,.18), 0 6px 14px rgba(5,150,105,.35); }
 .sp-grid .sp-tile.sp-hero span { font-size: 12px; font-weight: 800; color: var(--green-d, #047857); }
 .sp-grid .sp-tile.sp-hero:hover i { transform: scale(1.06); }
+
+/* ===== «Каталог данных»: без фоновой картинки, стиль как у «Как это работает» (страницы чередуются: с картинкой / без) ===== */
+#data-catalog.s-catalog { overflow: hidden; color: var(--dark); box-shadow: none; background: radial-gradient(circle at 8% 12%, color-mix(in srgb, var(--green) 18%, transparent), transparent 50%), radial-gradient(circle at 92% 90%, rgba(250,204,21,.16), transparent 50%), radial-gradient(circle at 90% 8%, rgba(56,189,248,.15), transparent 45%), var(--bg2); }
+#data-catalog .s-glass { background: rgba(255,255,255,.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(15,23,42,.06); }
+#data-catalog h1, #data-catalog p.lead, #data-catalog .s-cat-top h3 { text-shadow: none; }
+#data-catalog h1 { color: var(--dark); }
+#data-catalog h1 em { background: linear-gradient(90deg, var(--green), #65a30d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+#data-catalog p.lead, #data-catalog .s-cat-top p { color: var(--muted); }
+#data-catalog .s-hero-tag { background: var(--soft); border-color: var(--softline); color: var(--green); }
+#data-catalog .s-cat-ico { background: var(--soft); color: var(--green); }
+#data-catalog .s-cat-top h3, #data-catalog .s-cat-sum { color: var(--dark); }
+#data-catalog .s-cat-sum i, #data-catalog .s-cat-all, #data-catalog .s-cat-ok { color: var(--green); }
+#data-catalog .s-cat-foot { color: var(--muted); }
+#data-catalog .s-opt { background: rgba(255,255,255,.72); border-color: var(--line); color: var(--dark); }
+#data-catalog .s-opt:hover { background: var(--soft); border-color: var(--softline); }
+#data-catalog .s-opt > i { border-color: var(--softline); }
+#data-catalog .s-opt small, #data-catalog .s-opt em { color: var(--muted); }
+#data-catalog .s-opt.selected { background: var(--soft); border-color: var(--green); }
+#data-catalog .s-opt.selected > i { background: var(--green); border-color: var(--green); color: var(--on-green); }
+#data-catalog .s-opt.selected em { color: var(--green); }
+#data-catalog.s-catalog .s-btn-ghost { background: rgba(255,255,255,.72); color: var(--dark); border-color: var(--line); }
+#data-catalog.s-catalog .s-btn-ghost:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
