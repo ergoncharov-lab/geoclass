@@ -2478,12 +2478,14 @@ function snShpZip(feats, base) {
             '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div></div>' +
             toolsTpl() +
             '<div class="dw-block"><div class="dw-title">Что сравнивать</div>' +
-            '<div class="sn-seg sn-seg-w" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '">' + v.t + '</button>').join('') + '</div>' +
+            '<div class="sn-vt" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '"><i class="fas ' + ({ sentinel2: 'fa-image', falsecolor: 'fa-seedling', ndvi: 'fa-leaf', ndmi: 'fa-droplet', nbr: 'fa-wheat-awn' }[v.l] || 'fa-layer-group') + '"></i><span>' + ({ sentinel2: 'RGB', falsecolor: 'CIR' }[v.l] || v.t) + '</span></button>').join('') + '</div>' +
+            '<div class="dw-title sn-dt-t">Даты снимков</div>' + [1, 2].map(i => '<div class="sn-cdd"><button type="button" class="sn-cdd-t" data-sc-open="' + i + '" title="Выбрать дату снимка"><i class="fas fa-calendar-days"></i><b>Снимок ' + i + '</b><span data-sn="scD' + i + '">выбрать дату</span><i class="fas fa-chevron-down sn-cdd-ch"></i></button>' +
+                '<div class="sn-cdd-p" hidden><div class="sn-c-h"><button type="button" class="sn-c-n" data-sc-nav="-1" data-sc-i="' + i + '"><i class="fas fa-chevron-left"></i></button><b data-sn="scM' + i + '"></b><button type="button" class="sn-c-n" data-sc-nav="1" data-sc-i="' + i + '"><i class="fas fa-chevron-right"></i></button></div>' +
+                '<div class="sn-c-w"><span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span></div><div class="sn-c-g" data-sn="scC' + i + '"></div></div></div>').join('') +
             '<label class="sn-cc" title="Дни с облачностью выше порога затемняются в календарях под снимками">Облачность ≤ <b data-sn="ccVal">30</b>%<input type="range" data-sn="cc" min="0" max="100" step="5" value="30"></label>' +
             '<div class="sn-key"><span style="--c:#10b981">≤10%</span><span style="--c:#84cc16">≤30%</span><span style="--c:#f59e0b">≤60%</span><span style="--c:#ef4444">&gt;60%</span></div></div>' +
             '<div class="dw-block sn-cmpblock"><div class="dw-title">Сравнение</div>' +
-            '<div class="m3-hint">Карта разделится на две части (как «Шторка» в режиме дублирования), внизу появится панель: под каждым снимком — его дата, календарь выбора и статистика. Снимок 2 по умолчанию на месяц раньше. Статистика индексов считается по фигуре; без фигуры снимки сравниваются на видимой области карты.</div>' +
-            '<button type="button" class="dw-act ex-go" data-sn-act="cmp"><i class="fas fa-code-compare"></i><span>Сравнить снимки</span></button></div>';
+            '<div class="m3-hint">Нарисуйте фигуру на карте или импортируйте её (KML, GeoJSON, Excel, XML Росреестра) — сравнение запустится автоматически, снимки загружаются только в пределах фигуры. Карта разделится на две части, внизу появится панель: под каждым снимком — его дата, календарь выбора и статистика. Снимок 2 по умолчанию на месяц раньше.</div></div>';
     }
     function tpl(s) {
         if (s === CMPSEC) return tplCmp();
@@ -2587,8 +2589,9 @@ function snShpZip(feats, base) {
         shapeGJ = shape ? layerToGJ(shape) : null;
         clearCalc();
         renderShapeInfo(); renderDl();
-        if (cmp.on) { cmpInit(true); if (fresh) cmpCenter(); }   // шторка: снимки и статистика — для новой фигуры
-        if (sec === CMPSEC) { clearTimeout(shapeTimer); return; }   // в разделе сравнения нет календаря и выреза: даты выбираются под половинами карты
+        if (cmp.on && !shapeGJ) cmpOff();   // фигуру удалили — сравнение закрывается
+        else if (cmp.on) { cmpInit(true); if (fresh) cmpCenter(); }   // шторка: снимки и статистика — для новой фигуры
+        if (sec === CMPSEC) { clearTimeout(shapeTimer); if (shapeGJ && !cmp.on) cmpToggle(true); return; }   // фигура появилась — сравнение запускается сразу   // в разделе сравнения нет календаря и выреза: даты выбираются под половинами карты
         // после рисования фигуры снимок (в спектре раздела) последней даты без облачности грузится только внутри неё
         // (если включена подложка Sentinel из виджета карты — она остаётся на весь экстент)
         if (fresh && sec && shapeGJ && currentLayer !== layerOf(sec)) { pick = true; clipKey = null; month = monthStart(new Date()); hideClip(); }
@@ -2635,6 +2638,7 @@ function snShpZip(feats, base) {
         return { w: w, h: h, px: w * h, km2: turf.area(shapeGJ) / 1e6 };
     }
     function renderShapeInfo() {
+        try { if (sec === CMPSEC) [1, 2].forEach(scLoad); } catch (e) { /* календари дат ещё не созданы */ }   // фигура изменилась — перечитываем даты снимков
         const est = estimate();
         eachPane((s, pane) => {
             const el = q(s, 'shapeInfo');
@@ -3260,6 +3264,65 @@ function snShpZip(feats, base) {
             else enter(sec);
         }
     }
+    const sc = { mon: {}, grp: {}, tok: { 1: 0, 2: 0 } };   // календари выбора дат в боковой панели (с облачностью, как в разделе NDVI)
+    const scMonOf = day => new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, 1));
+    function scDraw(i) {
+        const el = ui[CMPSEC] && q(CMPSEC, 'scC' + i), mo = sc.mon[i];
+        if (!el || !mo) return;
+        el.classList.remove('busy');
+        const y = mo.getUTCFullYear(), m = mo.getUTCMonth(), dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        const max = +q(CMPSEC, 'cc').value, sel = cmp.pre[i], today = isoDay(new Date()), by = {};
+        (sc.grp[i] || []).forEach(g => { by[g.day] = g; });
+        let h = '';
+        for (let k = (mo.getUTCDay() + 6) % 7; k > 0; k--) h += '<span class="sn-c-d empty"></span>';
+        for (let d = 1; d <= dim; d++) {
+            const day = y + '-' + p2(m + 1) + '-' + p2(d), g = by[day];
+            if (!g || day > today) { h += '<span class="sn-c-d off">' + d + '</span>'; continue; }
+            h += '<button type="button" class="sn-c-d has' + (day === sel ? ' sel' : '') + (g.cc != null && g.cc > max ? ' dim' : '') + '" data-sc-i="' + i + '" data-sc-day="' + day + '" style="--c:' + ccColor(g.cc) + '" title="' + fmtDay(day) + ' · облачность ' + ccText(g.cc) + ' · снимков: ' + g.scenes.length + '">' + d + '<i></i></button>';
+        }
+        el.innerHTML = h;
+    }
+    async function scLoad(i) {
+        const el = ui[CMPSEC] && q(CMPSEC, 'scC' + i), lab = ui[CMPSEC] && q(CMPSEC, 'scM' + i);
+        if (!el || !lab) return;
+        if (!sc.mon[i]) sc.mon[i] = scMonOf(cmp.pre[i] || shiftDay(isoDay(new Date()), i === 2 ? -30 : 0));
+        const mo = sc.mon[i], y = mo.getUTCFullYear(), m = mo.getUTCMonth(), t = new Date(), tok = ++sc.tok[i];
+        lab.textContent = mo.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        const nx = ui[CMPSEC].pane.querySelector('[data-sc-nav="1"][data-sc-i="' + i + '"]');
+        if (nx) nx.disabled = y * 12 + m >= t.getUTCFullYear() * 12 + t.getUTCMonth();
+        const bb = shapeGJ ? searchBBox() : null;
+        if (!bb) { el.innerHTML = '<div class="sn-c-msg">Нарисуйте или импортируйте фигуру — покажем даты снимков</div>'; return; }
+        el.classList.add('busy');
+        let gs = [];
+        try { gs = await stacAround(bb, y + '-' + p2(m + 1) + '-16', 16); } catch (e) { gs = []; }
+        if (tok !== sc.tok[i]) return;
+        sc.grp[i] = gs; scDraw(i);
+    }
+    const cmpDateUi = () => {
+        if (!ui[CMPSEC]) return;
+        [1, 2].forEach(i => {
+            const d = q(CMPSEC, 'scD' + i); if (d) d.textContent = cmp.pre[i] ? fmtDay(cmp.pre[i]) : 'дата не выбрана';
+            if (cmp.pre[i] && (!sc.mon[i] || +sc.mon[i] !== +scMonOf(cmp.pre[i]))) { sc.mon[i] = scMonOf(cmp.pre[i]); scLoad(i); } else scDraw(i);
+        });
+    };
+    const scClose = () => { if (ui[CMPSEC]) ui[CMPSEC].pane.querySelectorAll('.sn-cdd.open').forEach(x => { x.classList.remove('open'); x.querySelector('.sn-cdd-p').hidden = true; }); };
+    document.addEventListener('click', e => {   // выпадающие календари дат в боковой панели (как в паспорте участка)
+        const tg = e.target.closest ? e.target : e.target.parentElement; if (!tg) return;
+        const op = tg.closest('[data-sc-open]');
+        if (op) {
+            const w = op.closest('.sn-cdd'), was = w.classList.contains('open'), i = +op.dataset.scOpen;
+            scClose();
+            if (!was) { w.classList.add('open'); w.querySelector('.sn-cdd-p').hidden = false; scLoad(i); }
+            return;
+        }
+        const t = tg.closest('[data-sc-day], [data-sc-nav]');
+        if (!t) { if (!tg.closest('.sn-cdd')) scClose(); return; }
+        const i = +t.dataset.scI;
+        if (t.dataset.scNav) { if (t.disabled || !sc.mon[i]) return; const mo = sc.mon[i]; sc.mon[i] = new Date(Date.UTC(mo.getUTCFullYear(), mo.getUTCMonth() + (+t.dataset.scNav), 1)); scLoad(i); return; }
+        cmp.pre[i] = t.dataset.scDay; cmpDateUi(); scClose();
+        if (cmp.on) cmpSetDate(i, t.dataset.scDay); else if (sec === CMPSEC && shapeGJ) cmpToggle(true);   // как в NDVI: выбрал дату — слой сразу на карте
+    });
+    document.addEventListener('input', e => { if (e.target.matches && e.target.matches('[data-sn="cc"]') && sec === CMPSEC) [1, 2].forEach(scDraw); });
     const cmpVarUi = () => { if (ui[CMPSEC]) ui[CMPSEC].pane.querySelectorAll('[data-sn-var]').forEach(b => b.classList.toggle('on', b.dataset.snVar === variant[CMPSEC])); };
     function enter(s) {
         if (!ui[s]) return;
@@ -3268,8 +3331,9 @@ function snShpZip(feats, base) {
         if (!map.hasLayer(grp)) grp.addTo(map);
         if (s === CMPSEC) {   // «Сравнение снимков»: список дат и календаря нет — отменяем начатый поиск, фигура общая со всеми разделами
             ++seq; clearTimeout(timer); clearTimeout(shapeTimer); pick = false; clipKey = null;
-            cmpVarUi(); renderShapeInfo(); q(s, 'ccVal').textContent = q(s, 'cc').value;
-            updateStatus(shapeGJ ? '↔️ Выберите слой и нажмите «Сравнить снимки»' : '✏️ Нарисуйте или импортируйте область, затем нажмите «Сравнить снимки»');
+            cmpVarUi(); renderShapeInfo(); [1, 2].forEach(i => { if (cmp.pre[i]) sc.mon[i] = scMonOf(cmp.pre[i]); scLoad(i); }); cmpDateUi(); q(s, 'ccVal').textContent = q(s, 'cc').value;
+            updateStatus(shapeGJ ? '↔️ Сравнение снимков: подбираем две даты…' : '✏️ Нарисуйте или импортируйте область — сравнение снимков запустится автоматически');
+            if (shapeGJ) cmpToggle(true);
             return;
         }
         if (zoneVis && !map.hasLayer(zoneGrp)) zoneGrp.addTo(map);
@@ -3308,7 +3372,7 @@ function snShpZip(feats, base) {
     }
 
     // ---------- сравнение двух снимков: шторка на карте + сравнительная статистика ----------
-    const cmp = { on: false, sec: null, base: '', k: {}, L: {}, ol: null, tok: 0, stT: { 1: 0, 2: 0 }, bar: null, res: {}, sel: {}, mon: {}, grp: {}, calT: { 1: 0, 2: 0 } };
+    const cmp = { on: false, sec: null, base: '', k: {}, L: {}, ol: null, tok: 0, stT: { 1: 0, 2: 0 }, bar: null, res: {}, sel: {}, mon: {}, grp: {}, pre: {}, calT: { 1: 0, 2: 0 } };
     const isoDay = d => d.toISOString().slice(0, 10);
     const shiftDay = (s, n) => isoDay(new Date(dayDate(s).getTime() + n * 864e5));
     const cmpQ = n => cmp.bar ? cmp.bar.querySelector('[data-sn="' + n + '"]') : null;
@@ -3467,6 +3531,7 @@ function snShpZip(feats, base) {
         snPrewarm(k);
         cmp.sel[i] = g.day; cmp.mon[i] = new Date(Date.UTC(+g.day.slice(0, 4), +g.day.slice(5, 7) - 1, 1)); cmpCalLoad(i);
         { const bd = cmpQ('cmpD' + i); if (bd) bd.textContent = fmtDay(g.day); }
+        cmp.pre[i] = g.day; cmpDateUi();
         info.textContent = 'облачность ' + ccText(g.cc) + ' · сцен: ' + g.scenes.length + (r.clear ? '' : ' · выше порога облачности');
         if (cmp.L[i]) { cmpClipOf(cmp.L[i]); cmp.L[i].redraw(); }
         updateSwipeLabels();
@@ -3488,10 +3553,10 @@ function snShpZip(feats, base) {
     }
     function cmpToggle(on) {
         if (!on) { cmpOff(); return; }
-        if (!sec || cmp.on) return;
+        if (!sec || cmp.on || !shapeGJ) return;
         if (typeof m3d !== 'undefined' && m3d.active) { updateStatus('⚠️ Сравнение недоступно в режиме 3D — выключите 3D', true); return; }
         if (swipeState.active) deactivateSwipe();
-        cmp.on = true; cmp.sec = sec; cmp.base = layerOf(sec); cmp.L = {}; cmp.ol = null; cmp.res = {}; cmp.sel = {}; cmp.mon = {}; cmp.grp = {};
+        cmp.on = true; cmp.sec = sec; cmp.base = layerOf(sec); cmp.L = {}; cmp.ol = null; cmp.res = {}; cmp.sel = Object.assign({}, cmp.pre); cmp.mon = {}; cmp.grp = {};
         [1, 2].forEach(i => { cmp.k[i] = cmpKey(i); });
         swipeState.custom = { left: () => cmpMakeLayer(1), right: () => cmpMakeLayer(2), layerKey: cmp.base, label: side => cmpLabel(side === 'left' ? 1 : 2) };
         mapStageEl.classList.add('swipe-cmp');
@@ -3500,7 +3565,7 @@ function snShpZip(feats, base) {
         cmpBtnUi(sec, true);
         cmpCenter();
         updateStatus('↔️ Сравнение снимков: подбираем две даты…');
-        cmpInit(false);
+        cmpInit(true);
     }
     async function cmpSetDate(i, v) {
         if (!cmp.on || !v) return;
@@ -3532,12 +3597,11 @@ function snShpZip(feats, base) {
     };
     // статистика одного снимка — под ним
     function cmpBlock(res) {
-        const st = (l, v) => '<div class="cb-k"><span>' + l + '</span><b>' + v + '</b></div>', hmax = Math.max.apply(null, res.hist);
+        const st = (l, v, w) => '<div class="cb-k' + (w ? ' w2' : '') + '"><span>' + l + '</span><b>' + v + '</b></div>';
         const cls = res.classes.slice(0, 6).map(c => '<div class="cb-c"><i style="background:' + c.color + '"></i><span>' + esc(c.name) + '</span><b>' + (c.n / res.valid * 100).toFixed(1).replace('.', ',') + ' %</b></div>').join('');
         return '<div class="cb-kpi">' + st('Среднее', f3(res.mean)) + st('Медиана', f3(res.median)) + st('Минимум', f3(res.min)) + st('Максимум', f3(res.max)) +
-            st('Ст. откл.', f3(res.std)) + st('Неоднор.', res.cv.toFixed(1).replace('.', ',') + ' %') + st('P10–P90', f3(res.p10) + '–' + f3(res.p90)) + st('Площадь', fHa(res.ha) + ' га') + '</div>' +
-            '<div class="cb-chart"><div class="cb-hw"><div class="sn-hist">' + res.hist.map(h => '<i style="height:' + Math.max(2, Math.round(h / hmax * 100)) + '%"></i>').join('') + '</div>' +
-            '<div class="cb-ax"><span>' + fmtN(res.rmin) + '</span><span>гистограмма</span><span>' + fmtN(res.rmax) + '</span></div></div>' + (cls ? '<div class="cb-cls">' + cls + '</div>' : '') + '</div>';
+            st('Ст. откл.', f3(res.std)) + st('Неоднор.', res.cv.toFixed(1).replace('.', ',') + ' %') + st('P10–P90', f3(res.p10) + ' – ' + f3(res.p90), 1) + st('Площадь', fHa(res.ha) + ' га', 1) + '</div>' +
+            (cls ? '<div class="cb-cls">' + cls + '</div>' : '');
     }
     async function cmpStatOne(i) {
         if (!cmp.on) return;

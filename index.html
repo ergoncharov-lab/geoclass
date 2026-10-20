@@ -477,7 +477,7 @@
         <div class="tab-pane" data-pane="sources" role="tabpanel">
             <div class="section src">
                 <div class="src-intro">Все данные открытые и подключаются напрямую из браузера, без личных ключей (кроме слоёв OpenWeatherMap). Нажмите на группу, чтобы увидеть детали.</div>
-                <details open style="--c:#ec4899"><summary><i class="fas fa-satellite"></i>Спутниковые снимки и индексы</summary><div class="src-b"><ul>
+                <details style="--c:#ec4899"><summary><i class="fas fa-satellite"></i>Спутниковые снимки и индексы</summary><div class="src-b"><ul>
                     <li><b>Снимки, NDVI, NDMI, NBR</b> — Sentinel-2 L2A (ESA Copernicus), 10 м. Каталог снимков: STAC Earth Search (Element84), сами файлы COG — с AWS S3. Индексы считаются по спектральным каналам; доступны естественные и ложные цвета (CIR).</li>
                     <li><b>Классификация земель</b> — Esri Sentinel-2 10m Land Cover (ArcGIS ImageServer).</li>
                     <li><b>Ускорение</b> — локальный прокси <code>serve_site.py</code> кэширует снимки на диске, повторное открытие быстрее.</li>
@@ -524,7 +524,7 @@
         <div class="tab-pane" data-pane="help" role="tabpanel">
             <div class="section ct">
                 <div class="section-title"><i class="fas fa-circle-question"></i> Инструкции</div>
-                <details class="ct-grp" open><summary><i class="fas fa-location-crosshairs"></i> Поиск и координаты</summary><ul class="hp"><li>Поле поиска — в левом верхнем углу карты: введите город или улицу и выберите результат.</li><li>Правый клик по карте → «Что здесь?» покажет координаты и адрес точки (блок «Координаты и адрес» на вкладке «Главная»).</li><li>Кнопки копирования рядом с полями сохранят значения в буфер.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-location-crosshairs"></i> Поиск и координаты</summary><ul class="hp"><li>Поле поиска — в левом верхнем углу карты: введите город или улицу и выберите результат.</li><li>Правый клик по карте → «Что здесь?» покажет координаты и адрес точки (блок «Координаты и адрес» на вкладке «Главная»).</li><li>Кнопки копирования рядом с полями сохранят значения в буфер.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-magnifying-glass-chart"></i> Анализ участка</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-file-lines"></i> Отчёты и паспорт участка</summary><ul class="hp"><li>Нажмите на отчёт в списке — паспорт раскроется на всю область карты.</li><li>«К карте» или Esc возвращают обычный вид.</li><li>Из паспорта можно скачать PDF.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-store"></i> Каталог геоданных</summary><ul class="hp"><li>Данные разбиты на группы: векторы OSM, спутниковые снимки, готовые карты.</li><li>Раскройте группу, выберите набор и оформите заказ (в разработке).</li></ul></details>
