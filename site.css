@@ -2024,3 +2024,10 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 @media (min-width: 1101px) { #top.s-hero .s-wrap { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); } }
 #top .s-hero-actions .s-btn { flex: 0 0 auto; }
 @media (max-width: 1280px) and (min-width: 1101px) { #top .s-hero-actions .s-btn { padding: 11px 14px; font-size: 13px; } }
+
+/* логотип TerraClass и ссылки на карту в карточках возможностей */
+.s-brand .s-logo { width: 30px; height: 30px; display: block; flex: none; }
+.s-links { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 5px; }
+.s-links a { font-size: 11px; line-height: 1.3; color: var(--mint); text-decoration: none; border-bottom: 1px dashed rgba(52,211,153,.5); white-space: nowrap; }
+.s-links a i { font-size: 8px; margin-right: 4px; opacity: .85; }
+.s-links a:hover { color: #fff; border-bottom-color: #fff; }

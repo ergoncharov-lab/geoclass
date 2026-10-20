@@ -1708,3 +1708,20 @@
         setTimeout(function () { var win = document.getElementById('gcHelpWin'), rb = q('.gc-rail-btn[data-rail="help"]'); if (win && win.hidden && rb) rb.click(); }, 700);
     });
 })();
+
+/* Ссылки «на карту» из блока «Возможности»: переход к карте и открытие нужного раздела боковой панели */
+(function () {
+    document.addEventListener('click', function (e) {
+        var a = e.target.closest && e.target.closest('a[data-open-bp]');
+        if (!a) return;
+        e.preventDefault();
+        var bp = a.getAttribute('data-open-bp'), nav = document.querySelector('.s-nav-map');
+        if (nav) nav.click();
+        setTimeout(function () {
+            var tile = document.querySelector('.sp-tile[data-bp="' + bp + '"]'), tab = document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]');
+            var g = tile && tile.closest('[data-group]'), rail = g && document.querySelector('#gcRail [data-rail="' + g.getAttribute('data-group') + '"]');
+            if (rail) rail.click();
+            setTimeout(function () { if (tile) tile.click(); else if (tab) tab.click(); }, 60);
+        }, 700);
+    });
+})();

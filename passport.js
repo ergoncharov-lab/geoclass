@@ -216,7 +216,7 @@
             g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(x, y, w + 16, 42); g.fillStyle = grd; g.fillRect(x + 8, y + 7, w, 10);
             g.fillStyle = '#0f172a'; g.font = '11px sans-serif'; g.fillText(lg.lo, x + 8, y + 34); g.textAlign = 'right'; g.fillText(lg.hi + ' ' + (lg.unit || ''), x + 8 + w, y + 34); g.textAlign = 'left';
         }
-        g.font = '10px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText('GeoClass · Esri World Imagery', 10, r0.height - 6);
+        g.font = '10px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText('TerraClass · Esri World Imagery', 10, r0.height - 6);
         try { return { url: c.toDataURL('image/jpeg', 0.92), w: c.width, h: c.height }; } catch (e) { return null; }
     }
     function pdfJpeg(url, w, h) {
@@ -1572,7 +1572,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
         var kids = []; for (i = 0; i < n; i++) kids.push((4 + 3 * i) + ' 0 R');
         obj(2, '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>');
-        obj(3, '<< /Title <FEFF' + hex + '> /Producer (GeoClass) /Creator (GeoClass) >>');
+        obj(3, '<< /Title <FEFF' + hex + '> /Producer (TerraClass) /Creator (TerraClass) >>');
         pages.forEach(function (p, k) {
             var pg = 4 + 3 * k, im = pg + 1, ct = pg + 2, cs = 'q ' + PW + ' 0 0 ' + PH + ' 0 0 cm /Im Do Q';
             obj(pg, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources << /XObject << /Im ' + im + ' 0 R >> >> /Contents ' + ct + ' 0 R >>');
@@ -1654,7 +1654,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 var sy = Math.round(b[0] * k), sh = Math.min(Math.round((b[1] - b[0]) * k), big.height - sy);
                 if (sh > 0) g.drawImage(big, 0, sy, big.width, sh, 0, Math.round(padT * k), big.width, sh);
                 g.fillStyle = '#64748b'; g.font = Math.round(11 * k) + 'px sans-serif'; g.textBaseline = 'middle';
-                g.fillText('Паспорт участка' + (D.cad ? ' № ' + D.cad : '') + ' · GeoClass · ' + d.toLocaleDateString('ru-RU'), Math.round(26 * k), Math.round((pageH - foot / 2) * k));
+                g.fillText('Паспорт участка' + (D.cad ? ' № ' + D.cad : '') + ' · TerraClass · ' + d.toLocaleDateString('ru-RU'), Math.round(26 * k), Math.round((pageH - foot / 2) * k));
                 g.textAlign = 'right'; g.fillText('стр. ' + (i + 1) + ' из ' + br.length, Math.round((W - 26) * k), Math.round((pageH - foot / 2) * k));
                 pages.push({ jpg: dataBytes(cv.toDataURL('image/jpeg', 0.9)), w: cv.width, h: cv.height });
                 cv.width = cv.height = 0;
@@ -1941,7 +1941,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var sh = new Sheet('Паспорт', '1E293B'), t = document.getElementById('ppTitle'), ad = document.getElementById('ppAddr'), d = new Date();
         var lab = ST.get({ b: 1, border: 1, wrap: 1 }), val = ST.get({ border: 1, wrap: 1 }), num = ST.get({ border: 1, h: 'right' });
         sh.add([{ v: t ? norm(t.textContent) : 'Паспорт участка', s: ST.get({ b: 1, sz: 18, color: '1E293B' }), span: 5 }], 30);
-        sh.add([{ v: 'Выгрузка сформирована ' + d.toLocaleString('ru-RU') + ' · GeoClass', s: ST.get({ i: 1, color: '64748B' }), span: 5 }]);
+        sh.add([{ v: 'Выгрузка сформирована ' + d.toLocaleString('ru-RU') + ' · TerraClass', s: ST.get({ i: 1, color: '64748B' }), span: 5 }]);
         sh.add([]);
         var kv = function (k, v, unit) {
             if (v == null || v === '' || (typeof v === 'number' && !isFinite(v))) return;

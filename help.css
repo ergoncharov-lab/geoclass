@@ -1,4 +1,4 @@
-/* Справка GeoClass: стили отдельной страницы help.html (подключается в окно справки через iframe) */
+/* Справка TerraClass: стили отдельной страницы help.html (подключается в окно справки через iframe) */
 :root {
     --bg: #eef1f4; --card: #ffffff; --card2: #f8fafc; --line: #e2e8f0; --ink: #1e293b; --dark: #0c1110; --muted: #64748b;
     --green: #059669; --green-d: #047857; --mint: #34d399; --soft: #ecfdf5; --softline: #a7f3d0; --gold: #d97706;

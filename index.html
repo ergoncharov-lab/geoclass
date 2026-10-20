@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GeoClass — Классификация земной поверхности</title>
+    <title>TerraClass — Классификация земной поверхности</title>
+    <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -32,7 +33,7 @@
 <!-- ============ ШАПКА САЙТА ============ -->
 <header class="s-header" id="siteHeader">
   <div class="s-wrap">
-    <a class="s-brand" href="#top"><i class="fas fa-seedling"></i> GeoClass</a>
+    <a class="s-brand" href="#top"><img class="s-logo" src="logo.png" alt=""> TerraClass</a>
     <button class="s-burger" id="siteBurger" aria-label="Меню"><i class="fas fa-bars"></i></button>
     <nav class="s-nav" id="siteNav">
       <a href="#top">Главная</a>
@@ -79,7 +80,7 @@
         <a class="s-btn s-btn-ghost" href="#features"><i class="far fa-circle-play"></i> Узнать больше</a>
       </div>
       <div class="s-facts">
-        <div><b>10 м</b><span>разрешение снимков Sentinel-2</span></div>
+        <div><b>10 м</b><span>разрешение Sentinel-2</span></div>
         <div><b>5 суток</b><span>частота съёмки территории</span></div>
         <div><b>8</b><span>открытых источников данных</span></div>
         <div><b>3</b><span>паспорта участка бесплатно</span></div>
@@ -88,7 +89,7 @@
     <aside class="s-hero-about s-glass">
       <div class="ab-eyebrow">О проекте</div>
       <h2>Предварительная проверка земельного участка за несколько минут</h2>
-      <p>GeoClass — геоаналитический портал для оценки земельных участков. Вы изучаете территорию бесплатными инструментами, а затем заказываете машинный комплексный анализ и получаете структурированный отчёт.</p>
+      <p>TerraClass — геоаналитический портал для оценки земельных участков. Вы изучаете территорию бесплатными инструментами, а затем заказываете машинный комплексный анализ и получаете структурированный отчёт.</p>
       <ul>
         <li><b>Бесплатно:</b> карта, слои, измерения, профили рельефа</li>
         <li><b>Полный анализ:</b> рельеф, вода, инфраструктура, спутниковые индексы, классификация земель</li>
@@ -124,7 +125,7 @@
     </nav>
     <!-- ОКНО «СПРАВКА»: открывается на всю карту (как паспорт участка); содержимое — help.html + help.css -->
     <div class="gc-help-win" id="gcHelpWin" hidden role="dialog" aria-label="Справка">
-        <div class="pp-top"><button class="pp-btn" id="gcHelpClose" title="Вернуться к карте" type="button"><i class="fas fa-arrow-left"></i> К карте</button><h2>Справка по карте GeoClass</h2><span class="gc-help-sub">интерфейс · функционал · шаги по вкладкам · источники данных</span></div>
+        <div class="pp-top"><button class="pp-btn" id="gcHelpClose" title="Вернуться к карте" type="button"><i class="fas fa-arrow-left"></i> К карте</button><h2>Справка по карте TerraClass</h2><span class="gc-help-sub">интерфейс · функционал · шаги по вкладкам · источники данных</span></div>
         <iframe class="gc-help-body" src="help.html" title="Справка" loading="lazy"></iframe>
     </div>
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
@@ -1594,17 +1595,17 @@
     <div class="s-flabel"><i class="fas fa-circle-check"></i> Бесплатно и самостоятельно</div>
     <div class="s-fgrid">
       <div class="s-fcard"><div class="s-ico"><i class="fas fa-layer-group"></i></div><div><h3>Подложки и спутник</h3><p>Схемы, топокарты, спутник и гибриды — в один клик.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="gc-pent"></i></div><div><h3>Участок и измерения</h3><p>Рисуйте или загружайте контур (KML, GeoJSON, Excel, XML Росреестра), меряйте длину и площадь.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-mountain"></i></div><div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия и уклоны.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cube"></i></div><div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-route"></i></div><div><h3>Логистика</h3><p>Буфер, дороги и водоёмы OSM, расстояния до ближайших.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-chart-area"></i></div><div><h3>Аналитические слои</h3><p>Land Cover, NDVI и почвенные карты.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-file-export"></i></div><div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с привязкой.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-satellite"></i></div><div><h3>Снимки и индексы</h3><p>NDVI, NDMI, NBR по датам и сравнение изменений.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-flask"></i></div><div><h3>Почвенный анализ</h3><p>pH, углерод, азот и гранулометрия по данным SoilGrids.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-landmark"></i></div><div><h3>Кадастр</h3><p>Границы и сведения об участках из НСПД.</p></div></div>
-      <div class="s-fcard"><div class="s-ico"><i class="fas fa-temperature-half"></i></div><div><h3>Агро и климат</h3><p>Сумма температур, заморозки и климатическая справка.</p></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="gc-pent"></i></div><div><h3>Участок и измерения</h3><p>Рисуйте или загружайте контур (KML, GeoJSON, Excel, XML Росреестра), меряйте длину и площадь.</p><span class="s-links"><a href="#map-section" data-open-bp="shape"><i class="fas fa-arrow-up-right-from-square"></i>Границы</a><a href="#map-section" data-open-bp="measure"><i class="fas fa-arrow-up-right-from-square"></i>Измерения</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-mountain"></i></div><div><h3>Рельеф</h3><p>Профиль высот по линии, гипсометрия и уклоны.</p><span class="s-links"><a href="#map-section" data-open-bp="profile"><i class="fas fa-arrow-up-right-from-square"></i>Профиль</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cube"></i></div><div><h3>3D-режим</h3><p>Рельеф, 3D-здания OSM, деревья и импорт моделей.</p><span class="s-links"><a href="#map-section" data-open-bp="3d"><i class="fas fa-arrow-up-right-from-square"></i>3D</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-route"></i></div><div><h3>Логистика</h3><p>Буфер, дороги и водоёмы OSM, расстояния до ближайших.</p><span class="s-links"><a href="#map-section" data-open-bp="logistics"><i class="fas fa-arrow-up-right-from-square"></i>Логистика</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-chart-area"></i></div><div><h3>Аналитические слои</h3><p>Land Cover, NDVI и почвенные карты.</p><span class="s-links"><a href="#map-section" data-open-bp="ndvi"><i class="fas fa-arrow-up-right-from-square"></i>NDVI</a><a href="#map-section" data-open-bp="chem"><i class="fas fa-arrow-up-right-from-square"></i>Почвы</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-cloud-sun-rain"></i></div><div><h3>Погода</h3><p>Радар осадков и прогноз на 7 дней.</p><span class="s-links"><a href="#map-section" data-open-bp="weather"><i class="fas fa-arrow-up-right-from-square"></i>Прогноз</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-file-export"></i></div><div><h3>Экспорт карты</h3><p>PDF, PNG, JPEG, WebP и GeoTIFF с привязкой.</p><span class="s-links"><a href="#map-section" data-open-bp="export"><i class="fas fa-arrow-up-right-from-square"></i>Экспорт</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-satellite"></i></div><div><h3>Снимки и индексы</h3><p>NDVI, NDMI, NBR по датам и сравнение изменений.</p><span class="s-links"><a href="#map-section" data-open-bp="dates"><i class="fas fa-arrow-up-right-from-square"></i>Снимки</a><a href="#map-section" data-open-bp="ndvi"><i class="fas fa-arrow-up-right-from-square"></i>NDVI</a><a href="#map-section" data-open-bp="ndmi"><i class="fas fa-arrow-up-right-from-square"></i>NDMI</a><a href="#map-section" data-open-bp="nbr"><i class="fas fa-arrow-up-right-from-square"></i>NBR</a><a href="#map-section" data-open-bp="change"><i class="fas fa-arrow-up-right-from-square"></i>Сравнение</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-flask"></i></div><div><h3>Почвенный анализ</h3><p>pH, углерод, азот и гранулометрия по данным SoilGrids.</p><span class="s-links"><a href="#map-section" data-open-bp="chem"><i class="fas fa-arrow-up-right-from-square"></i>Анализ</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-landmark"></i></div><div><h3>Кадастр</h3><p>Границы и сведения об участках из НСПД.</p><span class="s-links"><a href="#map-section" data-open-bp="cadastre"><i class="fas fa-arrow-up-right-from-square"></i>Кадастр</a></span></div></div>
+      <div class="s-fcard"><div class="s-ico"><i class="fas fa-temperature-half"></i></div><div><h3>Агро и климат</h3><p>Сумма температур, заморозки и климатическая справка.</p><span class="s-links"><a href="#map-section" data-open-bp="gdd"><i class="fas fa-arrow-up-right-from-square"></i>Тепло</a><a href="#map-section" data-open-bp="frost"><i class="fas fa-arrow-up-right-from-square"></i>Заморозки</a><a href="#map-section" data-open-bp="climate"><i class="fas fa-arrow-up-right-from-square"></i>Климат</a><a href="#map-section" data-open-bp="agro"><i class="fas fa-arrow-up-right-from-square"></i>Агро</a></span></div></div>
     </div>
     <div class="s-flabel gold"><i class="fas fa-star"></i> Платно</div>
     <div class="s-fgrid c3">
@@ -1700,7 +1701,7 @@
     </div>
   </div>
 <footer class="s-footer">
-  <div class="s-wrap"><span>© <span id="siteYear"></span> GeoClass</span><span><a href="#top">Наверх ↑</a></span></div>
+  <div class="s-wrap"><span>© <span id="siteYear"></span> TerraClass</span><span><a href="#top">Наверх ↑</a></span></div>
 </footer>
 </section>
 
