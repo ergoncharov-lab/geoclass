@@ -358,7 +358,7 @@
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
         tab: { analysis: 'Анализ участка', sources: 'Источники анализа', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
-        bp: { userlayers: 'Свои слои', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
+        bp: { userlayers: 'Свои слои', objects: 'Объекты на карте', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
               weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', shape: 'Границы и форма', agro: 'Агрокалькулятор', matrix: 'Матрица расстояний', change: 'Сравнение снимков', catalog: 'Каталог данных' }
     };
     function setView(v, title) {

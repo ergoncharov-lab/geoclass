@@ -265,7 +265,7 @@
                     <div class="sp-group-title" style="margin-top:4px">Слои</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="soil" style="--c:#84cc16" title="Почвы&#10;Векторная почвенная карта 1:2,5 млн: контуры почв и коды, клик по контуру — сведения."><i class="fas fa-seedling"></i><span>Почвы</span></button>
-                        <button type="button" class="sp-tile sp-stub" style="--c:#ef4444" title="Границы&#10;Раздел в разработке."><i class="fas fa-border-all"></i><span>Границы</span></button>
+                        <button type="button" class="sp-tile" data-bp="objects" style="--c:#ef4444" title="Объекты на карте&#10;Всё, что вы нарисовали или загрузили в этом сеансе: участки, линии, значки, текст — с площадью и длиной, показом на карте и удалением."><i class="fas fa-shapes"></i><span>Объекты на карте</span></button>
                         <button type="button" class="sp-tile" data-bp="cadastre" style="--c:#6366f1" title="Кадастр&#10;Кадастровая карта НСПД: границы участков и кадастровые номера."><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#16a34a" title="Лес&#10;Раздел в разработке."><i class="fas fa-tree"></i><span>Лес</span></button>
                         <button type="button" class="sp-tile" id="ulOpenBtn" data-bp="userlayers" style="--c:#0d9488" title="Свои слои&#10;Подключите собственный слой: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON по ссылке. Подключённые слои сохраняются в браузере и возвращаются при следующем открытии."><i class="fas fa-plus"></i><span>Свои слои</span></button>
@@ -595,6 +595,7 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="userlayers" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="cadastre" title="Кадастр: слой НСПД"><i class="fas fa-map-location-dot"></i><span>Кадастр</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="soil" title="Почвы: векторная почвенная карта"><i class="fas fa-seedling"></i><span>Почвы</span></button>
+          <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="objects" title="Объекты на карте: всё, что нарисовано или загружено в этом сеансе"><i class="fas fa-shapes"></i><span>Объекты на карте</span></button>
           </div>
 
           <!-- ВКЛАДКА «ГЛАВНАЯ»: легенда включённых аналитических слоёв -->
@@ -1113,6 +1114,15 @@
               <div class="dw-block">
                   <div class="dw-title">Легенда</div>
                   <div id="soilLegend"></div>
+              </div>
+          </div>
+
+          <!-- ОБЪЕКТЫ НА КАРТЕ: всё, что нарисовано или загружено в текущем сеансе (полигоны и импорт — drawnItems, «Рисование» — sketchItems); список строит ux-extras.js -->
+          <div class="bottom-panel-body bp-pane bp-draw bp-objs" data-bp-pane="objects" role="tabpanel">
+              <div class="dw-block">
+                  <div class="dw-title">Объекты на карте <span class="badge" id="objMapBadge">0</span></div>
+                  <div id="objMapList"></div>
+                  <div class="ob-sum" id="objMapSum"></div>
               </div>
           </div>
 

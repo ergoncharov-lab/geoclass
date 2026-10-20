@@ -1339,3 +1339,124 @@
     }
     btn.addEventListener('click', function (e) { e.stopPropagation(); start(); });
 })();
+
+/* ===== «Объекты на карте» (вкладка «Слои»): всё, что пользователь нарисовал или загрузил в текущем сеансе =====
+   Источники: drawnItems (полигоны, круги, импорт KML / GeoJSON / XML Росреестра) и sketchItems (линии, значки, текст из «Рисования»).
+   Файлы со многими фигурами раскрываются до отдельных строк. Список обновляется сам при любых изменениях. */
+(function () {
+    'use strict';
+    var list = document.getElementById('objMapList');
+    if (!list || typeof drawnItems === 'undefined' || typeof sketchItems === 'undefined') return;
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var nf = function (v, d) { return Number(v).toLocaleString('ru-RU', { maximumFractionDigits: d }); };
+
+    var st = document.createElement('style');
+    st.textContent = '.ob-row{display:flex;align-items:center;gap:8px;padding:6px 8px;margin:4px 0;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer}' +
+        '.ob-row:hover{border-color:#10b981;background:#f0fdf4}.ob-row>i{width:18px;text-align:center;color:#059669;flex:none}' +
+        '.ob-nm{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+        '.ob-nm small{display:block;font-weight:400;font-size:11px;color:#64748b}.ob-mt{font-size:12px;color:#334155;white-space:nowrap}' +
+        '.ob-b{border:0;background:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:6px}.ob-b:hover{color:#059669;background:#dcfce7}.ob-b[data-a="del"]:hover{color:#ef4444;background:#fee2e2}' +
+        '.ob-sum{margin-top:8px;font-size:12px;color:#475569;display:flex;gap:14px;flex-wrap:wrap}.ob-empty{padding:10px 2px;font-size:12.5px;color:#64748b;line-height:1.45}';
+    document.head.appendChild(st);
+
+    var items = [];
+    function flat(a, out) { a.forEach(function (x) { Array.isArray(x) ? flat(x, out) : out.push(x); }); return out; }
+    function lenOf(l) {
+        var ll = l.getLatLngs(), parts = Array.isArray(ll[0]) && !(ll[0] instanceof L.LatLng) ? ll : [ll], m = 0;
+        parts.forEach(function (p) { p = flat([p], []); for (var i = 1; i < p.length; i++) m += map.distance(p[i - 1], p[i]); });
+        return m;
+    }
+    // фигура (не группа) → строка списка
+    function describe(l, parent, top, sketch) {
+        var it = { l: l, parent: parent, top: top, sketch: sketch, name: '', type: '', icon: 'fa-shapes', mt: '', ha: 0, m: 0 };
+        var sk = l._sk, p = (l.feature && l.feature.properties) || {};
+        if (l instanceof L.Circle) { it.type = 'Круг'; it.icon = 'fa-circle'; }
+        else if (l instanceof L.CircleMarker) { it.type = 'Точка'; it.icon = 'fa-circle-dot'; }
+        else if (l instanceof L.Marker) { it.type = 'Метка'; it.icon = 'fa-location-dot'; }
+        else if (l instanceof L.Rectangle) { it.type = 'Прямоугольник'; it.icon = 'fa-vector-square'; }
+        else if (l instanceof L.Polygon) { it.type = 'Полигон'; it.icon = 'fa-draw-polygon'; }
+        else if (l instanceof L.Polyline) { it.type = 'Линия'; it.icon = 'fa-slash'; }
+        else return null;
+        if (sk) {
+            if (typeof SK_KIND_NAMES !== 'undefined' && SK_KIND_NAMES[sk.kind]) it.type = SK_KIND_NAMES[sk.kind];
+            if (typeof SK_KIND_ICONS !== 'undefined' && SK_KIND_ICONS[sk.kind]) it.icon = String(SK_KIND_ICONS[sk.kind]).replace(/^fa[sr]?\s+/, '');
+            it.name = sk.kind === 'text' ? '«' + sk.text + '»' : sk.name;
+        } else if (l._gcName) it.name = l._gcName;
+        else if (p.cad_number) it.name = p.cad_number + (p.contour_count > 1 ? ' · контур ' + p.contour : '');
+        else if (p.name || p.Name || p.title) it.name = p.name || p.Name || p.title;
+        else it.name = l._gcDef || '';
+        if (l instanceof L.Circle || l instanceof L.Polygon) {
+            var d = typeof getObjectCenterAndArea === 'function' ? getObjectCenterAndArea(l) : null;
+            if (d) { it.ha = d.area; it.mt = nf(d.area, 3) + ' га'; }
+        } else if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+            it.m = lenOf(l); it.mt = it.m < 1000 ? nf(it.m, 0) + ' м' : nf(it.m / 1000, 2) + ' км';
+        }
+        it.src = sketch ? 'Рисование' : (l.feature ? 'Загружено из файла' : 'Нарисовано');
+        return it;
+    }
+    function collect(group, sketch) {
+        group.eachLayer(function (top) {
+            (function walk(l, parent) {
+                if (typeof l.eachLayer === 'function') { l.eachLayer(function (c) { walk(c, l); }); return; }
+                var it = describe(l, parent, top, sketch);
+                if (it) items.push(it);
+            })(top, group);
+        });
+    }
+    function render() {
+        items = [];
+        collect(drawnItems, false); collect(sketchItems, true);
+        var cnt = {}, ha = 0, m = 0;
+        items.forEach(function (it) { if (!it.name) { var k = it.type + (it.l.feature ? '*' : ''); cnt[k] = (cnt[k] || 0) + 1; it.name = it.type + (it.l.feature ? ' из файла ' : ' ') + cnt[k]; } ha += it.ha; m += it.m; });
+        $('objMapBadge').textContent = items.length;
+        list.innerHTML = items.length ? items.map(function (it, i) {
+            return '<div class="ob-row" data-i="' + i + '" title="Показать на карте и выбрать"><i class="fas ' + it.icon + '"></i>' +
+                '<span class="ob-nm">' + esc(it.name) + '<small>' + esc(it.type + ' · ' + it.src) + '</small></span>' +
+                (it.mt ? '<span class="ob-mt">' + it.mt + '</span>' : '') +
+                '<button type="button" class="ob-b" data-a="zoom" title="Показать на карте"><i class="fas fa-crosshairs"></i></button>' +
+                '<button type="button" class="ob-b" data-a="del" title="Удалить"><i class="fas fa-xmark"></i></button></div>';
+        }).join('') : '<div class="ob-empty">Пока ничего нет. Нарисуйте участок, линию или значок либо загрузите файл (KML, GeoJSON, Excel, XML Росреестра) — объекты появятся здесь.</div>';
+        $('objMapSum').innerHTML = items.length ? '<span>Объектов: <b>' + items.length + '</b></span>' + (ha ? '<span>Площадь: <b>' + nf(ha, 3) + ' га</b></span>' : '') + (m ? '<span>Длина линий: <b>' + (m < 1000 ? nf(m, 0) + ' м' : nf(m / 1000, 2) + ' км') + '</b></span>' : '') : '';
+    }
+    var tm = 0;
+    function refresh() { clearTimeout(tm); tm = setTimeout(render, 60); }
+
+    function zoomTo(l) {
+        if (l.getBounds && !(l instanceof L.CircleMarker && !(l instanceof L.Circle))) map.fitBounds(l.getBounds().pad(0.25), { maxZoom: 18 });
+        else map.setView(l.getLatLng(), Math.max(map.getZoom(), 16));
+    }
+    list.addEventListener('click', function (e) {
+        var row = e.target.closest('.ob-row'); if (!row) return;
+        var it = items[+row.dataset.i]; if (!it) return;
+        var act = (e.target.closest('.ob-b') || {}).dataset;
+        act = act && act.a;
+        if (act === 'del') {
+            if (it.sketch) skDeleteLayer(it.l);
+            else if (it.top === it.l) deleteObject(drawnItems.getLayers().indexOf(it.l));
+            else {
+                it.parent.removeLayer(it.l);
+                if (typeof it.top.getLayers === 'function' && !it.top.getLayers().length) drawnItems.removeLayer(it.top);
+                if (typeof updateAllLabels === 'function') updateAllLabels();
+                updateObjectList(); updateStatus('🗑️ Объект удалён');
+            }
+            refresh(); return;
+        }
+        zoomTo(it.l);
+        if (act === 'zoom') return;
+        if (it.sketch) skSelect(it.l);
+        else if (it.top === it.l && typeof selectObject === 'function') selectObject(drawnItems.getLayers().indexOf(it.l));
+    });
+
+    // автообновление: добавление / удаление фигур, правка, импорт, переименование, действия «Рисования»
+    ['layeradd', 'layerremove'].forEach(function (ev) { drawnItems.on(ev, refresh); sketchItems.on(ev, refresh); });
+    map.on('draw:created draw:edited draw:deleted', refresh);
+    [['updateObjectList'], ['skRenderList']].forEach(function (n) {
+        var o = window[n[0]];
+        if (typeof o === 'function') window[n[0]] = function () { var r = o.apply(this, arguments); refresh(); return r; };
+    });
+    document.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('.bp-tab[data-bp-tab="objects"], .sp-tile[data-bp="objects"]')) setTimeout(render, 0);
+    });
+    render();
+})();

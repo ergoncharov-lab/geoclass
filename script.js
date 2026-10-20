@@ -4891,7 +4891,7 @@ const RR_MSK = {
     '54': { name: 'МСК-54 (Новосибирская область)', fn: -5612900.566, zones: rrZ(1, 74.73333333333, 3, 4, 1250000) },
     '55': { name: 'МСК-55 (Омская область)', fn: -5612900.563, zones: rrZ(1, 71.73333333333, 3, 2, 1250000) },
     '56': { name: 'МСК-56 (Оренбургская область)', fn: -5309414.7, zones: rrZ(1, 52.03333333333, 3, 4, 1300000) },
-    '57': { name: 'МСК-57 (Орловская область)', fn: -12900.566, zones: rrZ(1, 32.48333333333, 3, 3, 1250000), fnAlt: -5412900.566 },
+    '57': { name: 'МСК-57 (Орловская область)', fn: -5512900.566, zones: rrZ(1, 35.48333333333, 3, 2, 1250000), bbox: [34.5, 51.8, 38.8, 54.0] },
     '58': { name: 'МСК-58 (Пензенская область)', fn: -5514743.504, zones: rrZ(1, 43.05, 3, 2, 1300000) },
     '59': { name: 'МСК-59 (Пермский край)', fn: -5914743.504, zones: rrZ(1, 53.55, 3, 3, 1250000) },
     '60': { name: 'МСК-60 (Псковская область)', fn: -5911057.63, zones: rrZ(1, 27.95, 3, 3, 1250000) },
@@ -5098,12 +5098,12 @@ function rrXmlToGeoJSON(xmlText) {
 
     // ----- атрибуты объекта (без персональных данных) -----
     const cad = rrText(rec, 'object/common_data/cad_number') || rrText(root, 'land_record/object/common_data/cad_number');
-    const areaVal = rrNum(rrText(rec, 'params/area/value'));
+    const areaVal = rrNum(rrText(rec, 'params/area/value')) ?? rrNum(rrText(rec, 'params/area'));   // у зданий площадь — просто текст в params/area
     const inacc = rrNum(rrText(rec, 'params/area/inaccuracy'));
     const props = {
         source: 'rosreestr',
         cad_number: cad || (rrAll(root, 'cad_number')[0] || {}).textContent || '',
-        object_type: rrText(rec, 'object/common_data/type/value'),
+        object_type: ({ land_record: 'Земельный участок', build_record: 'Здание', construction_record: 'Сооружение', premises_record: 'Помещение' })[rrText(rec, 'object/common_data/type/value')] || rrText(rec, 'object/common_data/type/value'),
         subtype: rrText(rec, 'object/subtype/value'),
         category: rrText(rec, 'params/category/type/value'),
         permitted_use: rrText(rec, 'params/permitted_use/permitted_use_established/by_document')
@@ -5140,19 +5140,37 @@ function rrXmlToGeoJSON(xmlText) {
     };
 
     // ----- геометрия: все entity_spatial, внутри — кольца spatial_element -----
-    const spatials = rrAll(root, 'entity_spatial').filter(e => rrAll(e, 'ordinate').length);
+    // Части объекта (object_part — обременения, зоны, сервитуты) — не граница участка: в контуры не берутся
+    const isPart = e => { for (let p = e.parentElement; p; p = p.parentElement) if (/^object_parts?$/i.test(p.localName)) return true; return false; };
+    const allSpatials = rrAll(root, 'entity_spatial').filter(e => rrAll(e, 'ordinate').length);
+    const spatials = allSpatials.filter(e => !isPart(e));
     if (!spatials.length) {
         throw new Error('В выписке нет координат границ (раздел с контурами отсутствует)');
     }
 
     const warnings = [];
+    if (allSpatials.length > spatials.length) warnings.push('контуры частей участка (обременения, зоны) в границу не включены: ' + (allSpatials.length - spatials.length));
     const features = [];
     let skLabel = '';
     let hasArcs = false;
 
     spatials.forEach((es, idx) => {
-        const skText = rrText(es, 'sk_id');
-        const sk = rrParseSk(skText);
+        let skText = rrText(es, 'sk_id');
+        let sk = rrParseSk(skText);
+        if (!sk) {
+            // в этом контуре СК нет (или без номера МСК, напр. «СК кадастрового округа») — берём МСК из других контуров выписки,
+            // иначе — по коду региона из кадастрового номера (первые две цифры)
+            const other = rrAll(root, 'sk_id').map(e => e.textContent.trim()).find(t => rrParseSk(t));
+            const rc = /^(\d{1,3}):/.exec(props.cad_number || '');
+            if (other) {
+                skText = other; sk = rrParseSk(other);
+            } else if (rc) {
+                const code = rc[1].length < 2 ? '0' + rc[1] : rc[1];
+                const w = 'система координат указана как «' + (skText || 'не указана') + '» — принята МСК-' + code + ' по региону из кадастрового номера, проверьте положение на карте';
+                if (warnings.indexOf(w) < 0) warnings.push(w);
+                skText = 'МСК-' + code + ' ' + skText; sk = rrParseSk(skText);
+            }
+        }
         if (!sk) {
             throw new Error('Система координат «' + (skText || 'не указана') + '» пока не поддерживается: приложение читает местные системы координат МСК-XX субъектов РФ.');
         }
