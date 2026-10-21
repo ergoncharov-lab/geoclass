@@ -188,17 +188,40 @@ const CompositeTileLayer = L.LayerGroup.extend({
 // Это те же данные, что лежат в Esri Living Atlas «World Soils 250m», но отдаются публичным WMS без токена.
 // Показываем среднее прогнозное значение для верхнего слоя почвы 0–5 см.
 const SOILGRIDS_WMS_URL = 'https://maps.isric.org/mapserv?map=/map/';
+// Тайлы SoilGrids: WMS 1.1.1 (SRS), 256 px. Порядок попыток при ошибке тайла:
+// 0 — через локальный прокси /isric? (EPSG:3857), 1 — напрямую в EPSG:3857, 2 — напрямую в EPSG:4326.
+function soilWmsQuery(property, depth, srs, bbox, size) {
+    return `map=/map/${property}.map&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${property}_${depth}_mean` +
+        `&STYLES=&SRS=${srs}&BBOX=${bbox.join(',')}&WIDTH=${size}&HEIGHT=${size}&FORMAT=image/png&TRANSPARENT=TRUE`;
+}
+const SoilWmsLayer = L.TileLayer.WMS.extend({
+    _soilUrl: function (coords, mode) {
+        const b = this._tileCoordsToBounds(coords), size = this.getTileSize().x, o = this.options;
+        if (mode === 2) return 'https://maps.isric.org/mapserv?' + soilWmsQuery(o.soilProp, o.soilDepth, 'EPSG:4326', [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], size);
+        const nw = L.CRS.EPSG3857.project(b.getNorthWest()), se = L.CRS.EPSG3857.project(b.getSouthEast());
+        return (mode === 0 ? '/isric?' : 'https://maps.isric.org/mapserv?') + soilWmsQuery(o.soilProp, o.soilDepth, 'EPSG:3857', [nw.x, se.y, se.x, nw.y], size);
+    },
+    getTileUrl: function (coords) { return this._soilUrl(coords, 0); },
+    createTile: function (coords, done) {
+        const tile = L.TileLayer.WMS.prototype.createTile.call(this, coords, done);
+        tile._soilTry = 0;
+        return tile;
+    }
+});
 function soilGridsLayer(property, depth = '0-5cm') {
     const base = esriCached('Canvas/World_Light_Gray_Base', '&copy; Esri', 16, { zIndex: 1 });
-    const data = L.tileLayer.wms(`${SOILGRIDS_WMS_URL}${property}.map`, {
-        layers: `${property}_${depth}_mean`,
-        version: '1.3.0',
-        format: 'image/png',
-        transparent: true,
+    const data = new SoilWmsLayer(SOILGRIDS_WMS_URL + property + '.map', {
+        soilProp: property, soilDepth: depth,
         opacity: 0.8,
         maxZoom: 19,
         zIndex: 2,
         attribution: '&copy; ISRIC SoilGrids (CC BY 4.0)'
+    });
+    data.on('tileerror', e => {
+        const t = e.tile;
+        if (!t || t._soilTry === undefined || t._soilTry >= 2) return;
+        t._soilTry++;
+        t.src = data._soilUrl(e.coords, t._soilTry);
     });
     const labels = esriCached('Canvas/World_Light_Gray_Reference', '', 16, { zIndex: 3 });
     return new CompositeTileLayer([base, data, labels]);
@@ -253,7 +276,15 @@ const SENTINEL = {
     items: {}, files: {}, projs: {},
     queue: [], running: 0, warned: false, hostIdx: 0,
     contrast: { min: 0.2, max: 0.9 },   // диапазон шкалы «Контрастного NDVI»
-    maxJobs: 6,                       // одновременных расчётов тайлов (лимит браузера — 6 соединений на хост)
+    maxJobs: snAdaptiveMaxJobs(),     // одновременных расчётов тайлов; зависит от скорости сети (см. snAdaptiveMaxJobs)
+    lowQueue: [], lowRunning: 0,      // очередь фоновой предзагрузки (низкий приоритет)
+    prefetchGen: 0, prefetchTimer: 0,
+    // LRU-кэш блоков (512×512) в памяти: хранит промисы чтения, поэтому 4 тайла блока делят один запрос
+    chunkMem: {
+        max: 64, map: new Map(),
+        get(k) { const v = this.map.get(k); if (v !== undefined) { this.map.delete(k); this.map.set(k, v); } return v; },
+        set(k, v) { this.map.delete(k); this.map.set(k, v); while (this.map.size > this.max) this.map.delete(this.map.keys().next().value); }
+    },
     tileMem: new Map(), tileMemMax: 300,   // кэш готовых тайлов в памяти
     pool: undefined, proxyOk: undefined, lastDay: ''
 };
@@ -306,16 +337,32 @@ function snMeta(item, names) {
     });
 }
 
-// ограничение числа одновременных расчётов тайлов (новые тайлы — в приоритете, ушедшие с экрана — пропускаются)
-function snRun(fn, dead) {
-    return new Promise((res, rej) => { SENTINEL.queue.push({ fn, res, rej, dead }); snPump(); });
+// число одновременных расчётов тайлов по типу сети (в браузере лимит — 6 соединений на хост, остальное ждёт в очереди)
+function snAdaptiveMaxJobs() {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const t = c && c.effectiveType;
+    return t === '4g' ? 10 : t === '3g' ? 5 : t === '2g' ? 2 : 6;
+}
+(function () {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (c && c.addEventListener) c.addEventListener('change', () => { SENTINEL.maxJobs = snAdaptiveMaxJobs(); snPump(); });
+})();
+
+// ограничение числа одновременных расчётов тайлов (новые тайлы — в приоритете, ушедшие с экрана — пропускаются).
+// low = true — фоновая предзагрузка: берётся только когда нет обычных задач и занимает не больше трети слотов
+function snRun(fn, dead, low) {
+    return new Promise((res, rej) => { (low ? SENTINEL.lowQueue : SENTINEL.queue).push({ fn, res, rej, dead, low: !!low }); snPump(); });
 }
 function snPump() {
-    while (SENTINEL.running < SENTINEL.maxJobs && SENTINEL.queue.length) {
-        const j = SENTINEL.queue.pop();
+    while (SENTINEL.running < SENTINEL.maxJobs) {
+        let j;
+        if (SENTINEL.queue.length) j = SENTINEL.queue.pop();
+        else if (SENTINEL.lowQueue.length && SENTINEL.lowRunning < Math.max(1, Math.floor(SENTINEL.maxJobs / 3))) j = SENTINEL.lowQueue.shift();   // ближайшие к центру — первыми
+        else break;
         if (j.dead && j.dead()) { j.res(); continue; }   // тайл уже убран с карты — не тратим на него трафик
         SENTINEL.running++;
-        j.fn().then(j.res, j.rej).finally(() => { SENTINEL.running--; snPump(); });
+        if (j.low) SENTINEL.lowRunning++;
+        j.fn().then(j.res, j.rej).finally(() => { SENTINEL.running--; if (j.low) SENTINEL.lowRunning--; snPump(); });
     }
 }
 
@@ -324,7 +371,7 @@ function snPool() {
     if (SENTINEL.pool === undefined) {
         try {
             SENTINEL.pool = (typeof GeoTIFF !== 'undefined' && GeoTIFF.Pool && /^https?:$/.test(location.protocol))
-                ? new GeoTIFF.Pool(Math.max(2, Math.min(4, navigator.hardwareConcurrency || 2))) : null;
+                ? new GeoTIFF.Pool(Math.max(2, Math.min(8, navigator.hardwareConcurrency || 2))) : null;
         } catch (e) { SENTINEL.pool = null; }
     }
     return SENTINEL.pool || undefined;
@@ -534,7 +581,7 @@ function snOpen(href) {
                 try {
                     const imgs = [];
                     await snRace((async () => {
-                        const tiff = await GeoTIFF.fromUrl(cands[ci], { blockSize: 512 * 1024, cacheSize: 200 });
+                        const tiff = await GeoTIFF.fromUrl(cands[ci], { blockSize: 1024 * 1024, cacheSize: 400 });
                         const n = await tiff.getImageCount();
                         for (let i = 0; i < n; i++) {
                             const im = await tiff.getImage(i);
@@ -569,7 +616,7 @@ function snProj(epsg) {
 }
 
 // читает из COG нужное окно с подходящим уровнем детализации
-async function snRead(f, minE, minN, maxE, maxN, g, rgb) {
+async function snRead(f, minE, minN, maxE, maxN, g, rgb, maxDim) {
     let lv = 0;
     for (let i = f.imgs.length - 1; i >= 0; i--) {
         if (f.rx * f.W / f.imgs[i].w <= g * 1.0001) { lv = i; break; }
@@ -579,6 +626,7 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb) {
     const x0 = Math.max(0, Math.floor((minE - f.ox) / rx) - 1), x1 = Math.min(L.w, Math.ceil((maxE - f.ox) / rx) + 1);
     const y0 = Math.max(0, Math.floor((f.oy - maxN) / ry) - 1), y1 = Math.min(L.h, Math.ceil((f.oy - minN) / ry) + 1);
     if (x1 <= x0 || y1 <= y0 || (x1 - x0) * (y1 - y0) > 4e6) return null;
+    if (maxDim && (x1 - x0 > maxDim || y1 - y0 > maxDim)) return null;   // блок слишком велик (слабые устройства) — вызывающий прочитает тайл отдельно
     let bands, lastErr;
     for (let attempt = 0; attempt < 3 && !bands; attempt++) {
         try {
@@ -599,8 +647,23 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb) {
 
 const SN_NODES = 9, SN_STEP = 32;
 
-// шаг 1: открывает файлы сцены и читает нужные окна (для нескольких сцен тайла вызывается параллельно)
-async function snLoadScene(key, item, lon, lat) {
+const SN_CHUNK_MAX = 1024;   // максимальная сторона блока чтения, пикселей (не больше — чтобы не перегружать память)
+
+// кэш блоков: значение — промис чтения; ошибка не кэшируется
+function snChunk(k, loader) {
+    const c = SENTINEL.chunkMem;
+    let p = c.get(k);
+    if (!p) {
+        p = loader();
+        c.set(k, p);
+        p.catch(() => { if (c.map.get(k) === p) c.map.delete(k); });
+    }
+    return p;
+}
+
+// шаг 1: открывает файлы сцены и читает нужные окна (для нескольких сцен тайла вызывается параллельно).
+// Окно читается сразу для блока 512×512 (2×2 тайла) и кэшируется; blk = { id, tid, lon, lat } — сетка блока
+async function snLoadScene(key, item, lon, lat, blk) {
     const names = SN_ASSETS[key];
     const files = await Promise.all(names.map(nm => {
         const a = item.assets && item.assets[nm];
@@ -624,7 +687,27 @@ async function snLoadScene(key, item, lon, lat) {
     }
     if (minE > f0.ox + f0.W * f0.rx || maxE < f0.ox || maxN < f0.oy - f0.H * f0.ry || minN > f0.oy) return null;   // тайл вне сцены
     const g = Math.hypot(E[0][SN_NODES - 1] - E[0][0], N[0][SN_NODES - 1] - N[0][0]) / 256;
-    const rd = await Promise.all(files.map((f, k) => snRead(f, minE, minN, maxE, maxN, g, names[k] === 'visual')));
+    let rd;
+    if (blk) {
+        let bminE = Infinity, bminN = Infinity, bmaxE = -Infinity, bmaxN = -Infinity, bg = 0, q0 = null;
+        for (let b = 0; b < SN_NODES; b++) {
+            for (let a = 0; a < SN_NODES; a++) {
+                const q = fwd.forward([blk.lon[b][a], blk.lat[b][a]]);
+                if (q[0] < bminE) bminE = q[0]; if (q[0] > bmaxE) bmaxE = q[0];
+                if (q[1] < bminN) bminN = q[1]; if (q[1] > bmaxN) bmaxN = q[1];
+                if (!b && !a) q0 = q;
+                if (!b && a === SN_NODES - 1) bg = Math.hypot(q[0] - q0[0], q[1] - q0[1]) / 512;
+            }
+        }
+        // все каналы читаются параллельно; блок 512×512 покрывает 4 тайла. Если блок больше SN_CHUNK_MAX — читаем один тайл
+        rd = await Promise.all(files.map((f, k) => {
+            const rgb = names[k] === 'visual', tag = f.key + '|' + (rgb ? 'rgb' : 'b1') + '|';
+            return snChunk(tag + blk.id, () => snRead(f, bminE, bminN, bmaxE, bmaxN, bg, rgb, SN_CHUNK_MAX))
+                .then(r => r || snChunk(tag + 't' + blk.tid, () => snRead(f, minE, minN, maxE, maxN, g, rgb)));
+        }));
+    } else {
+        rd = await Promise.all(files.map((f, k) => snRead(f, minE, minN, maxE, maxN, g, names[k] === 'visual')));
+    }
     if (rd.some(r => !r)) return null;
     return { item: item, E: E, N: N, rd: rd };
 }
@@ -684,10 +767,25 @@ function snPaintScene(key, S, out) {
     }
 }
 
+// сетка узлов SN_NODES×SN_NODES (lon/lat) по квадрату веб-меркатора: левый верхний угол (x0, y0), сторона size метров
+function snGrid(x0, y0, size) {
+    const R = 6378137, D = 180 / Math.PI, lon = [], lat = [];
+    for (let b = 0; b < SN_NODES; b++) {
+        lon[b] = []; lat[b] = [];
+        const my = y0 - b * SN_STEP / 256 * size;
+        const la = (2 * Math.atan(Math.exp(my / R)) - Math.PI / 2) * D;
+        for (let a = 0; a < SN_NODES; a++) {
+            lon[b][a] = (x0 + a * SN_STEP / 256 * size) / R * D;
+            lat[b][a] = la;
+        }
+    }
+    return { lon: lon, lat: lat };
+}
+
 // рисует тайл z/x/y в canvas 256×256 по выбранной дате (мозаика всех сцен этого дня).
-// Сначала смотрит в кэш (память → IndexedDB); все сцены дня читаются параллельно.
-// dead() — функция «тайл уже не нужен»; skipCache — кэш уже проверен снаружи
-async function snRenderTile(key, z, x, y, canvas, dead, skipCache) {
+// Сначала смотрит в кэш (память → IndexedDB); все сцены дня читаются параллельно, данные — блоками 512×512 (4 тайла на запрос).
+// dead() — функция «тайл уже не нужен»; skipCache — кэш уже проверен снаружи; quiet — не показывать предупреждения (фоновая предзагрузка)
+async function snRenderTile(key, z, x, y, canvas, dead, skipCache, quiet) {
     const st = SENTINEL.state[key];
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 256, 256);
@@ -699,16 +797,12 @@ async function snRenderTile(key, z, x, y, canvas, dead, skipCache) {
     if (dead && dead()) return;
     const sig = snSig(key, z, x, y);
     const size = 40075016.686 / n, x0 = -20037508.343 + x * size, y0 = 20037508.343 - y * size;
-    const R = 6378137, D = 180 / Math.PI;
-    const lon = [], lat = [];
-    for (let b = 0; b < SN_NODES; b++) {
-        lon[b] = []; lat[b] = [];
-        const my = y0 - b * SN_STEP / 256 * size;
-        const la = (2 * Math.atan(Math.exp(my / R)) - Math.PI / 2) * D;
-        for (let a = 0; a < SN_NODES; a++) {
-            lon[b][a] = (x0 + a * SN_STEP / 256 * size) / R * D;
-            lat[b][a] = la;
-        }
+    const grid = snGrid(x0, y0, size), lon = grid.lon, lat = grid.lat;
+    // блок 2×2 тайла (512×512), в который входит этот тайл
+    let blk = null;
+    if (z >= 1) {
+        const bx = x >> 1, by = y >> 1, bsize = size * 2, bg = snGrid(-20037508.343 + bx * bsize, 20037508.343 - by * bsize, bsize);
+        blk = { id: z + '/' + bx + '/' + by, tid: z + '/' + x + '/' + y, lon: bg.lon, lat: bg.lat };
     }
     const lonMin = lon[0][0], lonMax = lon[0][SN_NODES - 1], latMax = lat[0][0], latMin = lat[SN_NODES - 1][0];
     const img = ctx.createImageData(256, 256);
@@ -719,8 +813,8 @@ async function snRenderTile(key, z, x, y, canvas, dead, skipCache) {
             const item = await snItem(sc.id);
             const bb = item.bbox;
             if (bb && (bb[0] > lonMax || bb[2] < lonMin || bb[1] > latMax || bb[3] < latMin)) return null;
-            return await snLoadScene(key, item, lon, lat);
-        } catch (e) { ok = false; snWarn(e); return null; }
+            return await snLoadScene(key, item, lon, lat, blk);
+        } catch (e) { ok = false; if (!quiet) snWarn(e); return null; }
     }));
     for (const S of loaded) if (S) snPaintScene(key, S, img.data);   // порядок сцен сохраняется: сначала самые чистые
     if (SENTINEL.state[key] && SENTINEL.state[key].date === dayAtStart) {
@@ -836,6 +930,50 @@ function sentinelApply(key) {
     SENTINEL.live.forEach(l => { if (l._snKey === key && l._map) l.redraw(); });
     updateStatus('🛰️ Загрузка снимка Sentinel-2…');
     if (typeof m3d !== 'undefined' && m3d.active) m3RebuildBasemap();
+    snPrefetch();
+}
+
+// Предзагрузка соседних тайлов: после сдвига карты и выбора даты в фоне считаем тайлы в радиусе 2 от центра экрана.
+// Низкий приоритет (snRun low): обычные тайлы всегда обгоняют; готовое попадает в кэш памяти и IndexedDB.
+const SN_PREFETCH_R = 2;
+function snPrefetch() {
+    clearTimeout(SENTINEL.prefetchTimer);
+    SENTINEL.prefetchTimer = setTimeout(snPrefetchRun, 500);   // пауза: пусть сначала встанут в очередь видимые тайлы
+}
+function snPrefetchRun() {
+    const gen = ++SENTINEL.prefetchGen;
+    SENTINEL.lowQueue.splice(0).forEach(j => j.res());   // прежняя предзагрузка уже не нужна
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (c && (c.saveData || c.effectiveType === '2g' || c.effectiveType === 'slow-2g')) return;   // экономим трафик
+    if (typeof GeoTIFF === 'undefined' || typeof proj4 === 'undefined') return;
+    const seen = {}, jobs = [];
+    SENTINEL.live.forEach(l => {
+        const m = l._map, key = l._snKey, st = SENTINEL.state[key];
+        if (!m || !st || !st.date || !st.scenes || !st.scenes.length) return;
+        const z = typeof l._tileZoom === 'number' ? l._tileZoom : Math.min(Math.round(m.getZoom()), 14);
+        if (!(z >= 0)) return;
+        const n = Math.pow(2, z), ct = m.project(m.getCenter(), z).divideBy(256).floor();
+        for (let dy = -SN_PREFETCH_R; dy <= SN_PREFETCH_R; dy++) {
+            const ty = ct.y + dy;
+            if (ty < 0 || ty >= n) continue;
+            for (let dx = -SN_PREFETCH_R; dx <= SN_PREFETCH_R; dx++) {
+                const ux = ct.x + dx, tx = ((ux % n) + n) % n;
+                if (l._tiles && l._tiles[ux + ':' + ty + ':' + z]) continue;   // тайл уже есть на слое
+                if (l._clip && l._tileCoordsToBounds && !l._tileCoordsToBounds({ x: ux, y: ty, z: z }).intersects(l._clip.bounds)) continue;
+                const sig = snSig(key, z, tx, ty);
+                if (seen[sig] || SENTINEL.tileMem.has(sig)) continue;
+                seen[sig] = 1;
+                jobs.push({ l: l, key: key, z: z, x: tx, y: ty, d: dx * dx + dy * dy });
+            }
+        }
+    });
+    jobs.sort((a, b) => a.d - b.d);   // сначала ближайшие к центру
+    jobs.forEach(j => {
+        const dead = () => gen !== SENTINEL.prefetchGen || !j.l._map;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = 256;
+        snRun(() => snRenderTile(j.key, j.z, j.x, j.y, cv, dead, false, true), dead, true).catch(() => { });
+    });
 }
 
 // ============================================================
@@ -1372,8 +1510,8 @@ const LAYER_NAMES = {
 // Превью-тайлы для чипов (z=3, x=4, y=2 — над Европой/Россией)
 const esriThumb = path => `${ESRI_SERVICES}/${path}/MapServer/tile/3/2/4`;
 const soilThumb = property => [
-    `${SOILGRIDS_WMS_URL}${property}.map&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${property}_0-5cm_mean` +
-        `&STYLES=&CRS=EPSG:3857&BBOX=0,5009377.085,5009377.085,10018754.171&WIDTH=72&HEIGHT=72&FORMAT=image/png&TRANSPARENT=TRUE`,
+    `/isric?map=/map/${property}.map&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${property}_0-5cm_mean` +
+        `&STYLES=&SRS=EPSG:4326&BBOX=0,40.98,45,66.51&WIDTH=72&HEIGHT=72&FORMAT=image/png&TRANSPARENT=TRUE`,
     esriThumb('Canvas/World_Light_Gray_Base')
 ];
 const LAYER_THUMBS = {
@@ -1387,6 +1525,8 @@ const LAYER_THUMBS = {
     sentinel2:      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     landsat8:       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     ndvi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    ndmi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    nbr:            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     // тот же участок мира, что и у остальных превью (z=3, x=4, y=2), но в метрах EPSG:3857
     esri_landcover: esriLandCoverUrl([0, 5009377.085, 5009377.085, 10018754.171], 72),
     esri_topo:      esriThumb('World_Topo_Map'),
@@ -5750,6 +5890,7 @@ function updateScaleBar() {
 
 map.on('zoomend', updateScaleBar);
 map.on('moveend', updateScaleBar);
+map.on('moveend', snPrefetch);   // предзагрузка соседних тайлов Sentinel-2
 setTimeout(updateScaleBar, 200);
 
 // ============================================================
