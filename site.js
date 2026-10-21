@@ -206,19 +206,20 @@
         if (d) { e.stopPropagation(); reports = reports.filter(function (r) { return r.id !== d.getAttribute('data-rp-del'); }); rpSave(); rpRender(); return; }
         var b = e.target.closest('[data-rp]'); if (!b) return;
         var r = reports.filter(function (x) { return x.id === b.getAttribute('data-rp'); })[0];
-        if (r && window.ppShow) window.ppShow(r.gj, { cad: r.cad, sat: r.sat });
+        if (r && window.ppShow) window.ppShow(r.gj, { cad: r.cad, name: r.uname, sat: r.sat });
     });
     rpRender();
     // плоский список слоёв участков (группы GeoJSON раскрываются) → GeoJSON-полигоны
     function rpShapes() {
         var out = [];
-        (function walk(l) {
-            if (l.getLayers && !(l instanceof L.Path)) { l.getLayers().forEach(walk); return; }
+        (function walk(l, gn) {
+            var nm = l._gcName || l._gcDef || gn || '';   // имя из «Списка объектов»: у самой фигуры или у группы, в которую она вложена
+            if (l.getLayers && !(l instanceof L.Path)) { l.getLayers().forEach(function (c) { walk(c, nm); }); return; }
             try {
                 var f;
                 if (l instanceof L.Circle) { var c = l.getLatLng(); f = turf.circle([c.lng, c.lat], l.getRadius() / 1000, { steps: 64, units: 'kilometers' }); }
                 else { var g = l.toGeoJSON(); f = g.type === 'FeatureCollection' ? g.features[0] : g; }
-                if (f && f.geometry && /Polygon/.test(f.geometry.type)) out.push({ gj: f, cad: (l.feature && l.feature.properties && l.feature.properties.cad_number) || '', layer: l });
+                if (f && f.geometry && /Polygon/.test(f.geometry.type)) out.push({ gj: f, cad: (l.feature && l.feature.properties && l.feature.properties.cad_number) || '', layer: l, nm: nm });
             } catch (e) { /* не полигон */ }
         })(drawnItems);
         return out;
@@ -318,13 +319,13 @@
         }
         var now = new Date(), date = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         list.forEach(function (s, i) {
-            var ha = turf.area(s.gj) / 1e4;
-            reports.unshift({ id: 'r' + now.getTime().toString(36) + i, name: s.cad ? 'Участок № ' + s.cad : 'Участок ' + ha.toFixed(2).replace('.', ',') + ' га', cad: s.cad, areaHa: ha, date: date, gj: s.gj, sat: { day: sat.day, cc: sat.cc, scenes: sat.scenes } });
+            var ha = turf.area(s.gj) / 1e4, un = s.nm || '';   // имя фигуры из «Списка объектов» (стандартное или своё)
+            reports.unshift({ id: 'r' + now.getTime().toString(36) + i, name: s.cad ? 'Участок № ' + s.cad : un || 'Участок ' + ha.toFixed(2).replace('.', ',') + ' га', uname: s.cad ? '' : un, cad: s.cad, areaHa: ha, date: date, gj: s.gj, sat: { day: sat.day, cc: sat.cc, scenes: sat.scenes } });
         });
         rpSave(); rpRender();
         var tab = document.querySelector('.panel-tab[data-tab="reports"]'); if (tab) tab.click();
         updateStatus('✅ Анализ выполнен, отчётов сохранено: ' + list.length + ' (вкладка «Отчёты»)');
-        if (list.length === 1 && window.ppShow) window.ppShow(reports[0].gj, { cad: reports[0].cad, sat: reports[0].sat });
+        if (list.length === 1 && window.ppShow) window.ppShow(reports[0].gj, { cad: reports[0].cad, name: reports[0].uname, sat: reports[0].sat });
     });
     // в 3D рисование недоступно (инструменты теперь в панели, а не на карте)
     var anDraw = document.querySelector('.an-draw');

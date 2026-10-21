@@ -856,8 +856,14 @@
                       <button class="dw-act" data-pf-mode="area" title="Гипсометрическая кривая: распределение высот по площади полигона"><i class="fas fa-chart-area"></i><span>По площади</span></button>
                   </div>
                   <div class="dw-tool-grid" style="margin-top:8px">
+                      <button class="dw-tool" data-pf-tool="line" data-pf-for="line" title="Линия: ЛКМ — точки, Enter или двойной клик — завершить"><i class="fas fa-route"></i><span>Линия</span></button>
+                      <button class="dw-tool" data-pf-tool="polygon" data-pf-for="area" title="Полигон"><i class="gc-pent"></i><span>Полигон</span></button>
+                      <button class="dw-tool" data-pf-tool="rectangle" data-pf-for="area" title="Прямоугольник"><i class="fas fa-vector-square"></i><span>Прямоуг.</span></button>
+                      <button class="dw-tool" data-pf-tool="circle" data-pf-for="area" title="Круг"><i class="far fa-circle"></i><span>Круг</span></button>
+                      <button class="dw-tool" data-pf-tool="sel" title="Взять фигуру, выбранную на карте или на вкладке «Рисование»"><i class="fas fa-arrow-pointer"></i><span>Выбрать</span></button>
                       <button class="dw-tool" data-gc-io="import" data-gc-for="hy" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i><span>Импорт</span></button>
                       <button class="dw-tool" data-gc-io="export" data-gc-for="hy" title="Экспорт полигона (KML, GeoJSON)"><i class="fas fa-file-export"></i><span>Экспорт</span></button>
+                      <button class="dw-tool dw-danger" data-pf-tool="clear" title="Удалить линию, полигон и результаты"><i class="fas fa-trash"></i><span>Удалить</span></button>
                   </div>
               </div>
               <div class="dw-block pf-ctrl">
@@ -871,7 +877,7 @@
                   <div class="dw-row" style="display:none"><label>Ширина полосы</label>
                       <select id="pfBand"><option value="0" selected>Авто</option><option value="50">50 м</option><option value="100">100 м</option><option value="250">250 м</option><option value="500">500 м</option><option value="1000">1 км</option></select>
                   </div>
-                  <div class="m3-hint">Рисование включено сразу: ЛКМ — точка, двойной клик или Enter — завершить, Esc — сбросить. Новая линия заменяет прежнюю</div>
+                  <div class="m3-hint">Выберите инструмент слева: ЛКМ — точка, двойной клик или Enter — завершить, Esc — сбросить. Новая линия заменяет прежнюю</div>
               </div>
               <div class="dw-block pf-stats">
                   <div class="dw-title">Показатели</div>
@@ -885,7 +891,7 @@
                   <div class="dw-title">График высот <span class="pf-legend" title="Уклон"><i style="background:#10b981"></i>&lt;3% <i style="background:#eab308"></i>3–8% <i style="background:#f97316"></i>8–15% <i style="background:#dc2626"></i>&gt;15%</span></div>
                   <div class="pf-chart-wrap" id="pfWrap">
                       <canvas id="pfCanvas"></canvas>
-                      <div class="pf-empty" id="pfEmpty">Рисуйте линию на карте: ЛКМ — точки, двойной клик или Enter — завершить</div>
+                      <div class="pf-empty" id="pfEmpty">Выберите инструмент «Линия» и рисуйте на карте: ЛКМ — точки, двойной клик или Enter — завершить</div>
                   </div>
               </div>
               <!-- Режим «По площади»: гипсометрическая кривая полигона -->
