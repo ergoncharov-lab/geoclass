@@ -2091,3 +2091,17 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 #data-catalog .s-opt.selected em { color: var(--green); }
 #data-catalog.s-catalog .s-btn-ghost { background: rgba(255,255,255,.72); color: var(--dark); border-color: var(--line); }
 #data-catalog.s-catalog .s-btn-ghost:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+
+/* слайдер «О проекте / возможности»: карточка прежняя, слайды лежат стопкой и плавно сменяются */
+.ab-track { display: grid; }
+.ab-slide { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 12px; opacity: 0; visibility: hidden; transform: translateX(14px); transition: opacity .45s, transform .45s, visibility 0s .45s; }
+.ab-slide.on { opacity: 1; visibility: visible; transform: none; transition: opacity .45s, transform .45s; }
+.ab-eyebrow i { margin-right: 4px; }
+.ab-ctl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.ab-nav { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font-size: 11px; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.ab-nav:hover { background: rgba(255,255,255,.2); }
+.ab-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.ab-dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.3); cursor: pointer; transition: background .2s, width .2s; }
+.ab-dots button.on { width: 20px; border-radius: 4px; background: var(--mint); }
+#abSlider { user-select: none; touch-action: pan-y; }
+@media (prefers-reduced-motion: reduce) { .ab-slide, .ab-slide.on { transition: none; } }

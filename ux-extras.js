@@ -389,10 +389,17 @@
     if (!tree || typeof map === 'undefined') return;
     var pane = document.querySelector('[data-bp-pane="cadastre"]');
     // nspd — ID слоя НСПД (можно поправить кликом по номеру справа от названия); rgb — цвет выделения объекта на карте
+    // ID слоёв «регионы», «районы» и «ООПТ» взяты по каталогу НСПД приблизительно: при включении слоя в строке состояния показывается его название из НСПД — если оно не то, поправьте номер здесь
     var LAYERS = [
+        { id: 'r', nspd: '875815', name: 'Регионы', group: 'Единицы административного деления', rgb: [190, 18, 60], minZoom: 3 },
+        { id: 'k', nspd: '36069', name: 'Кадастровые округа', group: 'Единицы кадастрового деления', rgb: [147, 51, 234], minZoom: 5, want: /кадастров\S*\s+округ|округ/i, cand: [36069, 36068, 36067, 36066, 36065, 36072, 36073] },
+        { id: 'd', nspd: '36070', name: 'Кадастровые районы', group: 'Единицы кадастрового деления', rgb: [219, 39, 119], minZoom: 7 },
+        { id: 'm', nspd: '875819', name: 'Муниципальные образования', group: 'Единицы административного деления', rgb: [2, 132, 199], minZoom: 6 },
         { id: 'q', nspd: '36071', name: 'Кадастровые кварталы', group: 'Единицы кадастрового деления', rgb: [124, 58, 237], minZoom: 10 },
         { id: 'z', nspd: '36048', name: 'Земельные участки из ЕГРН', group: 'Земельные участки', rgb: [245, 158, 11], minZoom: 14 },
-        { id: 'o', nspd: '36049', name: 'Здания и ОКС', group: 'Объекты капитального строительства', rgb: [37, 99, 235], minZoom: 15 }
+        { id: 'o', nspd: '36049', name: 'Здания и ОКС', group: 'Объекты капитального строительства', rgb: [37, 99, 235], minZoom: 15 },
+        { id: 'p', nspd: '37578', name: 'ООПТ (особо охраняемые территории)', group: 'Особо охраняемые природные территории', rgb: [22, 163, 74], minZoom: 6 },
+        { id: 'n', nspd: '875831', name: 'Населённые пункты', group: 'Административно-территориальное деление', rgb: [234, 88, 12], minZoom: 8 }
     ];
     // ключевые атрибуты: [подпись, [возможные поля НСПД], тип форматирования]
     var FIELDS = [
@@ -444,6 +451,12 @@
     function legFallback(c) {
         var row = function (col, t) { return '<div class="cad-lr"><i style="background:' + col + '"></i><span>' + t + '</span></div>'; };
         if (c.id === 'z') return '<div>Участки окрашены по <b>категории земель</b>:</div>' + row('#f9a8d4', 'земли населённых пунктов') + row('#fde047', 'земли сельскохозяйственного назначения') + row('#bbf7d0', 'земли лесного фонда') + row('#a16207', 'земли промышленности, транспорта и иного назначения') + '<div class="cad-lnote">Точная категория и вид разрешённого использования — в карточке участка после клика.</div>';
+        if (c.id === 'n') return 'Границы населённых пунктов (города, посёлки, сёла) по данным НСПД. Название, тип и статус — в карточке после клика.';
+        if (c.id === 'k') return 'Границы кадастровых округов (первые две цифры кадастрового номера — номер округа).';
+        if (c.id === 'm') return 'Границы муниципальных образований (районы, округа, поселения). Название и вид — в карточке после клика.';
+        if (c.id === 'r') return 'Границы регионов — линейный слой: клик нужно делать точно по линии границы.';
+        if (c.id === 'd') return 'Границы кадастровых районов; подписаны номером района (например 77:05).';
+        if (c.id === 'p') return '<div>Границы <b>особо охраняемых природных территорий</b> (ООПТ). Цвет — вид территории (ориентировочно):</div>' + row('#16a34a', 'государственные природные заповедники') + row('#0d9488', 'национальные парки') + row('#84cc16', 'государственные природные заказники') + row('#f59e0b', 'памятники природы') + row('#a855f7', 'дендрологические парки, ботанические сады') + row('#0ea5e9', 'лечебно-оздоровительные местности и курорты') + '<div class="cad-lnote">Точное название, вид, категория и документ о создании — в карточке после клика по территории.</div>';
         if (c.id === 'q') return 'Границы кадастровых кварталов; подписаны номером квартала (например 77:05:0001005).';
         return 'Контуры зданий, сооружений и объектов незавершённого строительства.';
     }
@@ -467,12 +480,30 @@
             return viaProxy(base(n) + '?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=&TRANSPARENT=true&LAYERS=' + n + '&WIDTH=' + s.x + '&HEIGHT=' + s.y + '&CRS=EPSG:3857&BBOX=' + [a.x, a.y, b.x, b.y].map(r3).join(','));
         }
     });
+    // слои «регионы» и «округа»: номер в каталоге НСПД не подтверждён, поэтому при первом включении подбираем его по названию слоя из GetCapabilities
+    function resolveId(c) {
+        if (!c.want || c._ok) return Promise.resolve();
+        c._ok = 1;
+        var ids = [nid(c)].concat(c.cand || []).filter(function (v, i, a) { return a.indexOf(String(v)) < 0 || a.indexOf(v) === i; }).map(String);
+        ids = ids.filter(function (v, i) { return ids.indexOf(v) === i; });
+        return ids.reduce(function (p, id) {
+            return p.then(function (found) {
+                if (found) return found;
+                return fetch(viaProxy(base(id) + '?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0')).then(okText).then(function (t) {
+                    var m = (t.match(/<Title>([^<]*)<\/Title>/g) || []).map(function (x) { return x.replace(/<\/?Title>/g, '').trim(); }).slice(0, 3).join(' ');
+                    return c.want.test(m) ? id : null;
+                }).catch(function () { return null; });
+            });
+        }, Promise.resolve(null)).then(function (id) {
+            if (id && id !== String(nid(c))) { st.ids[c.id] = id; save(); say('Слой «' + c.name + '»: найден номер НСПД ' + id + '.'); }
+        });
+    }
     var live = {}, errs = 0;
     function setLayer(c, on) {
         st.on[c.id] = on; save();
-        if (!on) { if (live[c.id]) map.removeLayer(live[c.id]); hint(); return; }
-        proxyP.then(function (ok) {
-            if (!ok) { say(NOPROXY); st.on[c.id] = false; save(); renderTree(); return; }
+        if (!on) { if (live[c.id]) map.removeLayer(live[c.id]); syncCredit(); hint(); return; }
+        proxyP.then(function (ok) { return ok ? resolveId(c) : 0; }).then(function () { return proxyP; }).then(function (ok) {
+            if (!ok) { say(NOPROXY); st.on[c.id] = false; save(); renderTree(); syncCredit(); return; }
             if (live[c.id] && live[c.id]._gcId !== nid(c)) { map.removeLayer(live[c.id]); live[c.id] = null; }
             if (!live[c.id]) {
                 live[c.id] = new CadTile('', { cfg: c, minZoom: c.minZoom, maxZoom: 22, zIndex: 450 + LAYERS.indexOf(c), tileSize: 256, keepBuffer: 4, updateWhenIdle: true });
@@ -490,10 +521,36 @@
                 });
                 live[c.id].on('tileload', function () { errs = 0; });
             }
-            live[c.id].addTo(map); hint();
+            live[c.id].addTo(map); syncCredit(); hint();
+            if (!c._chk) {      // проверка номера слоя: показываем название слоя из GetCapabilities НСПД
+                c._chk = 1;
+                fetch(viaProxy(base(nid(c)) + '?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0')).then(okText).then(function (t) {
+                    var m = t.match(/<Title>([^<]*)<\/Title>/g) || [];
+                    var tt = m.map(function (x) { return x.replace(/<\/?Title>/g, '').trim(); }).filter(Boolean).slice(0, 2).join(' / ');
+                    if (tt) say('Слой «' + c.name + '» (НСПД ' + nid(c) + '): ' + tt);
+                }).catch(function () { /* название недоступно — не критично */ });
+            }
         });
     }
     var active = function () { return LAYERS.filter(function (c) { return st.on[c.id]; }); };
+    // ---- указание источника в углу карты (виден, пока включён хотя бы один слой НСПД); логотип — файл nspd-logo.png рядом с сайтом, без него остаётся значок ----
+    var credStyle = document.createElement('style');
+    credStyle.textContent = '.gc-nspd-credit{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.92);border:1px solid #cbd5e1;border-radius:8px;padding:4px 9px 4px 6px;font:11.5px/1.2 "Segoe UI",system-ui,sans-serif;color:#334155;box-shadow:0 1px 4px rgba(0,0,0,.18)}' +
+        '.gc-nspd-credit a{color:#0f5132;font-weight:600;text-decoration:none}.gc-nspd-credit a:hover{text-decoration:underline}.gc-nspd-credit img{height:20px;width:auto;display:block}.gc-nspd-credit i{color:#047857;font-size:15px}@media print{.gc-nspd-credit{display:none}}';
+    document.head.appendChild(credStyle);
+    var credit = L.control({ position: 'bottomright' }), creditOn = false;
+    credit.onAdd = function () {
+        var d = L.DomUtil.create('div', 'gc-nspd-credit');
+        d.innerHTML = '<a href="https://nspd.gov.ru" target="_blank" rel="noopener" title="Национальная система пространственных данных"><img src="nspd-logo.png" alt="" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'\'"><i class="fas fa-landmark" style="display:none"></i></a>' +
+            '<span>Источник: <a href="https://nspd.gov.ru" target="_blank" rel="noopener">НСПД (Росреестр)</a></span>';
+        L.DomEvent.disableClickPropagation(d);
+        return d;
+    };
+    function syncCredit() {
+        var need = active().length > 0;
+        if (need && !creditOn) { credit.addTo(map); creditOn = true; }
+        else if (!need && creditOn) { credit.remove(); creditOn = false; }
+    }
     function hint() {
         var act = active(), z = map.getZoom();
         if (!act.length) { say('Отметьте слой в списке. Клик по объекту на карте покажет его сведения.'); return; }
@@ -862,7 +919,7 @@
     // items: [{ c: слой, f: объект GeoJSON }] — самые «мелкие» объекты (ОКС, участки) первыми
     function select(items) {
         hl.clearLayers(); bnds = []; sel = items;
-        items.slice().reverse().forEach(function (it, ri) { bnds[items.length - 1 - ri] = addGeom(it.f.geometry, it.c.rgb, it.c.id === 'q'); });   // кварталы рисуются под участками
+        items.slice().reverse().forEach(function (it, ri) { bnds[items.length - 1 - ri] = addGeom(it.f.geometry, it.c.rgb, it.c.id === 'q' || it.c.id === 'd' || it.c.id === 'r' || it.c.id === 'k' || it.c.id === 'm'); });   // кварталы рисуются под участками
         showInfo(items.map(function (it, i) { return card(it.c, it.f.properties || it.f, i); }).join('')
             + (items.length > 1 ? '<div class="cad-dlt">Скачать все выбранные (' + items.length + ')</div>' + dlBtns('all', true) : ''));
         $('cadInfoN').textContent = items.length > 1 ? '· ' + items.length : '';
@@ -952,7 +1009,7 @@
         var ll = (typeof contextMenuLatLng !== 'undefined') ? contextMenuLatLng : null;
         if (ll && sel.length) {
             var hits = sel.filter(function (it) { try { return hitGeom(it.f.geometry, ll); } catch (x) { return false; } });
-            var rank = function (it) { return it.c.id === 'z' ? 0 : it.c.id === 'o' ? 1 : it.c.id === 'q' ? 3 : 2; };
+            var rank = function (it) { return it.c.id === 'z' ? 0 : it.c.id === 'o' ? 1 : it.c.id === 'q' ? 3 : it.c.id === 'd' ? 4 : it.c.id === 'r' ? 5 : it.c.id === 'k' ? 6 : it.c.id === 'm' ? 4 : 2; };
             hits.sort(function (a, b) { return rank(a) - rank(b); });
             ctxHit = hits[0] || null;
         }
@@ -1064,7 +1121,7 @@
             });
             items.sort(function (a, b) { return LAYERS.indexOf(b.c) - LAYERS.indexOf(a.c); });
             if (multi) {
-                var add = items.filter(function (it) { return it.c.id !== 'q'; });
+                var add = items.filter(function (it) { return !/^[qdrkm]$/.test(it.c.id); });
                 if (!add.length) add = items;          // кварталы добавляются, только если в точке нет ничего другого
                 if (!add.length) { say(errn === res2.length ? 'НСПД не ответил. Проверьте интернет и доступ к НСПД.' : zeroN ? 'В этой точке только нулевой кадастровый квартал — он не выделяется.' : 'В этой точке объектов нет.'); return; }
                 var have = sel.map(keyOf), fresh = add.filter(function (it) { return have.indexOf(keyOf(it)) < 0; });
@@ -1088,28 +1145,49 @@
         cadClick({ latlng: map.mouseEventToLatLng(ev), originalEvent: ev });
     });
 
-    // ---- поиск по кадастровому номеру ----
-    function find() {
-        var q = $('cadQuery').value.trim();
-        if (!q) return;
-        say('Поиск в НСПД…');
-        var themes = [1, 2];     // 1 — объекты недвижимости, 2 — кадастровое деление (кварталы)
-        (function next(i) {
-            if (i >= themes.length) { say('Ничего не найдено по запросу «' + q + '».'); return; }
-            fetch(viaProxy('https://nspd.gov.ru/api/geoportal/v2/search/geoportal?thematicSearchId=' + themes[i] + '&query=' + encodeURIComponent(q))).then(okText).then(function (t) {
-                var f = feats(t).f;
-                if (!f.length) return next(i + 1);
+    // ---- поиск по кадастровому номеру: вызывается из основной строки поиска сайта (участок, здание, квартал); слой при этом может быть выключен ----
+    var CADRE = /^\d{1,2}:\d{1,2}(:\d{1,8}){0,2}$/;
+    window.gcCadIsNumber = function (q) { return CADRE.test(String(q || '').trim()); };
+    window.gcCadSearch = function (q) {
+        q = String(q || '').trim();
+        var tell = function (t) { say(t); if (typeof updateStatus === 'function') updateStatus(t); };
+        var parts = q.split(':').length;
+        // сначала тот раздел поиска, где номер такого вида ожидаем: участок/здание — объекты (1), квартал/район — кадастровое деление (2); остальные — на всякий случай
+        var themes = parts >= 4 ? [1, 2, 3, 4, 5] : [2, 1, 3, 4, 5];
+        tell('Поиск в НСПД…');
+        var norm = function (v) { return String(v || '').replace(/\s+/g, '').split(':').map(function (x) { return x.replace(/^0+(?=\d)/, ''); }).join(':'); };
+        var layerFor = function (pr) { return parts === 3 ? byId('q') : parts === 2 ? byId('d') : detect(pr); };
+        return new Promise(function (done) {
+            var partial = null;      // запасной вариант: частичное совпадение, если точного нет
+            (function next(i) {
+                if (i >= themes.length) {
+                    if (partial) return show(partial.f, partial.n);
+                    tell('Ничего не найдено в НСПД по запросу «' + q + '».'); done(false); return;
+                }
+                fetch(viaProxy('https://nspd.gov.ru/api/geoportal/v2/search/geoportal?thematicSearchId=' + themes[i] + '&query=' + encodeURIComponent(q))).then(okText).then(function (t) {
+                    var f = feats(t).f;
+                    if (!f.length) return next(i + 1);
+                    var exact = f.filter(function (x) { var ro = rowsOf(x.properties || x); return ro.num && norm(ro.num) === norm(q); })[0];
+                    if (exact) return show(exact, f.length);
+                    if (!partial) partial = { f: f[0], n: f.length };
+                    next(i + 1);
+                }).catch(function () { next(i + 1); });
+            })(0);
+            function show(feat, n) {
                 reqN++;
-                var pr = f[0].properties || f[0];
-                select([{ c: detect(pr), f: f[0] }]);
-                say('Найдено: ' + f.length + (f.length > 1 ? ' (показан первый)' : '') + '.');
-                var b = bnds[0];
-                if (b && b.isValid()) map.fitBounds(b, { maxZoom: 18, padding: [40, 40] });
-            }).catch(function () { say('Поиск недоступен: проверьте доступ к НСПД и запуск через serve_site.py.'); });
-        })(0);
-    }
-    $('cadFind').addEventListener('click', find);
-    $('cadQuery').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') find(); });
+                var c = layerFor(feat.properties || feat);
+                if (!st.on[c.id]) {      // слой найденного типа включается сам, чтобы объект был виден на карте
+                    var chk = tree.querySelector('input[data-id="' + c.id + '"]'); if (chk) chk.checked = true;
+                    setLayer(c, true);
+                }
+                select([{ c: c, f: feat }]);      // открывает раздел «Кадастр» в боковой панели
+                tell('Найдено в НСПД: ' + c.name.toLowerCase() + (n > 1 ? ' (совпадений: ' + n + ', показано лучшее)' : '') + '.');
+                var bd = bnds[0];
+                if (bd && bd.isValid()) map.fitBounds(bd, { maxZoom: 18, padding: [40, 40] });
+                done(true);
+            }
+        });
+    };
 
     renderTree(); hint();
 })();

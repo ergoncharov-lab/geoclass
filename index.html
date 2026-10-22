@@ -8,7 +8,11 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- заранее открываем соединения (DNS + TLS) с источниками снимков Sentinel-2: первые тайлы появляются быстрее -->
+<link rel="preconnect" href="https://sentinel-cogs.s3.us-west-2.amazonaws.com" crossorigin>
+<link rel="preconnect" href="https://earth-search.aws.element84.com" crossorigin>
+<link rel="dns-prefetch" href="https://s3.us-west-2.amazonaws.com">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Вращение карты (правая кнопка мыши / Shift + колесо) -->
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
@@ -86,8 +90,24 @@
         <div><b>3</b><span>паспорта участка бесплатно</span></div>
       </div>
     </div>
-    <aside class="s-hero-about s-glass">
-      <div class="ab-eyebrow">О проекте</div>
+    <style>
+/* слайдер «О проекте / возможности»: карточка прежняя, слайды лежат стопкой и плавно сменяются */
+.ab-track { display: grid; }
+.ab-slide { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 12px; opacity: 0; visibility: hidden; transform: translateX(14px); transition: opacity .45s, transform .45s, visibility 0s .45s; }
+.ab-slide.on { opacity: 1; visibility: visible; transform: none; transition: opacity .45s, transform .45s; }
+.ab-eyebrow i { margin-right: 4px; }
+.ab-ctl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.ab-nav { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font-size: 11px; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.ab-nav:hover { background: rgba(255,255,255,.2); }
+.ab-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.ab-dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.3); cursor: pointer; transition: background .2s, width .2s; }
+.ab-dots button.on { width: 20px; border-radius: 4px; background: var(--mint); }
+#abSlider { user-select: none; touch-action: pan-y; }
+@media (prefers-reduced-motion: reduce) { .ab-slide, .ab-slide.on { transition: none; } }
+    </style>
+    <aside class="s-hero-about s-glass" id="abSlider" aria-roledescription="карусель" aria-label="О проекте и возможности анализов">
+      <div class="ab-track">
+        <div class="ab-slide on" role="group" aria-label="1 из 11"><div class="ab-eyebrow">О проекте</div>
       <h2>Предварительная проверка земельного участка за несколько минут</h2>
       <p>TerraClass — геоаналитический портал для оценки земельных участков. Вы изучаете территорию бесплатными инструментами, а затем заказываете машинный комплексный анализ и получаете структурированный отчёт.</p>
       <ul>
@@ -96,8 +116,41 @@
         <li><b>Результат:</b> паспорт участка и отчёт в PDF</li>
         <li><b>Платно только:</b> полный анализ с паспортом (первые три бесплатно), классификация земли и массовое скачивание данных</li>
         <li><b>Подходит</b> для первичной оценки перед покупкой, арендой и планированием работ</li>
-      </ul>
+      </ul></div>
+        <div class="ab-slide" role="group" aria-label="2 из 11"><div class="ab-eyebrow"><i class="fas fa-file-lines"></i> Анализ · Анализ участка</div><h2>Паспорт участка за несколько минут</h2><p>Один контур — и вы получаете сводный отчёт без выезда на место и ручных расчётов.</p><ul><li><b>Что внутри:</b> площадь, периметр, рельеф, почвы, погода, динамика вегетации</li><li><b>Польза:</b> быстрая оценка пригодности участка перед покупкой или арендой</li><li><b>Результат:</b> паспорт в PDF с индексом пригодности</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="3 из 11"><div class="ab-eyebrow"><i class="fas fa-mountain"></i> Анализ · Профиль рельефа</div><h2>Рельеф: высоты, уклоны, стекание</h2><p>Профиль по линии и гипсометрия по площади с тепловой картой высот или уклонов.</p><ul><li><b>Что внутри:</b> график высот, перепад, крутизна склонов, ступени высот</li><li><b>Польза:</b> выбор техники и севооборота, оценка риска эрозии и заболачивания</li><li><b>Результат:</b> CSV, PNG и GeoTIFF высот</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="4 из 11"><div class="ab-eyebrow"><i class="fas fa-route"></i> Анализ · Логистика</div><h2>Дороги и водоёмы вокруг участка</h2><p>Расстояния до ближайших дорог и воды по прямой и по маршруту.</p><ul><li><b>Что внутри:</b> буфер вокруг участка, дороги и водоёмы OpenStreetMap, расчёт маршрута</li><li><b>Польза:</b> оценка подъезда, стоимости доставки и доступа к воде</li><li><b>Результат:</b> таблица расстояний и время в пути</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="5 из 11"><div class="ab-eyebrow"><i class="fas fa-flask"></i> Анализ · Почвенный анализ</div><h2>Почвы участка по открытым данным</h2><p>pH, органический углерод, азот, глина и песок по контуру поля.</p><ul><li><b>Что внутри:</b> карта показателя, легенда, статистика и зоны деления поля</li><li><b>Польза:</b> ориентир для зонирования и выбора точек отбора проб</li><li><b>Результат:</b> GeoTIFF почвенного слоя</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="6 из 11"><div class="ab-eyebrow"><i class="fas fa-draw-polygon"></i> Анализ · Границы и динамика NDVI</div><h2>Форма поля и динамика вегетации</h2><p>Компактность, габариты и сравнение NDVI по снимкам за сезон.</p><ul><li><b>Что внутри:</b> площадь, периметр, форма, адрес, динамика NDVI от посева до уборки</li><li><b>Польза:</b> понимание потерь на поворотах техники и развития культуры</li><li><b>Результат:</b> краткий анализ сезона по снимкам</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="7 из 11"><div class="ab-eyebrow"><i class="fas fa-satellite"></i> Снимки · Sentinel-2</div><h2>Свежие спутниковые снимки 10 м</h2><p>Выбор даты по календарю с оценкой облачности и превью.</p><ul><li><b>Что внутри:</b> естественные цвета, ложные цвета (CIR), облачность по каждой дате</li><li><b>Польза:</b> видно реальное состояние поля без выезда</li><li><b>Результат:</b> цветной GeoTIFF выбранной области</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="8 из 11"><div class="ab-eyebrow"><i class="fas fa-leaf"></i> Снимки · NDVI</div><h2>Состояние посевов и зоны внесения</h2><p>Индекс вегетации по каждому пикселю внутри контура поля.</p><ul><li><b>Что внутри:</b> статистика индекса, зоны дифференцированного внесения, аномальные точки</li><li><b>Польза:</b> экономия удобрений и поиск проблемных участков поля</li><li><b>Результат:</b> зоны в GeoJSON, Shapefile и KML для техники</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="9 из 11"><div class="ab-eyebrow"><i class="fas fa-cloud-rain"></i> Снимки · NDMI</div><h2>Влажность растений и водный стресс</h2><p>Показывает, где растениям не хватает влаги, раньше, чем это видно глазом.</p><ul><li><b>Что внутри:</b> карта влажности растительности и статистика по контуру</li><li><b>Польза:</b> раннее выявление засухи и планирование полива</li><li><b>Результат:</b> GeoTIFF со значениями индекса</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="10 из 11"><div class="ab-eyebrow"><i class="fas fa-wheat-awn"></i> Снимки · NBR</div><h2>Покров, гари и угнетённые посевы</h2><p>Индекс нарушенности покрова с зонами и аномалиями, как в NDVI.</p><ul><li><b>Что внутри:</b> сухая биомасса, голая почва, гари, зоны и аномальные точки</li><li><b>Польза:</b> оценка нарушений покрова и состояния после пожара или уборки</li><li><b>Результат:</b> зоны и точки в векторных форматах</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="11 из 11"><div class="ab-eyebrow"><i class="fas fa-code-compare"></i> Снимки · Сравнение</div><h2>Что изменилось между двумя датами</h2><p>Карта делится шторкой: две даты рядом с графиками и показателями.</p><ul><li><b>Что внутри:</b> ключевые показатели и график под каждой половиной карты</li><li><b>Польза:</b> наглядная динамика поля за сезон или между годами</li><li><b>Результат:</b> вывод по изменениям без ручного сравнения</li></ul></div>
+      </div>
+      <div class="ab-ctl"><button type="button" class="ab-nav" data-ab="-1" aria-label="Назад"><i class="fas fa-chevron-left"></i></button><div class="ab-dots"></div><button type="button" class="ab-nav" data-ab="1" aria-label="Вперёд"><i class="fas fa-chevron-right"></i></button></div>
     </aside>
+    <script>
+    (function () {
+        var box = document.getElementById('abSlider'); if (!box) return;
+        var sl = [].slice.call(box.querySelectorAll('.ab-slide')), dots = box.querySelector('.ab-dots'), cur = 0, timer = null, hover = false, drag = null;
+        sl.forEach(function (_, i) { var b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Слайд ' + (i + 1)); b.addEventListener('click', function () { go(i, true); }); dots.appendChild(b); });
+        function go(i, user) {
+            cur = (i + sl.length) % sl.length;
+            sl.forEach(function (s, k) { s.classList.toggle('on', k === cur); s.setAttribute('aria-hidden', k === cur ? 'false' : 'true'); });
+            [].forEach.call(dots.children, function (d, k) { d.classList.toggle('on', k === cur); });
+            if (user) play();
+        }
+        function play() { clearInterval(timer); timer = setInterval(function () { if (!hover && !document.hidden) go(cur + 1); }, 7000); }
+        box.querySelectorAll('.ab-nav').forEach(function (b) { b.addEventListener('click', function () { go(cur + (+b.getAttribute('data-ab')), true); }); });
+        box.addEventListener('mouseenter', function () { hover = true; }); box.addEventListener('mouseleave', function () { hover = false; });
+        box.addEventListener('pointerdown', function (e) { if (e.target.closest('button')) return; drag = { x: e.clientX, id: e.pointerId }; });
+        box.addEventListener('pointerup', function (e) { if (!drag) return; var dx = e.clientX - drag.x; drag = null; if (Math.abs(dx) > 40) go(cur + (dx < 0 ? 1 : -1), true); });
+        box.addEventListener('pointercancel', function () { drag = null; });
+        box.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft') go(cur - 1, true); else if (e.key === 'ArrowRight') go(cur + 1, true); });
+        go(0); play();
+    })();
+    </script>
     <div class="s-tiles">
       <div class="s-tile"><i class="fas fa-satellite"></i><b>Мониторинг посевов</b><span>Снимки Sentinel-2 и временные ряды NDVI</span></div>
       <div class="s-tile"><i class="fas fa-seedling"></i><b>Почвы и влага</b><span>pH, органический углерод, NDMI</span></div>
@@ -172,7 +225,7 @@
             <div class="sp-search">
             <div class="map-search">
         <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Поиск города или улицы..." autocomplete="off">
+        <input type="text" id="searchInput" placeholder="Город, улица или кадастровый номер..." autocomplete="off">
         <button id="searchBtn" title="Найти адрес, город или координаты"><i class="fas fa-search"></i></button>
     </div>
     <div id="searchResults" class="search-results"></div>
@@ -897,7 +950,8 @@
               <!-- Режим «По площади»: гипсометрическая кривая полигона -->
               <div class="dw-block hy-blk hy-ctrl">
                   <div class="dw-title">Гипсометрия полигона</div>
-                  <label class="dw-check"><input type="checkbox" id="hyHeat" checked> Тепловая карта высот на полигоне</label>
+                  <label class="dw-check"><input type="checkbox" id="hyHeat" checked> Тепловая карта на полигоне</label>
+                  <div class="dw-row"><label>Карта</label><select id="hyMapKind" title="Что показывать на полигоне"><option value="elev" selected>Высоты</option><option value="slope">Уклоны</option></select></div>
                   <div class="dw-row"><label>Вид</label>
                       <select id="hyView"><option value="abs" selected>Кривая, м</option><option value="rel">Кривая, отн.</option><option value="belts">Ступени высот</option></select>
                   </div>
@@ -1099,7 +1153,7 @@
           <div class="bottom-panel-body bp-pane bp-draw bp-cad" data-bp-pane="cadastre" role="tabpanel">
               <div class="dw-block">
                   <div class="dw-title">Поиск по кадастровому номеру</div>
-                  <div class="dw-row"><input type="text" id="cadQuery" class="cad-in" placeholder="Например: 77:05:0001005:19"><button class="dw-act" id="cadFind" type="button" title="Найти объект в НСПД"><i class="fas fa-magnifying-glass"></i><span>Найти</span></button></div>
+                  <div class="m3-hint">Номер участка, здания или квартала (например 77:05:0001005:19 или 77:05:0001005) вводится в основную строку поиска вверху — слой включится сам.</div>
                   <div class="m3-hint">Источник: НСПД (nspd.gov.ru). Клик по объекту на карте выделяет его цветом и показывает сведения; Ctrl+клик — выбрать несколько объектов. Границы — для ознакомления, не заменяют выписку ЕГРН.</div>
               </div>
               <div class="dw-block">
@@ -1386,9 +1440,15 @@
                 </button>
                 <div class="widget-panel widget-panel-horizontal" id="layersWidgetPanel">
                     <div class="widget-panel-body-horizontal">
+                        <div class="ovl-chip" data-cad="r" style="--c:#be123c" title="Границы регионов, линии (НСПД)"><i class="fas fa-earth-europe"></i><span>Регионы</span></div>
+                        <div class="ovl-chip" data-cad="k" style="--c:#9333ea" title="Кадастровые округа (НСПД)"><i class="fas fa-object-group"></i><span>Округа</span></div>
+                        <div class="ovl-chip" data-cad="d" style="--c:#db2777" title="Кадастровые районы (НСПД)"><i class="fas fa-draw-polygon"></i><span>Районы</span></div>
+                        <div class="ovl-chip" data-cad="m" style="--c:#0284c7" title="Муниципальные образования (НСПД)"><i class="fas fa-landmark-flag"></i><span>Муницип.</span></div>
+                        <div class="ovl-chip" data-cad="n" style="--c:#ea580c" title="Населённые пункты (НСПД)"><i class="fas fa-city"></i><span>Нас. пункты</span></div>
                         <div class="ovl-chip" data-cad="q" style="--c:#7c3aed" title="Кадастровые кварталы НСПД"><i class="fas fa-border-all"></i><span>Кварталы</span></div>
                         <div class="ovl-chip" data-cad="z" style="--c:#f59e0b" title="Земельные участки из ЕГРН (НСПД)"><i class="fas fa-map-location-dot"></i><span>Участки</span></div>
                         <div class="ovl-chip" data-cad="o" style="--c:#2563eb" title="Здания и ОКС (НСПД)"><i class="fas fa-building"></i><span>Здания</span></div>
+                        <div class="ovl-chip" data-cad="p" style="--c:#16a34a" title="Особо охраняемые природные территории (НСПД)"><i class="fas fa-tree"></i><span>ООПТ</span></div>
                         <div class="ovl-chip" data-soil="1" style="--c:#a16207" title="Почвенная карта 1:2,5 млн (soil.geojson): клик по контуру — коды почв"><i class="fas fa-seedling"></i><span>Почвы</span></div>
                         <div class="ovl-chip" data-open="userlayers" style="--c:#0d9488" title="Свои слои: WMS, WFS, WMTS/XYZ, ArcGIS, GeoJSON"><i class="fas fa-plus"></i><span>Свои слои</span></div>
                     </div>

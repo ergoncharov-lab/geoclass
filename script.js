@@ -205,13 +205,37 @@ const SoilWmsLayer = L.TileLayer.WMS.extend({
     createTile: function (coords, done) {
         const tile = L.TileLayer.WMS.prototype.createTile.call(this, coords, done);
         tile._soilTry = 0;
+        const fail = this.options.soilFail;
+        if (fail) setTimeout(() => { if (!tile.complete) fail(); }, 8000);   // ISRIC молчит — переключаемся на Esri
         return tile;
     }
 });
-function soilGridsLayer(property, depth = '0-5cm') {
-    const base = esriCached('Canvas/World_Light_Gray_Base', '&copy; Esri', 16, { zIndex: 1 });
+// Запасной путь для слоёв почв: тайл строится из GeoTIFF, полученного по WCS (тот же запрос и та же палитра, что в паспорте участка). Только z ≥ 8 — на мелких масштабах растр слишком велик.
+async function soilWcsTile(prop, depth, coords, layer) {
+    const P = window.ppSoil;
+    if (!P || coords.z < 8) return null;
+    const b = layer._tileCoordsToBounds(coords), c = await P.cov(prop, depth, [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    const pal = (P.pal && P.pal[prop]) || null;
+    if (!pal || !pal.rng) return null;
+    const lut = [];
+    for (let i = 0; i <= 64; i++) lut.push(P.palCol(pal.c, i / 64).match(/\d+/g).map(Number));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(256, 256), d = img.data, dx = (c.x1 - c.x0) / c.W, dy = (c.y1 - c.y0) / c.H, span = pal.rng[1] - pal.rng[0] || 1;
+    for (let py = 0; py < 256; py++) for (let px = 0; px < 256; px++) {
+        const ll = L.CRS.EPSG3857.pointToLatLng(L.point(coords.x * 256 + px + 0.5, coords.y * 256 + py + 0.5), coords.z);
+        const ix = Math.floor((ll.lng - c.x0) / dx), iy = Math.floor((c.y1 - ll.lat) / dy);
+        if (ix < 0 || iy < 0 || ix >= c.W || iy >= c.H) continue;
+        const v = c.v[iy * c.W + ix];
+        if (v !== v) continue;
+        const col = lut[Math.round(Math.max(0, Math.min(1, (v - pal.rng[0]) / span)) * 64)], o = (py * 256 + px) * 4;
+        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv.toDataURL();
+}
+function soilWmsData(property, depth, onFail) {
     const data = new SoilWmsLayer(SOILGRIDS_WMS_URL + property + '.map', {
-        soilProp: property, soilDepth: depth,
+        soilProp: property, soilDepth: depth, soilFail: onFail,
         opacity: 0.8,
         maxZoom: 19,
         zIndex: 2,
@@ -219,10 +243,133 @@ function soilGridsLayer(property, depth = '0-5cm') {
     });
     data.on('tileerror', e => {
         const t = e.tile;
+        if (t && t._soilTry >= 2 && !t._soilWcs) {   // все варианты WMS не сработали — рисуем тайл по данным WCS (как в паспорте участка и «Почвенном анализе»)
+            t._soilWcs = 1;
+            if (onFail) onFail(); else soilWcsTile(property, depth, e.coords, data).then(u => { if (u) t.src = u; }).catch(() => { });
+            return;
+        }
         if (!t || t._soilTry === undefined || t._soilTry >= 2) return;
         t._soilTry++;
         t.src = data._soilUrl(e.coords, t._soilTry);
     });
+    return data;
+}
+
+// ---------- Esri Living Atlas «World Soils 250m» (те же данные SoilGrids, сервер Esri) ----------
+// Адрес сервиса берётся из карточки Living Atlas по id; переменные и глубины — из multiDimensionalInfo сервиса.
+// Значения читаются через exportImage (GeoTIFF, F32) — это основной источник для слоёв почв и анализа; ISRIC остаётся запасным.
+const ESRI_SOIL_ITEM = '73aefa635a644c548fd57814a4e18114';
+const ESRI_SOIL_DEPTHS = ['0-5cm', '5-15cm', '15-30cm', '30-60cm', '60-100cm', '100-200cm'];
+const ESRI_SOIL_KEY = { phh2o: 'soil_ph', soc: 'soil_soc', nitrogen: 'soil_nitrogen', cec: 'soil_cec', clay: 'soil_clay', sand: 'soil_sand' };
+const ESRI_SOIL_K = { phh2o: 10, soc: 10, nitrogen: 100, cec: 10, clay: 10, sand: 10, silt: 10, bdod: 100 };   // родные единицы SoilGrids → единицы показателя
+const ESRI_SOIL_LK = { phh2o: 1, soc: 10, nitrogen: 100, cec: 10, clay: 10, sand: 10 };                       // как LK в «Почвенном анализе»
+const ESRI_SOIL_RE = {
+    phh2o: t => /\bph\b|phh2o/i.test(t), nitrogen: t => /nitrogen/i.test(t), clay: t => /clay/i.test(t), sand: t => /sand/i.test(t),
+    silt: t => /silt/i.test(t), cec: t => /cation|\bcec\b/i.test(t), bdod: t => /bulk/i.test(t),
+    soc: t => /organic carbon|\bsoc\b/i.test(t) && !/density|stock|ocd|ocs/i.test(t)
+};
+let esriSoilP = null, esriSoilFailAt = 0;
+async function esriSoilJson(url) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
+    try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
+    finally { clearTimeout(t); }
+}
+function esriSoilInit() {
+    if (esriSoilP) return esriSoilP;
+    if (Date.now() - esriSoilFailAt < 60000) return Promise.reject(new Error('Esri World Soils недоступен (повтор через минуту)'));
+    esriSoilP = (async () => {
+        const it = await esriSoilJson('https://www.arcgis.com/sharing/rest/content/items/' + ESRI_SOIL_ITEM + '?f=json');
+        if (!it.url) throw new Error('в карточке Esri нет адреса сервиса');
+        const url = it.url.replace(/\/+$/, '');
+        const info = await esriSoilJson(url + '/multiDimensionalInfo?f=json');
+        const md = info.multidimensionalInfo || info;
+        if (!md.variables || !md.variables.length) throw new Error('сервис Esri не содержит переменных почв');
+        console.log('Esri World Soils:', url, md.variables.map(v => v.name));
+        return { url: url, vars: md.variables };
+    })().catch(e => { esriSoilP = null; esriSoilFailAt = Date.now(); console.warn('Esri World Soils:', e); throw e; });
+    return esriSoilP;
+}
+function esriSoilVar(S, prop, depth) {
+    const txt = v => String(v.name) + ' ' + (v.description || '');
+    const v = S.vars.find(x => String(x.name).toLowerCase() === prop) || S.vars.find(x => ESRI_SOIL_RE[prop] && ESRI_SOIL_RE[prop](txt(x)));
+    if (!v) throw new Error('в сервисе Esri нет показателя ' + prop);
+    const dim = (v.dimensions || []).find(d => /z|depth/i.test(d.name)) || (v.dimensions || [])[0];
+    if (!dim || !dim.values || !dim.values.length) return { name: v.name };
+    const ab = x => Math.abs(Array.isArray(x) ? x[0] : x);
+    const vals = dim.values.slice().sort((a, b) => ab(a) - ab(b));
+    return { name: v.name, dim: dim.name, val: vals[Math.min(Math.max(0, ESRI_SOIL_DEPTHS.indexOf(depth)), vals.length - 1)] };
+}
+const esriSoilMem = new Map();
+function esriSoilFetch(prop, depth, bbox, sr, w, h) {
+    const key = [prop, depth, bbox.join(','), sr, w, h].join('|');
+    if (esriSoilMem.has(key)) return esriSoilMem.get(key);
+    const p = (async () => {
+        const S = await esriSoilInit(), v = esriSoilVar(S, prop, depth);
+        const def = { variableName: v.name }; if (v.dim) { def.dimensionName = v.dim; def.values = [v.val]; def.isSlice = true; }
+        const q = new URLSearchParams({ f: 'image', bbox: bbox.join(','), bboxSR: sr, imageSR: sr, size: w + ',' + h, format: 'tiff', pixelType: 'F32',
+            interpolation: 'RSP_NearestNeighbor', noData: '-9999', noDataInterpretation: 'esriNoDataMatchAny', mosaicRule: JSON.stringify({ multidimensionalDefinition: [def] }) });
+        const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+        let buf;
+        try { const r = await fetch(S.url + '/exportImage?' + q, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); buf = await r.arrayBuffer(); }
+        finally { clearTimeout(t); }
+        const b = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+        if (!((b[0] === 73 && b[1] === 73) || (b[0] === 77 && b[1] === 77))) throw new Error('Esri вернул не растр: ' + new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(160, buf.byteLength))));
+        const img = await (await GeoTIFF.fromArrayBuffer(buf)).getImage();
+        return { raw: (await img.readRasters({ samples: [0] }))[0], w: img.getWidth(), h: img.getHeight() };
+    })();
+    esriSoilMem.set(key, p);
+    p.catch(() => esriSoilMem.delete(key));
+    if (esriSoilMem.size > 300) esriSoilMem.delete(esriSoilMem.keys().next().value);
+    return p;
+}
+function esriSoilLut(prop) {
+    const g = LAYER_LEGENDS[ESRI_SOIL_KEY[prop]] && LAYER_LEGENDS[ESRI_SOIL_KEY[prop]].gradient;
+    if (!g) return null;
+    const hex = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)), lk = ESRI_SOIL_LK[prop], lut = [];
+    for (let i = 0; i <= 64; i++) {
+        const x = i / 64 * (g.colors.length - 1), j = Math.min(g.colors.length - 2, Math.floor(x)), f = x - j, a = hex(g.colors[j]), b = hex(g.colors[j + 1]);
+        lut.push([0, 1, 2].map(k => Math.round(a[k] + (b[k] - a[k]) * f)));
+    }
+    return { lut: lut, lo: g.min / lk, hi: g.max / lk };
+}
+const EsriSoilLayer = L.GridLayer.extend({
+    initialize: function (prop, depth, mkFallback, options) {
+        this._prop = prop; this._depth = depth; this._mkFb = mkFallback;
+        L.GridLayer.prototype.initialize.call(this, options);
+        this.on('remove', () => { if (this._fb) { if (this._fb._map) this._fb.remove(); this._fb = null; } });
+    },
+    _useFallback: function () {   // Esri недоступен — подключаем прежний слой ISRIC WMS
+        if (this._fb || !this._map || !this._mkFb) return;
+        this._fb = this._mkFb(); this._fb.addTo(this._map);
+    },
+    createTile: function (coords, done) {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const prop = this._prop, n = Math.pow(2, coords.z), size = 40075016.686 / n, x0 = -20037508.343 + coords.x * size, y1 = 20037508.343 - coords.y * size;
+        esriSoilFetch(prop, this._depth, [x0, y1 - size, x0 + size, y1], 3857, 256, 256).then(r => {
+            const P = esriSoilLut(prop);
+            if (!P || r.w !== 256 || r.h !== 256) throw new Error('нет шкалы или неверный размер тайла Esri');
+            const ctx = c.getContext('2d'), img = ctx.createImageData(256, 256), d = img.data, k = ESRI_SOIL_K[prop], span = P.hi - P.lo || 1;
+            for (let i = 0; i < 65536; i++) {
+                const x = r.raw[i];
+                if (!(x > -9000) || x >= 65000) continue;
+                const col = P.lut[Math.round(Math.max(0, Math.min(1, (x / k - P.lo) / span)) * 64)], o = i * 4;
+                d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
+            }
+            ctx.putImageData(img, 0, 0);
+        }).catch(() => this._useFallback()).then(() => done(null, c));
+        return c;
+    }
+});
+function soilGridsLayer(property, depth = '0-5cm') {
+    const base = esriCached('Canvas/World_Light_Gray_Base', '&copy; Esri', 16, { zIndex: 1 });
+    let esri = null;
+    // по умолчанию — ISRIC (WMS); если он недоступен (ошибка или молчит) — поверх подключается Esri Living Atlas World Soils 250m
+    const data = soilWmsData(property, depth, () => {
+        if (esri || !data._map) return;
+        esri = new EsriSoilLayer(property, depth, null, { tileSize: 256, opacity: 0.8, maxZoom: 19, zIndex: 2, attribution: '&copy; ISRIC SoilGrids (CC BY 4.0) via Esri Living Atlas' });
+        esri.addTo(data._map);
+    });
+    data.on('remove', () => { if (esri) { if (esri._map) esri.remove(); esri = null; } });
     const labels = esriCached('Canvas/World_Light_Gray_Reference', '', 16, { zIndex: 3 });
     return new CompositeTileLayer([base, data, labels]);
 }
@@ -281,11 +428,11 @@ const SENTINEL = {
     prefetchGen: 0, prefetchTimer: 0,
     // LRU-кэш блоков (512×512) в памяти: хранит промисы чтения, поэтому 4 тайла блока делят один запрос
     chunkMem: {
-        max: 64, map: new Map(),
+        max: 96, map: new Map(),
         get(k) { const v = this.map.get(k); if (v !== undefined) { this.map.delete(k); this.map.set(k, v); } return v; },
         set(k, v) { this.map.delete(k); this.map.set(k, v); while (this.map.size > this.max) this.map.delete(this.map.keys().next().value); }
     },
-    tileMem: new Map(), tileMemMax: 300,   // кэш готовых тайлов в памяти
+    tileMem: new Map(), tileMemMax: 400,   // кэш готовых тайлов в памяти
     pool: undefined, proxyOk: undefined, lastDay: ''
 };
 
@@ -341,7 +488,7 @@ function snMeta(item, names) {
 function snAdaptiveMaxJobs() {
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     const t = c && c.effectiveType;
-    return t === '4g' ? 10 : t === '3g' ? 5 : t === '2g' ? 2 : 6;
+    return t === '4g' ? 16 : t === '3g' ? 6 : t === '2g' ? 2 : 8;   // S3 отдаёт по HTTP/2 — много запросов идут по одному соединению
 }
 (function () {
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -419,7 +566,7 @@ function snIdbTrim(db) {
     try {
         const st = db.transaction('tiles', 'readwrite').objectStore('tiles'), c = st.count();
         c.onsuccess = () => {
-            let del = c.result - 3000;
+            let del = c.result - 6000;
             if (del <= 0) return;
             st.index('t').openCursor().onsuccess = e => {
                 const cur = e.target.result;
@@ -906,7 +1053,8 @@ const SentinelLayer = L.GridLayer.extend({
 function sentinelTiles(key) {
     const layer = new SentinelLayer(key, {
         attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search',
-        tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3
+        tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3,
+        updateWhenZooming: false   // во время анимации зума тайлы промежуточного масштаба не считаем — только итоговый
     });
     SENTINEL.live.push(layer);
     return layer;
@@ -2695,13 +2843,13 @@ function snShpZip(feats, base) {
             '<div class="dw-row"><label>От</label><input type="range" data-sn="cMin" min="-0.2" max="0.8" step="0.05"><span class="dw-val" data-sn="cMinV"></span></div>' +
             '<div class="dw-row"><label>До</label><input type="range" data-sn="cMax" min="0.3" max="1" step="0.05"><span class="dw-val" data-sn="cMaxV"></span></div>' +
             '<button type="button" class="dw-act" data-sn-act="auto"><i class="fas fa-wand-magic-sparkles"></i><span>Авто по области</span></button></div>';
-        const zset = s !== 'ndvi' ? '' :
+        const zset = s !== 'ndvi' && s !== 'nbr' ? '' :
             '<div class="sn-zset"><div class="sn-zt-t">Зоны внесения и аномалии</div>' +
-            '<div class="m3-hint">После рисования фигуры автоматически считаются только данные и статистика NDVI. Зоны для дифференцированного внесения и точки аномалий строятся по кнопке ниже.</div>' +
+            '<div class="m3-hint">После рисования фигуры автоматически считаются только данные и статистика ' + d.name + '. Зоны для дифференцированного внесения и точки аномалий строятся по кнопке ниже.</div>' +
             '<div class="dw-row"><label>Число зон</label><input type="number" data-sn="zN" min="2" max="10" step="1" value="3"></div>' +
-            '<div class="dw-row"><label>Разбиение</label><select data-sn="zM"><option value="q" selected>Равные по площади</option><option value="e">Равные интервалы NDVI</option></select></div>' +
+            '<div class="dw-row"><label>Разбиение</label><select data-sn="zM"><option value="q" selected>Равные по площади</option><option value="e">Равные интервалы ' + d.name + '</option></select></div>' +
             '<div class="dw-row"><label>Норма, кг/га</label><input type="number" data-sn="zBase" min="0" step="1" value="100"></div>' +
-            '<div class="dw-row"><label>Нормы по зонам</label><select data-sn="zS"><option value="eq" selected>Одинаковые (правка вручную)</option><option value="low">Больше там, где NDVI ниже (±20%)</option><option value="high">Больше там, где NDVI выше (±20%)</option></select></div>' +
+            '<div class="dw-row"><label>Нормы по зонам</label><select data-sn="zS"><option value="eq" selected>Одинаковые (правка вручную)</option><option value="low">Больше там, где ' + d.name + ' ниже (±20%)</option><option value="high">Больше там, где ' + d.name + ' выше (±20%)</option></select></div>' +
             '<button type="button" class="dw-act ex-go" data-sn-act="zones"><i class="fas fa-layer-group"></i><span>Разбить на зоны и найти аномалии</span></button>' +
             '<div class="dw-row"><label>Порог аномалий, σ</label><input type="number" data-sn="aS" min="1.5" max="8" step="0.5" value="3"></div></div>';
         const calc = !isIdx ? '' :
@@ -2805,7 +2953,7 @@ function snShpZip(feats, base) {
             let l = clipLay[k];
             if (!(want && k === lay)) { if (l && map.hasLayer(l)) map.removeLayer(l); return; }
             if (!l) {
-                l = clipLay[k] = new SentinelLayer(k, { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, zIndex: 5 });
+                l = clipLay[k] = new SentinelLayer(k, { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, updateWhenZooming: false, zIndex: 5 });
                 SENTINEL.live.push(l);
             }
             if (!force && l._clip && l._clip.gj === shapeGJ && map.hasLayer(l)) return;
@@ -3099,6 +3247,10 @@ function snShpZip(feats, base) {
         zoneGrp.clearLayers(); anomGrp.clearLayers();
         eachPane((s, pane) => ['calcOut', 'zoneOut', 'anomOut'].forEach(n => { const o = pane.querySelector('[data-sn="' + n + '"]'); if (o) o.innerHTML = ''; }));
     }
+    function clearZA() {   // зоны и аномалии относятся к одному индексу: при переходе NDVI ↔ NBR сбрасываем
+        zoneRes = null; anomRes = null; zoneGrp.clearLayers(); anomGrp.clearLayers();
+        eachPane((s, pane) => ['zoneOut', 'anomOut'].forEach(n => { const o = pane.querySelector('[data-sn="' + n + '"]'); if (o) o.innerHTML = ''; }));
+    }
     function snCalcStats(r, key) {
         const v = r.values, m = r.mask, n = v.length;
         let total = 0, valid = 0;
@@ -3172,7 +3324,7 @@ function snShpZip(feats, base) {
             const name = SEC[sec].vars.find(v => v.l === base) ? SEC[sec].vars.find(v => v.l === base).t : SEC[sec].name;
             lastCalc = { res: res, date: st.date, name: name, lay: lay };
             renderCalc(res, st.date, name);
-            if (base === 'ndvi') { lastRaster = { r: r, date: st.date }; }   // зоны и аномалии — только по кнопке
+            if (base === 'ndvi' || base === 'nbr') { if (lastRaster && lastRaster.base !== base) clearZA(); lastRaster = { r: r, date: st.date, base: base }; }   // зоны и аномалии — только по кнопке
             updateStatus(`✅ ${name}: среднее ${f3(res.mean)}, площадь ${fHa(res.ha)} га`);
         } catch (e) {
             console.warn('Sentinel: калькулятор', e);
@@ -3197,12 +3349,15 @@ function snShpZip(feats, base) {
         document.body.appendChild(a); a.click();
         setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
     }
-    // ---------- зоны внесения удобрений и аномальные точки (NDVI) ----------
-    const zInt = () => clamp(Math.round(+(q('ndvi', 'zN') || {}).value || 3), 2, 10);
+    // ---------- зоны внесения удобрений и аномальные точки (NDVI, NBR) ----------
+    const zk = () => (sec === 'ndvi' || sec === 'nbr') ? sec : (lastRaster ? lastRaster.base : 'ndvi');   // раздел, в панели которого показываются зоны
+    const zn = () => (lastRaster ? lastRaster.base : 'ndvi').toUpperCase();   // название индекса для подписей
+    const zMine = () => !!lastRaster && lastRaster.base === zk();
+    const zInt = () => clamp(Math.round(+(q(zk(), 'zN') || {}).value || 3), 2, 10);
     const r1 = v => Math.round(v * 10) / 10;
     function applyRates() {
         if (!zoneRes) return;
-        const k = zoneRes.k, base = Math.max(0, +q('ndvi', 'zBase').value || 0), s = q('ndvi', 'zS').value;
+        const k = zoneRes.k, base = Math.max(0, +q(zk(), 'zBase').value || 0), s = q(zk(), 'zS').value;
         zoneRes.rates = zoneRes.zones.map(z => {
             const t = k > 1 ? 1 - 2 * z.i / (k - 1) : 0;   // +1 у самой слабой зоны, −1 у самой густой
             return r1(s === 'low' ? base * (1 + 0.2 * t) : s === 'high' ? base * (1 - 0.2 * t) : base);
@@ -3213,7 +3368,7 @@ function snShpZip(feats, base) {
         return zoneRes.zones.reduce((t, z) => { t.ha += z.ha; t.kg += z.ha * (zoneRes.rates[z.i] || 0); return t; }, { kg: 0, ha: 0 });
     }
     function renderZoneTotal() {
-        const el = q('ndvi', 'zTot');
+        const el = q(zk(), 'zTot');
         if (!el || !zoneRes) return;
         const t = zoneTotals();
         el.innerHTML = 'Всего: <b>' + Math.round(t.kg).toLocaleString('ru-RU') + ' кг</b> (' + fHa(t.kg / 1000) + ' т) на ' + fHa(t.ha) + ' га · в среднем ' + (t.ha ? fHa(t.kg / t.ha) : '0') + ' кг/га';
@@ -3224,7 +3379,7 @@ function snShpZip(feats, base) {
         zoneRes.zones.forEach(z => {
             if (!z.feat) return;
             L.geoJSON(z.feat, { style: { color: '#ffffff', weight: 1.5, opacity: 0.95, fillColor: z.color, fillOpacity: 0.6 } })
-                .bindTooltip(() => z.name + ' · NDVI ' + fmtN(z.min) + ' … ' + fmtN(z.max) + ' · ' + fHa(z.ha) + ' га · ' + (zoneRes.rates[z.i] || 0) + ' кг/га', { sticky: true })
+                .bindTooltip(() => z.name + ' · ' + zn() + ' ' + fmtN(z.min) + ' … ' + fmtN(z.max) + ' · ' + fHa(z.ha) + ' га · ' + (zoneRes.rates[z.i] || 0) + ' кг/га', { sticky: true })
                 .addTo(zoneGrp);
         });
         if (sec && zoneVis && !map.hasLayer(zoneGrp)) zoneGrp.addTo(map);
@@ -3235,14 +3390,14 @@ function snShpZip(feats, base) {
         anomGrp.eachLayer(l => { if (l.bringToFront) l.bringToFront(); });
     }
     function renderZones() {
-        const out = q('ndvi', 'zoneOut');
+        const out = q(zk(), 'zoneOut');
         if (!out) return;
         if (!zoneRes) { out.innerHTML = ''; return; }
         const rows = zoneRes.zones.map(z => '<div class="sn-zr"><i style="background:' + z.color + '"></i>' +
-            '<span><b>' + esc(z.name) + '</b><em>NDVI ' + (z.n ? fmtN(z.min) + ' … ' + fmtN(z.max) + ' · ср. ' + fmtN(z.mean) : '—') + '</em></span>' +
+            '<span><b>' + esc(z.name) + '</b><em>' + zn() + ' ' + (z.n ? fmtN(z.min) + ' … ' + fmtN(z.max) + ' · ср. ' + fmtN(z.mean) : '—') + '</em></span>' +
             '<u>' + fHa(z.ha) + ' га</u><input type="number" min="0" step="1" data-sn="zr" data-z="' + z.i + '" value="' + (zoneRes.rates[z.i] || 0) + '"><s>кг/га</s></div>').join('');
         out.innerHTML = '<div class="sn-res"><div class="sn-res-hd">Зоны внесения · ' + zoneRes.k + ' · ' + fmtDay(zoneRes.date) + '</div>' +
-            '<div class="m3-hint">Зона 1 — самый низкий NDVI, зона ' + zoneRes.k + ' — самый высокий. Нормы внесения можно править прямо в списке — они попадут в файл.</div>' +
+            '<div class="m3-hint">Зона 1 — самый низкий ' + zn() + ', зона ' + zoneRes.k + ' — самый высокий. Нормы внесения можно править прямо в списке — они попадут в файл.</div>' +
             rows + '<div class="sn-ztot" data-sn="zTot"></div>' +
             '<label class="dw-check"><input type="checkbox" data-sn="zvis"' + (zoneVis ? ' checked' : '') + '> Показывать зоны на карте</label>' +
             '<div class="sn-dlrow"><button type="button" class="dw-act" data-sn-act="zgj" title="Векторный слой GeoJSON"><i class="fas fa-download"></i><span>GeoJSON</span></button>' +
@@ -3251,13 +3406,13 @@ function snShpZip(feats, base) {
         renderZoneTotal();
     }
     async function buildZones() {
-        const out = q('ndvi', 'zoneOut');
+        const out = q(zk(), 'zoneOut');
         if (!lastRaster || !shapeGJ) return;
         const k = zInt();
-        q('ndvi', 'zN').value = k;
+        q(zk(), 'zN').value = k;
         out.innerHTML = '<div class="m3-hint">Строим зоны…</div>';
         try {
-            zoneRes = await snMakeZones(lastRaster.r, k, q('ndvi', 'zM').value, shapeGJ);
+            zoneRes = await snMakeZones(lastRaster.r, k, q(zk(), 'zM').value, shapeGJ);
         } catch (e) {
             console.warn('Sentinel: зоны', e);
             zoneRes = null; zoneGrp.clearLayers();
@@ -3271,7 +3426,7 @@ function snShpZip(feats, base) {
     }
     // после расчёта зон подложка меняется на обычный (естественные цвета) снимок Sentinel той же даты — цвета зон не сливаются с цветами NDVI
     function showTrueColor() {
-        const src = SENTINEL.state[layerOf('ndvi')];
+        const src = SENTINEL.state[layerOf(zk())];
         if (!src || !src.date || !src.scenes) return;
         const st = SENTINEL.state.sentinel2 || (SENTINEL.state.sentinel2 = {});
         const same = st.date === src.date && st.scenes && st.scenes.map(s => s.id).join() === src.scenes.map(s => s.id).join();
@@ -3282,10 +3437,10 @@ function snShpZip(feats, base) {
         updateStatus('🛰️ Подложка переключена на обычный снимок Sentinel-2 — зоны и точки хорошо видны. Выбор даты вернёт NDVI');
     }
     function buildAnoms() {
-        const out = q('ndvi', 'anomOut');
+        const out = q(zk(), 'anomOut');
         anomGrp.clearLayers(); anomRes = null;
         if (!lastRaster) { out.innerHTML = ''; return; }
-        const sg = clamp(+q('ndvi', 'aS').value || 3, 1.5, 8);
+        const sg = clamp(+q(zk(), 'aS').value || 3, 1.5, 8);
         try { anomRes = snFindAnoms(lastRaster.r, sg); } catch (e) {
             console.warn('Sentinel: аномалии', e);
             out.innerHTML = '<div class="m3-hint">Аномальные точки не найдены: ' + esc(e.message) + '</div>';
@@ -3293,15 +3448,15 @@ function snShpZip(feats, base) {
         }
         anomRes.pts.forEach(p => {
             L.circleMarker([p.lat, p.lng], { radius: 7, color: '#ffffff', weight: 2, fillColor: p.z < 0 ? '#dc2626' : '#2563eb', fillOpacity: 0.95 })
-                .bindTooltip('NDVI ' + fmtN(p.v) + ' · ' + (p.z < 0 ? '−' : '+') + Math.abs(p.z).toFixed(1).replace('.', ',') + 'σ · ≈' + fHa(p.ha) + ' га', { sticky: true })
+                .bindTooltip(zn() + ' ' + fmtN(p.v) + ' · ' + (p.z < 0 ? '−' : '+') + Math.abs(p.z).toFixed(1).replace('.', ',') + 'σ · ≈' + fHa(p.ha) + ' га', { sticky: true })
                 .addTo(anomGrp);
         });
         if (sec && anomVis && !map.hasLayer(anomGrp)) anomGrp.addTo(map);
         raiseOverlays();
         const st = (l, v) => '<div class="sn-st"><span>' + l + '</span><b>' + v + '</b></div>', a = anomRes;
-        out.innerHTML = '<div class="sn-res"><div class="sn-res-hd">Аномальные точки NDVI</div>' +
+        out.innerHTML = '<div class="sn-res"><div class="sn-res-hd">Аномальные точки ' + zn() + '</div>' +
             (a.pts.length
-                ? '<div class="sn-st-grid">' + st('Найдено', a.total + (a.total > a.pts.length ? ' (показано ' + a.pts.length + ')' : '')) + st('Медиана NDVI', f3(a.med)) +
+                ? '<div class="sn-st-grid">' + st('Найдено', a.total + (a.total > a.pts.length ? ' (показано ' + a.pts.length + ')' : '')) + st('Медиана ' + zn(), f3(a.med)) +
                   st('Ниже нормы', a.nLow) + st('Выше нормы', a.nHigh) + '</div>' +
                   '<div class="m3-hint"><span class="sn-dot" style="--c:#dc2626"></span> ниже нормы · <span class="sn-dot" style="--c:#2563eb"></span> выше нормы. Точка — пиксель с отклонением от медианы поля больше ' + String(a.sigma).replace('.', ',') + 'σ (устойчивая оценка, пятно от 2 пикселей, полоса 10 м у границы фигуры не учитывается).</div>' +
                   '<label class="dw-check"><input type="checkbox" data-sn="avis"' + (anomVis ? ' checked' : '') + '> Показывать точки на карте</label>' +
@@ -3324,30 +3479,30 @@ function snShpZip(feats, base) {
     }
     function zoneDownload(kind) {
         if (!zoneRes) return;
-        const fs = zoneFeatures(), base = 'NDVI_zones_' + zoneRes.date + '_' + zoneRes.k;
+        const fs = zoneFeatures(), base = zn() + '_zones_' + zoneRes.date + '_' + zoneRes.k;
         if (!fs.length) { updateStatus('⚠️ Нет зон для сохранения', true); return; }
         if (kind === 'zgj') saveBlob(new Blob([JSON.stringify({ type: 'FeatureCollection', features: fs })], { type: 'application/geo+json' }), base + '.geojson');
-        else if (kind === 'zkml') saveBlob(new Blob([snKml(fs, 'Зоны внесения NDVI ' + zoneRes.date)], { type: 'application/vnd.google-earth.kml+xml' }), base + '.kml');
+        else if (kind === 'zkml') saveBlob(new Blob([snKml(fs, 'Зоны внесения ' + zn() + ' ' + zoneRes.date)], { type: 'application/vnd.google-earth.kml+xml' }), base + '.kml');
         else saveBlob(snShpZip(fs, base), base + '_shp.zip');
         updateStatus('✅ Слой зон сохранён: ' + base);
     }
     function anomDownload() {
         if (!anomRes || !anomRes.pts.length) return;
-        const fs = anomRes.pts.map(p => ({ type: 'Feature', properties: { ndvi: Math.round(p.v * 10000) / 10000, sigma: Math.round(p.z * 100) / 100, type: p.z < 0 ? 'ниже нормы' : 'выше нормы', area_ha: Math.round(p.ha * 100) / 100 },
+        const fs = anomRes.pts.map(p => ({ type: 'Feature', properties: { [zn().toLowerCase()]: Math.round(p.v * 10000) / 10000, sigma: Math.round(p.z * 100) / 100, type: p.z < 0 ? 'ниже нормы' : 'выше нормы', area_ha: Math.round(p.ha * 100) / 100 },
             geometry: { type: 'Point', coordinates: [p.lng, p.lat] } }));
-        saveBlob(new Blob([JSON.stringify({ type: 'FeatureCollection', features: fs })], { type: 'application/geo+json' }), 'NDVI_anomalies_' + (lastRaster ? lastRaster.date : '') + '.geojson');
+        saveBlob(new Blob([JSON.stringify({ type: 'FeatureCollection', features: fs })], { type: 'application/geo+json' }), zn() + '_anomalies_' + (lastRaster ? lastRaster.date : '') + '.geojson');
     }
     function onChange(e) {
         const n = e.target.getAttribute && e.target.getAttribute('data-sn');
         if (!n) return;
-        if (n === 'zN' || n === 'zM') { if (zoneRes && lastRaster) buildZones(); }   // пересчёт — только если зоны уже построены
-        else if (n === 'zS' || n === 'zBase') { if (zoneRes) { applyRates(); renderZones(); } }
-        else if (n === 'aS') { if (lastRaster && (zoneRes || anomRes)) buildAnoms(); }   // пересчёт — только после первого построения
+        if (n === 'zN' || n === 'zM') { if (zoneRes && zMine()) buildZones(); }   // пересчёт — только если зоны уже построены
+        else if (n === 'zS' || n === 'zBase') { if (zoneRes && zMine()) { applyRates(); renderZones(); } }
+        else if (n === 'aS') { if (zMine() && (zoneRes || anomRes)) buildAnoms(); }   // пересчёт — только после первого построения
         else if (n === 'zvis') { zoneVis = e.target.checked; if (zoneVis) zoneGrp.addTo(map); else map.removeLayer(zoneGrp); }
         else if (n === 'avis') { anomVis = e.target.checked; if (anomVis) anomGrp.addTo(map); else map.removeLayer(anomGrp); }
     }
     function onInput(e) {
-        if (e.target.getAttribute && e.target.getAttribute('data-sn') === 'zr' && zoneRes) {
+        if (e.target.getAttribute && e.target.getAttribute('data-sn') === 'zr' && zoneRes && zMine()) {
             zoneRes.rates[+e.target.getAttribute('data-z')] = Math.max(0, +e.target.value || 0);
             renderZoneTotal();
         }
@@ -3559,7 +3714,7 @@ function snShpZip(feats, base) {
     // ---------- зоны внесения — по кнопке ----------
     async function makeZones() {
         if (busy) { updateStatus('⚠️ Дождитесь окончания расчёта', true); return; }
-        if (!lastRaster || !shapeGJ) { updateStatus('⚠️ Сначала нарисуйте фигуру и дождитесь расчёта статистики NDVI', true); return; }
+        if (!lastRaster || !shapeGJ || !zMine()) { updateStatus('⚠️ Сначала нарисуйте фигуру и дождитесь расчёта статистики ' + (sec ? sec.toUpperCase() : 'индекса'), true); return; }
         updateStatus('🧩 Делим контур на зоны…');
         await buildZones();
         buildAnoms();
@@ -3611,7 +3766,7 @@ function snShpZip(feats, base) {
     }
     // слой половины карты: снимок (внутри фигуры — поверх обычной подложки) + контур фигуры справа
     function cmpMakeLayer(i) {
-        const l = cmp.L[i] = new SentinelLayer(cmp.k[i], { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, zIndex: 5 });
+        const l = cmp.L[i] = new SentinelLayer(cmp.k[i], { attribution: 'Contains modified Copernicus Sentinel data, AWS Earth Search', tileSize: 256, maxZoom: 19, maxNativeZoom: 14, keepBuffer: 3, updateWhenZooming: false, zIndex: 5 });
         cmpClipOf(l);
         const parts = [];
         if (shapeGJ) { const ub = (LAYER_SEC[currentLayer] || !layerFactories[currentLayer]) ? 'esri_sat' : currentLayer; if (layerFactories[ub]) parts.push(layerFactories[ub]()); }
@@ -6240,6 +6395,7 @@ let searchSeq = 0;
 
 async function searchAddress(query) {
     if (query.length < 2) return [];
+    if (window.gcCadIsNumber && window.gcCadIsNumber(query)) return [{ name: 'Кадастровый номер ' + query, address: 'Нажмите кнопку поиска или Enter — найти в НСПД (участок, здание, квартал, район)', cad: query, lat: 0, lon: 0, dist: null }];
     const ref = searchRef(), q = encodeURIComponent(query);
     const base = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&addressdetails=1&accept-language=ru&countrycodes=ru&dedupe=1`;
     const vb = (dLat, dLng) => `&viewbox=${(ref.lng - dLng).toFixed(4)},${(ref.lat + dLat).toFixed(4)},${(ref.lng + dLng).toFixed(4)},${(ref.lat - dLat).toFixed(4)}`;
@@ -6282,6 +6438,7 @@ function selectSearchResult(index) {
     if (!item) return;
     searchResults.classList.remove('active');
     searchInput.value = '';
+    if (item.cad) { window.gcCadSearch(item.cad); return; }
     map.setView([item.lat, item.lon], 16);
     reverseRequestId++;   // отменяем незавершённый запрос «Что здесь?»
     showGeoPoint(L.latLng(item.lat, item.lon), 'search', item.address);
@@ -6313,6 +6470,7 @@ searchInput.addEventListener('input', function() {
 searchBtn.addEventListener('click', async function() {
     const query = searchInput.value.trim();
     if (query.length < 2) return;
+    if (window.gcCadIsNumber && window.gcCadIsNumber(query)) { searchResults.classList.remove('active'); searchInput.value = ''; window.gcCadSearch(query); return; }   // кадастровый номер ищется сразу
     const my = ++searchSeq, items = await searchAddress(query);
     if (my === searchSeq) showSearchResults(items);
 });
@@ -11971,12 +12129,12 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     }
     // a = [сетка высот, строк, столбцов, запад, север, шаг по широте, шаг по долготе, мин, макс]
     function hmMake(a) {
-        const grid = a[0], rows = a[1], cols = a[2], bw = a[3], bn = a[4], dLat = a[5], dLng = a[6], mn = a[7], mx = a[8], span = (mx - mn) || 1;
+        const grid = a[0], rows = a[1], cols = a[2], bw = a[3], bn = a[4], dLat = a[5], dLng = a[6], mn = a[7], mx = a[8], span = (mx - mn) || 1, slope = a.kind === 'slope';
         const c0 = document.createElement('canvas'); c0.width = cols; c0.height = rows;
         const g0 = c0.getContext('2d'), img = g0.createImageData(cols, rows);
         for (let i = 0; i < grid.length; i++) {
             const v = grid[i]; if (v !== v) continue;
-            const c = hmColor((v - mn) / span), o = i * 4;
+            const c = slope ? slColorRGB(v) : hmColor((v - mn) / span), o = i * 4;
             img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
         }
         g0.putImageData(img, 0, 0);
@@ -11986,11 +12144,21 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         g1.drawImage(c0, 0, 0, c1.width, c1.height);   // плавное «тепловое» сглаживание
         return L.imageOverlay(c1.toDataURL('image/png'), [[bn - rows * dLat, bw], [bn, bw + cols * dLng]], { opacity: 0.7, interactive: false, pane: 'tilePane', zIndex: 12 });
     }
+    // карта уклонов — та же шкала, что в паспорте участка: 0° зелёный … 15° и круче красный
+    const SL_STOPS = [[22, 163, 74], [132, 204, 22], [250, 204, 21], [249, 115, 22], [220, 38, 38]];
+    function slColorRGB(deg) {
+        const t = Math.max(0, Math.min(1, deg / 15)) * 4, i = Math.min(3, Math.floor(t)), f = t - i, a = SL_STOPS[i], b = SL_STOPS[i + 1];
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    }
     function hmLegendSync() {
         const el = $('hmLegend'); if (!el) return;
         const mode = (pfPaneEl && pfPaneEl.dataset.pfMode) || 'line', d = mode === 'area' ? hy.hm : pf.hm;
         el.hidden = !d;
-        if (d) { $('hmMin').textContent = Math.round(d.mn); $('hmMax').textContent = Math.round(d.mx); }
+        const bar = el.querySelector('.hm-bar'), cap = el.querySelector('.hm-lab span:nth-child(2)');
+        if (bar) bar.style.background = d && d.kind === 'slope' ? 'linear-gradient(90deg,#16a34a,#84cc16,#facc15,#f97316,#dc2626)' : '';
+        if (cap) cap.textContent = d && d.kind === 'slope' ? 'уклон, °' : 'высота, м';
+        if (d && d.kind === 'slope') { $('hmMin').textContent = '0'; $('hmMax').textContent = '15+'; }
+        else if (d) { $('hmMin').textContent = Math.round(d.mn); $('hmMax').textContent = Math.round(d.mx); }
     }
     // сетка высот внутри полигона (для полосы вдоль линии)
     async function hmGrid(gj, alive) {
@@ -12041,9 +12209,10 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     function hyHeatShow() {
         if (hy.heat) { map.removeLayer(hy.heat); hy.heat = null; }
         hy.hm = null;
-        if (hy.hmArgs && $('hyHeat').checked) {
-            hy.heat = hmMake(hy.hmArgs).addTo(map);
-            hy.hm = { mn: hy.hmArgs[7], mx: hy.hmArgs[8] };
+        const sl = !!$('hyMapKind') && $('hyMapKind').value === 'slope', args = sl ? hy.slArgs : hy.hmArgs;
+        if (args && $('hyHeat').checked) {
+            hy.heat = hmMake(args).addTo(map);
+            hy.hm = { mn: args[7], mx: args[8], kind: sl ? 'slope' : 'elev' };
         }
         hmLegendSync();
     }
@@ -12111,7 +12280,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         hy.seq++; pfArmed = false; hyStopDraw();
         if (hy.layer) { map.removeLayer(hy.layer); hy.layer = null; }
         if (hy.heat) { map.removeLayer(hy.heat); hy.heat = null; }
-        hy.hm = null; hy.hmArgs = null; hmLegendSync();
+        hy.hm = null; hy.hmArgs = null; hy.slArgs = null; hmLegendSync();
         Object.assign(hy, { gj: null, area: 0, e: null, cw: null, curve: null, st: null, bins: null, hover: -1 });
         $('hyCsv').disabled = $('hyPng').disabled = true;
         hyStatsRender(); hyDraw();
@@ -12232,6 +12401,15 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             st: { n: nV, min: mn, max: mx, mean, median: pct(0.5), p10: pct(0.1), p90: pct(0.9), hi: mx > mn ? (mean - mn) / (mx - mn) : 0, slope: sN ? sSum / sN : null, steep: sN ? steep / sN : null } });
         hyBinning(); hyStatsRender();
         hy.hmArgs = [grid, rows, cols, bw, bn, dLat, dLng, mn, mx];
+        const sg = new Float32Array(rows * cols).fill(NaN), nb = (i, j) => (j >= 0 && j < grid.length && grid[j] === grid[j]) ? grid[j] : null;   // карта уклонов, °: центральные разности, на краю — односторонние
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+            const i = r * cols + c, v = grid[i]; if (v !== v) continue;
+            const L0 = c > 0 ? nb(i, i - 1) : null, R0 = c < cols - 1 ? nb(i, i + 1) : null, U0 = r > 0 ? nb(i, i - cols) : null, D0 = r < rows - 1 ? nb(i, i + cols) : null;
+            const gx = (L0 != null && R0 != null) ? (R0 - L0) / (2 * step) : R0 != null ? (R0 - v) / step : L0 != null ? (v - L0) / step : 0;
+            const gy = (U0 != null && D0 != null) ? (D0 - U0) / (2 * step) : D0 != null ? (D0 - v) / step : U0 != null ? (v - U0) / step : 0;
+            sg[i] = Math.atan(Math.hypot(gx, gy)) * 180 / Math.PI;
+        }
+        hy.slArgs = [sg, rows, cols, bw, bn, dLat, dLng, 0, 15]; hy.slArgs.kind = 'slope';
         hyHeatShow();
         $('hyEmpty').hidden = true; $('hyCsv').disabled = $('hyPng').disabled = false;
         hyDraw();
@@ -12429,6 +12607,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         pfMarkTool();
     }));
     $('hyHeat').addEventListener('change', () => hyHeatShow());
+    $('hyMapKind').addEventListener('change', () => hyHeatShow());
     $('hyView').addEventListener('change', hyDraw);
     $('hyStep').addEventListener('change', () => { hyBinning(); hyDraw(); });
     map.on('draw:drawstop', () => { if (hy.drawing) { hyStopDraw(); pfArmed = false; setTimeout(drawSync, 50); } });   // Esc в процессе рисования — снова готовы обводить
@@ -13897,15 +14076,33 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     };
 
     // ---------- данные SoilGrids: WCS → GeoTIFF ----------
+    // по умолчанию — ISRIC; если он недоступен — Esri Living Atlas World Soils 250m (те же данные SoilGrids)
     async function fetchCoverage(prop, depth, bb) {
+        try { return await fetchCoverageIsric(prop, depth, bb); }
+        catch (e) {
+            console.warn('ISRIC недоступен, пробуем Esri World Soils:', e);
+            const pd = 0.0025;
+            try {
+            const ex0 = bb[0] - pd, ex1 = bb[2] + pd, ey0 = bb[1] - pd, ey1 = bb[3] + pd;
+            const W = Math.max(2, Math.ceil((ex1 - ex0) / (0.00225 / Math.cos((ey0 + ey1) / 2 * Math.PI / 180)))), H = Math.max(2, Math.ceil((ey1 - ey0) / 0.00225));
+            if (W * H <= 4e6) {
+                const r = await esriSoilFetch(prop, depth, [ex0, ey0, ex1, ey1], 4326, W, H), kk = PROPS[prop].k, ev = new Float32Array(r.raw.length);
+                for (let i = 0; i < ev.length; i++) { const x = r.raw[i]; ev[i] = (x > -9000 && x < 65000) ? x / kk : NaN; }
+                return { W: r.w, H: r.h, x0: ex0, y0: ey0, x1: ex1, y1: ey1, v: ev };
+            }
+            } catch (e2) { console.warn('Esri World Soils:', e2); }
+            throw e;
+        }
+    }
+    async function fetchCoverageIsric(prop, depth, bb) {
         const pd = 0.0025;   // запас в один пиксель 250 м — для интерполяции у края фигуры
         const query = 'map=/map/' + prop + '.map&SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=' + prop + '_' + depth + '_mean&FORMAT=image/tiff' +
             '&SUBSET=long(' + (bb[0] - pd).toFixed(5) + ',' + (bb[2] + pd).toFixed(5) + ')&SUBSET=lat(' + (bb[1] - pd).toFixed(5) + ',' + (bb[3] + pd).toFixed(5) + ')' +
             '&SUBSETTINGCRS=http://www.opengis.net/def/crs/EPSG/0/4326&OUTPUTCRS=http://www.opengis.net/def/crs/EPSG/0/4326';
         let buf = null;
-        try { const r = await fetch('https://maps.isric.org/mapserv?' + query); if (r.ok) buf = await r.arrayBuffer(); } catch (e) { /* CORS или сеть — пробуем через локальный прокси */ }
+        try { const r = await fetch('https://maps.isric.org/mapserv?' + query, { signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined }); if (r.ok) buf = await r.arrayBuffer(); } catch (e) { /* CORS или сеть — пробуем через локальный прокси */ }
         if (!buf && /^https?:$/.test(location.protocol)) {
-            try { const r = await fetch('/isric?' + query); if (r.ok) buf = await r.arrayBuffer(); } catch (e) { /* нет прокси */ }
+            try { const r = await fetch('/isric?' + query, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined }); if (r.ok) buf = await r.arrayBuffer(); } catch (e) { /* нет прокси */ }
         }
         if (!buf) throw new Error('сервер ISRIC недоступен из браузера. Запустите сайт через serve_site.py (он содержит прокси) и повторите');
         const h = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));

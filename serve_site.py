@@ -2,7 +2,7 @@
 # Запуск:  python serve_site.py   (из папки сайта или откуда угодно), затем откройте http://localhost:8000
 # Прокси ускорен: постоянные соединения с S3 (без нового TLS-рукопожатия на каждый запрос)
 # и кэш ответов на диске (папка .s3cache рядом со скриптом) — повторно открытые снимки грузятся мгновенно.
-import hashlib, http.client, http.server, json, mimetypes, os, ssl, sys, threading, time, urllib.parse, urllib.request
+import hashlib, http.client, http.cookiejar, http.server, json, mimetypes, os, ssl, sys, threading, time, urllib.parse, urllib.request
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 UPSTREAM_HOST = 'sentinel-cogs.s3.us-west-2.amazonaws.com'
@@ -31,13 +31,15 @@ def response_headers(raw_headers):
     return {k.lower(): v for k, v in raw_headers}
 
 
-def make_opener(px=None):
+def make_opener(px=None, jar=None):
     """Исходящие запросы без проверки сертификата (НСПД использует российский корневой сертификат).
     Если НСПД закрыт для вашего IP (зарубежный адрес/VPN) — задайте прокси в РФ: переменная окружения GEO_PROXY=http://host:port"""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     handlers = [urllib.request.HTTPSHandler(context=ctx)]
+    if jar is not None:
+        handlers.append(urllib.request.HTTPCookieProcessor(jar))
     px = px or os.environ.get('GEO_PROXY')
     if px:
         handlers.append(urllib.request.ProxyHandler({'http': px, 'https': px}))
@@ -65,7 +67,10 @@ def win_proxy_for(url):
 
 # НСПД: прокси из GEO_PROXY, а если не задан — тот, что система (PAC) выбирает для nspd.gov.ru; остальные запросы идут как раньше
 NSPD_PROXY = os.environ.get('GEO_PROXY') or win_proxy_for('https://nspd.gov.ru')
-NSPD_OPENER = make_opener(NSPD_PROXY)
+NSPD_JAR = http.cookiejar.CookieJar()     # cookie сессии НСПД: поисковый API отвечает 403 без них
+NSPD_OPENER = make_opener(NSPD_PROXY, NSPD_JAR)
+NSPD_HDR_XHR = dict(NSPD_HDR, **{'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors',
+                                  'Sec-Fetch-Site': 'same-origin', 'Referer': 'https://nspd.gov.ru/map?thematic=PKK'})
 
 
 def upstream_get(path, headers):
@@ -291,6 +296,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def ucache_fetch(self, u, is_nspd):
         """Загружает слой с источника напрямую (для НСПД — с браузерными заголовками и своим прокси)."""
         hdr = dict(NSPD_HDR) if is_nspd else {'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'}   # НСПД отдаёт тайлы только «браузерным» запросам с их сайта
+        try:
+            return self.ucache_open(u, hdr, is_nspd)
+        except urllib.error.HTTPError as e:
+            if not (is_nspd and e.code == 403 and '/geoportal/' in u):
+                raise
+            # поиск НСПД строже плиток: заходим на страницу карты (получаем cookie) и повторяем запрос с «браузерными» заголовками XHR
+            try:
+                page = urllib.request.Request('https://nspd.gov.ru/map', headers={'User-Agent': BROWSER_UA, 'Accept': 'text/html,*/*;q=0.8', 'Accept-Encoding': 'identity'})
+                NSPD_OPENER.open(page, timeout=20).read()
+            except Exception as e2:
+                print('NSPD session warm-up error:', e2)
+            try:
+                return self.ucache_open(u, dict(NSPD_HDR_XHR), is_nspd)
+            except urllib.error.HTTPError as e3:
+                print('NSPD search 403 after retry:', e3.read()[:300].decode('utf-8', 'replace'), '| cookies:', len(NSPD_JAR))
+                raise
+
+    def ucache_open(self, u, hdr, is_nspd):
         req = urllib.request.Request(u, headers=hdr)
         with (NSPD_OPENER if is_nspd else OPENER).open(req, timeout=20 if is_nspd else 60) as r:
             data = r.read()
@@ -396,16 +419,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if hit:
             status, headers, data = hit
         else:
-            conn = http.client.HTTPSConnection('maps.isric.org', timeout=120)
+            conn = http.client.HTTPSConnection('maps.isric.org', timeout=30)
             try:
                 conn.request('GET', '/mapserv?' + query, headers={'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'})
                 r = conn.getresponse()
                 data = r.read()
                 status, headers = r.status, response_headers(r.getheaders())
             except Exception as e:
-                print('ISRIC error:', e)
-                self.send_error(502, 'ISRIC unreachable', str(e))
-                return
+                # напрямую недоступно (блокировка/VPN только в браузере) — пробуем через прокси: GEO_PROXY или системный (PAC), как у браузера
+                print('ISRIC direct error:', e)
+                try:
+                    px = os.environ.get('GEO_PROXY') or win_proxy_for('https://maps.isric.org')
+                    if not px:
+                        raise e
+                    rq = urllib.request.Request('https://maps.isric.org/mapserv?' + query, headers={'User-Agent': PROXY_UA, 'Accept-Encoding': 'identity'})
+                    with make_opener(px).open(rq, timeout=120) as r2:
+                        data = r2.read()
+                        status, headers = r2.status, response_headers(r2.getheaders())
+                except Exception as e2:
+                    print('ISRIC error:', e2)
+                    self.send_error(502, 'ISRIC unreachable', str(e2))
+                    return
             finally:
                 conn.close()
             if status == 200 and data[:2] in (b'II', b'MM'):
