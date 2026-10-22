@@ -429,16 +429,20 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .mc-group.mc-hidden { display: none !important; }
 
 /* выезжающие подложки: плитки собраны в прямоугольник по 4 в строке */
-#baseLayersPanel, #satellitePanel, #analyticsPanel { top: 0; transform: none; animation: slideInLeftTop .2s ease; }
+#baseLayersPanel, #satellitePanel, #analyticsPanel, #layersWidgetPanel { top: 0; transform: none; animation: slideInLeftTop .2s ease; }
 @keyframes slideInLeftTop { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
 #baseLayersPanel .widget-panel-body-horizontal,
 #satellitePanel .widget-panel-body-horizontal,
-#analyticsPanel .widget-panel-body-horizontal {
+#analyticsPanel .widget-panel-body-horizontal,
+#layersWidgetPanel .widget-panel-body-horizontal {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; align-items: start;
     width: min(344px, calc(100vw - 90px)); max-width: none; max-height: 62vh; overflow-x: hidden; overflow-y: auto; padding: 3px;
 }
-#baseLayersPanel .layer-chip, #satellitePanel .layer-chip, #analyticsPanel .layer-chip { width: 100%; min-width: 0; }
-#baseLayersPanel .layer-chip span, #satellitePanel .layer-chip span, #analyticsPanel .layer-chip span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+#baseLayersPanel .layer-chip, #satellitePanel .layer-chip, #analyticsPanel .layer-chip, #layersWidgetPanel .ovl-chip { width: 100%; min-width: 0; }
+#baseLayersPanel .layer-chip span, #satellitePanel .layer-chip span, #analyticsPanel .layer-chip span, #layersWidgetPanel .ovl-chip span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+
+/* внутри любого раздела боковой панели слайды-подсказки не показываем (только на главной) */
+#mainPanel:not([data-view="home"]) .tab-art { display: none !important; }
 
 /* кнопка «Свернуть панель»: язычок на краю боковой панели */
 .map-controls-left { left: 6px; top: 50%; transform: translateY(-50%); }
