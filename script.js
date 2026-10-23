@@ -504,7 +504,7 @@ function snPump() {
     while (SENTINEL.running < SENTINEL.maxJobs) {
         let j;
         if (SENTINEL.queue.length) j = SENTINEL.queue.pop();
-        else if (SENTINEL.lowQueue.length && SENTINEL.lowRunning < Math.max(1, Math.floor(SENTINEL.maxJobs / 3))) j = SENTINEL.lowQueue.shift();   // ближайшие к центру — первыми
+        else if (SENTINEL.lowQueue.length && SENTINEL.running === SENTINEL.lowRunning && SENTINEL.lowRunning < Math.max(1, Math.floor(SENTINEL.maxJobs / 3))) j = SENTINEL.lowQueue.shift();   // предзагрузка стартует, только пока нет обычных тайлов (не отбирает канал у видимых)   // ближайшие к центру — первыми
         else break;
         if (j.dead && j.dead()) { j.res(); continue; }   // тайл уже убран с карты — не тратим на него трафик
         SENTINEL.running++;
@@ -657,6 +657,12 @@ function snStats() {
 SENTINEL.directBadAt = 0;
 try { SENTINEL.directBadAt = Number(localStorage.getItem('gcSnDirectBad') || 0); } catch (e) { }
 const snDirectBad = () => Date.now() - SENTINEL.directBadAt < 10 * 6e4;   // 10 минут: сети и сертификаты бывают нестабильны, потом снова пробуем прямой путь
+// ошибка прямого чтения одного файла: он переходит на прокси, остальные остаются напрямую; глобально прямой путь отключается, если так упали 3 файла за 10 минут
+function snMarkFileBad(href) {
+    const b = SENTINEL.badFiles || (SENTINEL.badFiles = {});
+    b[href] = Date.now();
+    if (Object.keys(b).filter(k => Date.now() - b[k] < 6e5).length >= 3) snMarkDirectBad();
+}
 function snMarkDirectBad() {
     if (!snDirectBad() && SN_LOG.on) console.warn('[Sentinel] прямое соединение с S3 не работает в этой сети — дальше только через локальный прокси');
     SENTINEL.directBadAt = Date.now();
@@ -851,7 +857,7 @@ function snOpen(href) {
             });
             for (let attempt = 0; attempt < 2; attempt++) {
                 // если прямой путь признан нерабочим — сначала только прокси; прямые адреса — лишь запасной вариант на второй попытке
-                const lst = (attempt === 0 && snDirectBad() && cands.some(u => u.charAt(0) === '/')) ? cands.filter(u => u.charAt(0) === '/') : cands;
+                const lst = (attempt === 0 && (snDirectBad() || Date.now() - ((SENTINEL.badFiles && SENTINEL.badFiles[href]) || 0) < 6e5) && cands.some(u => u.charAt(0) === '/')) ? cands.filter(u => u.charAt(0) === '/') : cands;
                 const order = lst.map((_, i) => lst[(SENTINEL.hostIdx + i) % lst.length]);
                 try {
                     const w = await race(order);
@@ -902,7 +908,7 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb, maxDim) {
         }
     }
     if (!bands && f.url && f.url.charAt(0) !== '/' && SENTINEL.proxyOk) {   // переходим на локальный прокси и читаем то же окно заново
-        snMarkDirectBad();
+        snMarkFileBad(f.key);
         delete SENTINEL.files[f.key];
         SENTINEL.hostIdx = 0;
         return snRead(await snOpen(f.key), minE, minN, maxE, maxN, g, rgb, maxDim);
@@ -916,6 +922,13 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb, maxDim) {
 }
 
 const SN_NODES = 9, SN_STEP = 32;
+// уровень обзора (overview), который выберет snRead для разрешения g
+function snLv(f, g) {
+    let lv = 0;
+    for (let i = f.imgs.length - 1; i >= 0; i--) { if (f.rx * f.W / f.imgs[i].w <= g * 1.0001) { lv = i; break; } }
+    return lv;
+}
+SENTINEL.progressive = true;   // «сначала быстро, потом чётко»: тайл сперва рисуется по более грубому уровню обзора (в разы меньше данных), затем уточняется в фоне
 
 const SN_CHUNK_MAX = 1024;   // максимальная сторона блока чтения, пикселей (не больше — чтобы не перегружать память)
 
@@ -933,7 +946,7 @@ function snChunk(k, loader) {
 
 // шаг 1: открывает файлы сцены и читает нужные окна (для нескольких сцен тайла вызывается параллельно).
 // Окно читается сразу для блока 512×512 (2×2 тайла) и кэшируется; blk = { id, tid, lon, lat } — сетка блока
-async function snLoadScene(key, item, lon, lat, blk) {
+async function snLoadScene(key, item, lon, lat, blk, coarse) {
     const names = SN_ASSETS[key];
     const files = await Promise.all(names.map(nm => {
         const a = item.assets && item.assets[nm];
@@ -956,8 +969,8 @@ async function snLoadScene(key, item, lon, lat, blk) {
         }
     }
     if (minE > f0.ox + f0.W * f0.rx || maxE < f0.ox || maxN < f0.oy - f0.H * f0.ry || minN > f0.oy) return null;   // тайл вне сцены
-    const g = Math.hypot(E[0][SN_NODES - 1] - E[0][0], N[0][SN_NODES - 1] - N[0][0]) / 256;
-    let rd;
+    const kk = coarse ? 2 : 1, g0 = Math.hypot(E[0][SN_NODES - 1] - E[0][0], N[0][SN_NODES - 1] - N[0][0]) / 256, g = g0 * kk;
+    let rd, gb = g0;
     if (blk) {
         let bminE = Infinity, bminN = Infinity, bmaxE = -Infinity, bmaxN = -Infinity, bg = 0, q0 = null;
         for (let b = 0; b < SN_NODES; b++) {
@@ -970,16 +983,17 @@ async function snLoadScene(key, item, lon, lat, blk) {
             }
         }
         // все каналы читаются параллельно; блок 512×512 покрывает 4 тайла. Если блок больше SN_CHUNK_MAX — читаем один тайл
+        gb = bg;
         rd = await Promise.all(files.map((f, k) => {
-            const rgb = names[k] === 'visual', tag = f.key + '|' + (rgb ? 'rgb' : 'b1') + '|';
-            return snChunk(tag + blk.id, () => snRead(f, bminE, bminN, bmaxE, bmaxN, bg, rgb, SN_CHUNK_MAX))
+            const rgb = names[k] === 'visual', tag = f.key + '|' + (rgb ? 'rgb' : 'b1') + (coarse ? '|c' : '') + '|';
+            return snChunk(tag + blk.id, () => snRead(f, bminE, bminN, bmaxE, bmaxN, bg * kk, rgb, SN_CHUNK_MAX))
                 .then(r => r || snChunk(tag + 't' + blk.tid, () => snRead(f, minE, minN, maxE, maxN, g, rgb)));
         }));
     } else {
         rd = await Promise.all(files.map((f, k) => snRead(f, minE, minN, maxE, maxN, g, names[k] === 'visual')));
     }
     if (rd.some(r => !r)) return null;
-    return { item: item, E: E, N: N, rd: rd };
+    return { item: item, E: E, N: N, rd: rd, diff: !!coarse && files.some(f => snLv(f, gb) !== snLv(f, gb * 2)) };   // diff: грубый уровень реально отличается от обычного — нужно уточнение
 }
 
 // шаг 2: дорисовывает в буфер out (256×256 RGBA) пиксели одной загруженной сцены
@@ -1055,15 +1069,15 @@ function snGrid(x0, y0, size) {
 // рисует тайл z/x/y в canvas 256×256 по выбранной дате (мозаика всех сцен этого дня).
 // Сначала смотрит в кэш (память → IndexedDB); все сцены дня читаются параллельно, данные — блоками 512×512 (4 тайла на запрос).
 // dead() — функция «тайл уже не нужен»; skipCache — кэш уже проверен снаружи; quiet — не показывать предупреждения (фоновая предзагрузка)
-async function snRenderTile(key, z, x, y, canvas, dead, skipCache, quiet) {
+async function snRenderTile(key, z, x, y, canvas, dead, skipCache, quiet, prog) {
     const t0 = performance.now();
-    try { return await snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0); }
+    try { return await snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0, !!prog && SENTINEL.progressive); }
     finally { snLog('network', key, z, x, y, t0); }
 }
-async function snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0) {
+async function snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0, coarse, refine) {
     const st = SENTINEL.state[key];
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 256, 256);
+    if (!refine) ctx.clearRect(0, 0, 256, 256);   // при уточнении старая картинка остаётся на месте, пока не готова новая
     if (!st || !st.date || !st.scenes || !st.scenes.length) return;
     if (typeof GeoTIFF === 'undefined' || typeof proj4 === 'undefined') throw new Error('не загрузились библиотеки geotiff / proj4');
     const n = Math.pow(2, z);
@@ -1088,13 +1102,15 @@ async function snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0) {
             const item = await snItem(sc.id);
             const bb = item.bbox;
             if (bb && (bb[0] > lonMax || bb[2] < lonMin || bb[1] > latMax || bb[3] < latMin)) return null;
-            return await snLoadScene(key, item, lon, lat, blk);
+            return await snLoadScene(key, item, lon, lat, blk, coarse);
         } catch (e) { ok = false; if (!quiet) snWarn(e); return null; }
     }));
     for (const S of loaded) if (S) snPaintScene(key, S, img.data);   // порядок сцен сохраняется: сначала самые чистые
     if (SENTINEL.state[key] && SENTINEL.state[key].date === dayAtStart) {
         ctx.putImageData(img, 0, 0);
-        if (ok) { snMemPut(sig, img); snIdbPut(sig, canvas); }
+        const needRefine = coarse && ok && loaded.some(S => S && S.diff);
+        if (ok && !needRefine) { snMemPut(sig, img); snIdbPut(sig, canvas); }   // в кэш попадает только итоговая (чёткая) версия
+        if (needRefine) snRun(() => snRenderTile0(key, z, x, y, canvas, dead, true, true, performance.now(), false, true), dead, true).catch(() => { });
     }
 }
 
@@ -1172,7 +1188,7 @@ const SentinelLayer = L.GridLayer.extend({
         if (clip && !this._tileCoordsToBounds(coords).intersects(clip.bounds)) { setTimeout(() => done(null, c), 0); return c; }
         // готовые тайлы берутся из кэша сразу, минуя очередь загрузки
         snFromCache(key, coords.z, coords.x, coords.y, c)
-            .then(hit => hit || snRun(() => snRenderTile(key, coords.z, coords.x, coords.y, c, dead, true), dead))
+            .then(hit => hit || snRun(() => snRenderTile(key, coords.z, coords.x, coords.y, c, dead, true, false, !clip), dead))
             .catch(snWarn).then(() => { if (clip && map && !c._snDead) { try { snMaskTile(map, c, coords, clip.gj); } catch (e) { snWarn(e); } } done(null, c); });
         return c;
     }

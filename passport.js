@@ -35,7 +35,7 @@
     // блок: o.t — заголовок, o.i — значок, o.c — цвет, o.info — [что это, зачем нужно, как считается], o.map — колонка слева (квадратная карта), o.id/o.body — данные справа
     function blk(o) {
         var f = o.info;
-        return '<div class="pp-sub' + (o.map ? '' : ' nomap') + '"' + (o.c ? ' style="--ac:' + o.c + '"' : '') + '><div class="pp-sub-h"><span class="pp-ic sm"><i class="fas fa-' + o.i + '"></i></span><h4>' + o.t + '</h4>' +
+        return '<div class="pp-sub' + (o.map ? '' : ' nomap') + (o.cls ? ' ' + o.cls : '') + '"' + (o.c ? ' style="--ac:' + o.c + '"' : '') + '><div class="pp-sub-h"><span class="pp-ic sm"><i class="fas fa-' + o.i + '"></i></span><h4>' + o.t + '</h4>' +
             (o.cal || '') + '<button type="button" class="pp-i-btn"><i class="fas fa-circle-info"></i> Расшифровка</button></div>' +
             '<div class="pp-info"><div><b>Что это</b>' + f[0] + '</div><div><b>Зачем нужно</b>' + f[1] + '</div><div><b>Как рассчитывается</b>' + f[2] + '</div></div>' +
             '<div class="pp-mc">' + (o.map ? '<div class="pp-mcol">' + o.map + '</div>' : '') + '<div class="pp-dcol"' + (o.id ? ' id="' + o.id + '"' : '') + '>' + (o.body || '') + '</div></div></div>';
@@ -185,7 +185,7 @@
         return (minis[key] = { map: m, el: el, gj: gj, title: title, leg: null });
     }
     function legSrc(key) {   // краткое описание источника под легендой
-        var s = /^soil_/.test(key) ? 'ISRIC SoilGrids, 250 м' : /^(ndvi|ndmi|nbr|s2rgb)$/.test(key) ? 'Sentinel-2 L2A (ESA Copernicus), 10 м' : /^el[hs]$/.test(key) ? 'цифровая модель рельефа Terrarium (Mapzen / AWS)' : '';
+        var s = /^soil_/.test(key) ? 'ISRIC SoilGrids, 250 м' : /^(ndvi|ndmi|nbr|s2rgb|s2cir)$/.test(key) ? 'Sentinel-2 L2A (ESA Copernicus), 10 м' : /^el[hs]$/.test(key) ? 'цифровая модель рельефа Terrarium (Mapzen / AWS)' : '';
         return s ? '<div class="pp-legsrc">Источник: ' + s + '</div>' : '';
     }
     function setLeg(key, cols, lo, hi, unit) {
@@ -293,11 +293,20 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         } catch (err) { el.innerHTML = '<div class="pp-ph3">3D недоступно (WebGL)</div>'; return; }
         m3s[key] = m;
         var kicks = 0, heatSpec = { id: 'heat', type: 'raster', source: 'heat', paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 } };
-        var kick = function () {   // слой поверх рельефа дорисовывается не целиком, пока подгружаются тайлы высот: пересоздаём слой и рельеф, когда карта «затихла»
-            try { if (m.getLayer('heat')) { m.removeLayer('heat'); m.addLayer(heatSpec, m.getLayer('plot') ? 'plot' : undefined); } m.setTerrain({ source: 'dem', exaggeration: 1.5 }); m.triggerRepaint(); } catch (e) { /* карта удалена */ }
+        var kick = function () {   // слой поверх рельефа дорисовывается не целиком, пока подгружаются тайлы высот: пересоздаём слой и «толкаем» зум, как при ручном масштабировании
+            try {
+                if (m.isMoving() || !el.clientWidth) return;
+                if (m.getLayer('heat')) { m.removeLayer('heat'); m.addLayer(heatSpec, m.getLayer('plot') ? 'plot' : undefined); }
+                m.setTerrain({ source: 'dem', exaggeration: 1.5 });
+                var z0 = m.getZoom(); m.jumpTo({ zoom: z0 + 0.25 });
+                setTimeout(function () { try { m.jumpTo({ zoom: z0 }); m.triggerRepaint(); } catch (e) { /* карта удалена */ } }, 150);
+            } catch (e) { /* карта удалена */ }
         };
         var fit = function () { try { m.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 30, pitch: 60, bearing: -20, duration: 0 }); kicks = 0; } catch (e) { /* карта удалена */ } };
-        if (heat) m.on('idle', function () { if (m.getSource('heat') && kicks < 3) { kicks++; setTimeout(kick, 200); } });
+        if (window.IntersectionObserver) {   // карта стала видимой (раздел развернули / доскроллили) — подгруженные «вслепую» слои перерисовываем
+            var io = new IntersectionObserver(function (es) { if (es.some(function (x) { return x.isIntersecting; })) { setTimeout(kick, 500); setTimeout(kick, 2000); } }, { threshold: 0.2 });
+            io.observe(el); var rm2 = m.remove.bind(m); m.remove = function () { io.disconnect(); rm2(); };
+        }
         var lw = 0, ro = window.ResizeObserver ? new ResizeObserver(function () {   // контейнер меняет размер после загрузки данных выше по странице — подстраиваем холст и кадр
             var w = el.clientWidth; if (!w) return; try { m.resize(); } catch (e) { return; }
             if (Math.abs(w - lw) > 40) { lw = w; fit(); }
@@ -315,6 +324,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             } catch (e) { console.warn('Паспорт: слой 3D', e); }
             try { m.addSource('plot', { type: 'geojson', data: gj }); m.addLayer({ id: 'plot', type: 'line', source: 'plot', paint: { 'line-color': '#ffffff', 'line-width': 2.5 } }); } catch (e) { console.warn('Паспорт: контур 3D', e); }
             m.resize(); lw = el.clientWidth; fit();
+            [1500, 3500, 6000, 10000].forEach(function (t) { setTimeout(kick, t); });
         });
     }
 
@@ -426,7 +436,33 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#passportPane .pp-top .pp-tb.sec{background:#fff;color:#334155;border-color:#cbd5e1}#passportPane .pp-top .pp-tb.sec i{color:#2563eb}',
         '#passportPane .pp-top .pp-tbs{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:5px;order:5;margin-left:auto}#passportPane .pp-top .pp-tbs .pp-tb{width:auto;height:26px;flex:0 0 auto}#passportPane .pp-top .pp-tb i{font-size:11px}',
         '#passportPane .pp-top .pp-tb.xls{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}#passportPane .pp-top .pp-tb.htm{background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff}#passportPane .pp-top .pp-tb:disabled{opacity:.7;cursor:progress;transform:none}',
-        '@media print{#ppSt{display:none}}'
+        '#ppBody .pp-pack > .pp-sub.pp-wide{grid-column:1/-1}',
+        '#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{display:grid!important;grid-template-columns:minmax(0,500px) minmax(0,500px) minmax(240px,1fr)!important;gap:22px;align-items:start}',
+        '#ppBody .pp-sub.pp-wide .pp-mcol,#ppBody .pp-sub.pp-wide .pp-mpair{display:contents}#ppBody .pp-sub.pp-wide .pp-mapw{max-width:none;min-width:0}',
+        '@media(max-width:1250px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:minmax(0,420px) minmax(0,420px) minmax(200px,1fr)!important;gap:14px}}',
+        '@media(max-width:1100px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:repeat(2,minmax(0,1fr))!important}#ppBody .pp-sub.pp-wide .pp-dcol{grid-column:1/-1}}',
+        '@media(max-width:700px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:minmax(0,1fr)!important}}',
+        '#ppNav.pp-nav{order:11;flex:1 1 100%;min-width:0;display:flex;flex-direction:column;gap:6px;padding:2px 0 0}',
+        '#ppNav .nv-s{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:5px}',
+        '#ppNav .nv-b{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 8px;border:1px solid #e2e8f0;border-radius:9px;background:linear-gradient(180deg,#fff,#f1f5f9);color:#334155;font:600 12px/1 system-ui,sans-serif;cursor:pointer;overflow:hidden;transition:transform .15s,box-shadow .15s,background .15s,color .15s,border-color .15s}',
+        '#ppNav .nv-b i{font-size:12px;color:var(--ac,#2563eb);flex:none}#ppNav .nv-b span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+        '#ppNav .nv-b:hover{border-color:var(--ac,#2563eb);transform:translateY(-1px);box-shadow:0 3px 8px rgba(15,23,42,.14)}',
+        '#ppNav .nv-b.on{background:var(--ac,#2563eb);border-color:var(--ac,#2563eb);color:#fff;box-shadow:0 3px 10px rgba(15,23,42,.18)}#ppNav .nv-b.on i{color:#fff}',
+        '#ppNav .nv-u{display:flex;flex-wrap:wrap;gap:5px;padding:6px 8px;border-radius:10px;background:color-mix(in srgb,var(--ac,#2563eb) 8%,#fff);border:1px solid color-mix(in srgb,var(--ac,#2563eb) 28%,#e2e8f0);max-height:66px;overflow-y:auto;scrollbar-width:thin}#ppNav .nv-u[hidden]{display:none}',
+        '#ppNav .nv-c{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:99px;border:1px solid #dbe3ec;background:#fff;color:#475569;font:500 12px/1 system-ui,sans-serif;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}',
+        '#ppNav .nv-c i{font-size:10.5px;color:var(--ac,#2563eb)}#ppNav .nv-c:hover{border-color:var(--ac,#2563eb);color:#0f172a}#ppNav .nv-c.on{background:var(--ac,#2563eb);border-color:var(--ac,#2563eb);color:#fff}#ppNav .nv-c.on i{color:#fff}',
+        '#ppSt.pp-stbar{padding:5px 12px 8px;margin-bottom:4px}#ppSt .pp-sts{display:none}',
+        '#ppSt.pp-stbar + #ppNav.pp-nav{margin-top:2px;padding:7px 6px;background:linear-gradient(180deg,#f8fafc,#fff);border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(15,23,42,.08)}',
+        '#passportPane .pp-top{z-index:1200!important}#ppBody .pp-mapw,#ppBody .pp-map,#ppBody .pp-mcol{isolation:isolate;z-index:0}',
+        '#ppNav .nv-si{font-size:10.5px;flex:none;margin-left:1px}#ppNav .nv-si:not(.fas){display:none}#ppNav .nv-si.fa-circle-check{color:#16a34a}#ppNav .nv-si.fa-spinner{color:#2563eb}#ppNav .nv-si.fa-triangle-exclamation{color:#dc2626;cursor:pointer}#ppNav .nv-si.fa-circle-pause{color:#94a3b8}',
+        '#ppNav .nv-b.on .nv-si{color:#fff!important}',
+        '#ppNav .nv-b.st-load:not(.on){background:repeating-linear-gradient(-45deg,#dbeafe 0 7px,#c7ddfb 7px 14px);background-size:20px 20px;animation:nvStrip .9s linear infinite;color:#1d4ed8}',
+        '#ppNav .nv-b.st-ok:not(.on){background:linear-gradient(180deg,#f0fdf4,#dcfce7);border-color:#bbf7d0}#ppNav .nv-b.st-err:not(.on){background:#fee2e2;border-color:#fecaca;color:#b91c1c}#ppNav .nv-b.st-off:not(.on){background:#f1f5f9;color:#94a3b8}',
+        '#ppNav .nv-b.st-err.on{box-shadow:0 0 0 2px #fca5a5}#ppNav .nv-b.st-load.on{animation:nvPulse 1.2s ease-in-out infinite}',
+        '#ppNav .nv-c::after{content:"";width:7px;height:7px;border-radius:50%;background:transparent;margin-left:2px}#ppNav .nv-c.st-ok::after{background:#22c55e}#ppNav .nv-c.st-load::after{background:#3b82f6;animation:nvPulse 1s ease-in-out infinite}#ppNav .nv-c.st-err::after{background:#ef4444}#ppNav .nv-c.st-off::after{background:#cbd5e1}#ppNav .nv-c.on::after{box-shadow:0 0 0 2px rgba(255,255,255,.7)}',
+        '@keyframes nvStrip{to{background-position:20px 0}}@keyframes nvPulse{50%{opacity:.55}}',
+        '#ppBody .pp-sec,#ppBody .pp-sub{scroll-margin-top:var(--ppTopH,130px)}',
+        '@media print{#ppSt,#ppNav{display:none}}html.pp-printing #ppNav{display:none!important}'
     ].join('');
     function ppCss() { if (!document.getElementById('ppStCss')) { var cs = document.createElement('style'); cs.id = 'ppStCss'; cs.textContent = ST_CSS; document.head.appendChild(cs); } }
     // ---------- «пакет» блоков: два столбца равной высоты, остаток высоты поглощают карты ----------
@@ -485,6 +521,91 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         h.className = 'pp-st pp-stbar';
         h.innerHTML = '<b class="pp-stp" id="ppStPct">0%</b><div class="pp-sts">' + Object.keys(STL).map(function (k) { return '<span class="pp-stc load" data-st="' + k + '"></span>'; }).join('') + '</div><span class="pp-stx" id="ppStTxt"></span><i class="pp-stf" id="ppStFill"></i>';
         Object.keys(STL).forEach(function (k) { stSet(k, k === 'cls' || k === 'sat' ? 'off' : 'load'); });
+        stNav(top, h);
+    }
+    // ---------- панель быстрых переходов по разделам: одна строка под статусами загрузки, закреплена вместе с шапкой ----------
+    var NAV = ['Общее', 'Классы земли', 'Снимки', 'Почва', 'Рельеф', 'Логистика', 'Климат', 'Итог'], navCtx = null, navSig = '', navT = 0, navG = [], NKEYS = [['addr'], ['cls'], ['sat'], ['soil'], ['elev'], ['log'], ['clim', 'wx'], []], navA = 0, navS = -1, navLock = 0, navRaf = 0;
+    function navGroups() {   // разделы и все блоки внутри них (каждый индекс, почвенный показатель, климатический блок…)
+        var g = [];
+        Array.prototype.forEach.call(body.querySelectorAll('.pp-sec'), function (sc, i) {
+            var ic = sc.querySelector('.pp-ic i'), h3 = sc.querySelector('h3'), subs = [];
+            Array.prototype.forEach.call(sc.querySelectorAll('.pp-sub'), function (b) {
+                if (b.parentNode.closest && b.parentNode.closest('.pp-sub')) return;
+                var h4 = b.querySelector('.pp-sub-h h4'), bi = b.querySelector('.pp-sub-h .pp-ic i'), t = h4 ? h4.textContent.replace(/^Sentinel-2\s*·\s*/, '').trim() : '';
+                if (t) subs.push({ t: t, full: h4.textContent.trim(), ic: bi ? bi.className : 'fas fa-circle', el: b });
+            });
+            g.push({ keys: NKEYS[i] || [], t: NAV[i] || (h3 && h3.textContent) || ('Раздел ' + (i + 1)), full: h3 ? h3.textContent : '', ic: ic ? ic.className : 'fas fa-circle', ac: sc.style.getPropertyValue('--ac') || '#2563eb', el: sc, subs: subs });
+        });
+        return g;
+    }
+    function navSubs() {   // ряд блоков активного раздела
+        var u = document.querySelector('#ppNav .nv-u'); if (!u) return;
+        var g = navG[navA]; navS = -1;
+        if (!g || g.subs.length < 2) { u.hidden = true; u.innerHTML = ''; return; }
+        u.hidden = false; u.style.setProperty('--ac', g.ac);
+        u.innerHTML = g.subs.map(function (x, j) { return '<button type="button" class="nv-c" data-s="' + j + '" title="' + esc(x.full) + '"><i class="' + x.ic + '"></i>' + esc(x.t) + '</button>'; }).join('');
+        navStat();
+    }
+    function navStat() {   // статусы загрузки показываются прямо на кнопках меню (данные берутся из скрытых меток #ppSt)
+        var nv = document.getElementById('ppNav'), h = document.getElementById('ppSt'); if (!nv || !h) return;
+        var rank = { err: 3, load: 2, ok: 1, off: 0 }, IC = { load: 'spinner fa-spin', ok: 'circle-check', err: 'triangle-exclamation', off: 'circle-pause' };
+        var cls = function (k) { var el = h.querySelector('[data-st="' + k + '"]'), m = el && /\b(load|ok|err|off)\b/.exec(el.className); return m ? m[1] : ''; };
+        var secSt = navG.map(function (g) { var r = '', best = -1; g.keys.forEach(function (k) { var c = cls(k); if (c && rank[c] > best) { best = rank[c]; r = c; } }); return r; });
+        Array.prototype.forEach.call(nv.querySelectorAll('.nv-b'), function (b, i) {
+            var st = secSt[i] || '', si = b.querySelector('.nv-si'), g = navG[i];
+            b.className = b.className.replace(/\s*\bst-\w+\b/g, '') + (st ? ' st-' + st : '');
+            if (si) si.className = 'nv-si' + (st ? ' fas fa-' + IC[st] : '') + (st === 'err' ? ' err' : '');
+            if (g) b.setAttribute('data-k', g.keys.filter(function (k) { return cls(k) === 'err'; }).join(','));
+            b.title = (g ? (g.full || g.t) : '') + (st === 'load' ? ' — загружается…' : st === 'ok' ? ' — данные получены' : st === 'err' ? ' — ошибка, нажмите на значок ⚠, чтобы обновить раздел' : st === 'off' ? ' — отключено / нет данных' : '');
+        });
+        var g2 = navG[navA];
+        if (g2) Array.prototype.forEach.call(nv.querySelectorAll('.nv-c'), function (c, j) {
+            var sub = g2.subs[j], st = secSt[navA] || '', r;
+            if (!sub) return;
+            r = sub.el.querySelector('.fa-spin') ? 'load' : st === 'off' ? 'off' : st === 'load' ? 'ok' : st;
+            c.className = c.className.replace(/\s*\bst-\w+\b/g, '') + (r ? ' st-' + r : '');
+        });
+    }
+    function navSpy() {
+        navRaf = 0; var c = navCtx; if (!c || !navG.length || Date.now() < navLock) return;
+        var lim = c.top.getBoundingClientRect().bottom + 30, a = 0, s2 = -1;
+        navG.forEach(function (g, i) { if (g.el.isConnected && g.el.getBoundingClientRect().top <= lim) a = i; });
+        navG[a].subs.forEach(function (x, j) { if (x.el.getBoundingClientRect().top <= lim) s2 = j; });
+        if (a !== navA) { navA = a; navMark(); navSubs(); }
+        if (s2 !== navS || a !== navA) navMarkSub(s2);
+        navS = s2;
+    }
+    function navMark() { Array.prototype.forEach.call(document.querySelectorAll('#ppNav .nv-b'), function (b, i) { b.classList.toggle('on', i === navA); }); }
+    function navMarkSub(j) { Array.prototype.forEach.call(document.querySelectorAll('#ppNav .nv-c'), function (b, i) { b.classList.toggle('on', i === j); }); }
+    function navBuild() {
+        var c = navCtx; if (!c || !c.h.parentNode) return;
+        var g = navGroups(), sig = g.map(function (x) { return x.t + ':' + x.subs.map(function (y) { return y.t; }).join(','); }).join('|');
+        if (!g.length || (sig === navSig && document.getElementById('ppNav'))) { navG = g.length ? g : navG; return; }
+        navSig = sig; navG = g; if (navA >= g.length) navA = 0;
+        var old = document.getElementById('ppNav'); if (old) old.remove();
+        var nv = document.createElement('div'); nv.id = 'ppNav'; nv.className = 'pp-nav';
+        nv.innerHTML = '<div class="nv-s">' + g.map(function (x, i) { return '<button type="button" class="nv-b" data-g="' + i + '" style="--ac:' + x.ac + '" title="' + esc(x.full || x.t) + '"><i class="' + x.ic + '"></i><span>' + esc(x.t) + '</span><i class="nv-si"></i></button>'; }).join('') + '</div><div class="nv-u" hidden></div>';
+        nv.addEventListener('click', function (e) {
+            var b = e.target.closest('[data-g],[data-s]'); var tgt; if (!b) return;
+            var si = e.target.closest('.nv-si.err');
+            if (si) { var ek = (b.getAttribute('data-k') || '').split(',')[0], chip = ek && document.querySelector('#ppSt [data-st="' + ek + '"]'); if (chip) chip.click(); return; }
+            if (b.hasAttribute('data-g')) { var gi = +b.getAttribute('data-g'); if (gi !== navA) { navA = gi; navMark(); navSubs(); } tgt = navG[gi] && navG[gi].el; }
+            else { var sj = +b.getAttribute('data-s'); tgt = navG[navA] && navG[navA].subs[sj] && navG[navA].subs[sj].el; navMarkSub(sj); navS = sj; }
+            if (!tgt || !tgt.isConnected) return;
+            navLock = Date.now() + 900;
+            body.style.setProperty('--ppTopH', (c.top.offsetHeight + 10) + 'px');
+            tgt.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setTimeout(function () { navLock = 0; navSpy(); }, 950);
+        });
+        c.h.parentNode.insertBefore(nv, c.h.nextSibling); navMark(); navSubs(); navStat(); navSpy();
+    }
+    function stNav(top, h) {
+        navCtx = { top: top, h: h }; navSig = ''; navBuild();
+        if (!body._ppNavMo) {   // блоки могут дорисовываться позже — обновляем меню, только если изменился список заголовков
+            body._ppNavMo = new MutationObserver(function () { clearTimeout(navT); navT = setTimeout(function () { navBuild(); navStat(); }, 300); });
+            body._ppNavMo.observe(body, { childList: true, subtree: true });
+            document.addEventListener('scroll', function () { if (!navRaf) navRaf = requestAnimationFrame(navSpy); }, true);
+        }
     }
     // сводка полосы: доля загруженных блоков среди подключённых (отключённые не считаются)
     function stSum() {
@@ -495,6 +616,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (a) a.textContent = pct + '%'; if (f) f.style.width = pct + '%';
         if (t) t.textContent = er ? 'ошибок: ' + er + ' (нажмите на блок)' : ok >= on ? 'всё загружено' : 'загружено ' + ok + ' из ' + on;
         h.classList.toggle('done', on > 0 && ok >= on); h.classList.toggle('hasErr', er > 0);
+        navStat();
     }
     function stSet(k, st, msg) {
         var el = document.querySelector('#ppSt [data-st="' + k + '"]'); if (!el) return;
@@ -526,8 +648,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
 
     // ---------- 3. спутниковые снимки ----------
     var SATS = [
-        { k: 's2rgb', t: 'Sentinel-2 · естественные цвета', i: 'image', c: '#0ea5e9', l: 'яркости каналов',
-            f: ['Снимок участка в естественных цветах — так его видит глаз.', 'Визуальный контроль посевов, границ полей, застройки и воды; подложка для проверки всех индексов.', 'Композит Sentinel-2 L2A (10 м): красный B04 (665 нм), зелёный B03 (560 нм), синий B02 (490 нм); облака и тени маскируются по слою SCL, выбирается наименее облачная сцена.'] },
+        { k: 's2rgb', t: 'Sentinel-2 · естественные и ложные цвета', i: 'image', c: '#0ea5e9', l: 'яркости каналов',
+            f: ['Снимок участка в естественных цветах (так его видит глаз) и рядом — в ложных цветах (CIR), где растительность выглядит красной.', 'Визуальный контроль посевов, границ полей, застройки и воды; в ложных цветах легко отличить здоровую растительность от угнетённой, голой почвы и воды; подложка для проверки всех индексов.', 'Композит Sentinel-2 L2A (10 м): красный B04 (665 нм), зелёный B03 (560 нм), синий B02 (490 нм); ложные цвета (CIR): ближний ИК B08 (842 нм) → красный канал, B04 → зелёный, B03 → синий; облака и тени маскируются по слою SCL, выбирается наименее облачная сцена.'] },
         { k: 'ndvi', t: 'NDVI — вегетация', i: 'leaf', c: '#16a34a', l: 'NDVI',
             f: ['Нормализованный вегетационный индекс — показатель количества и «зелёности» растительной массы.', 'Выявляет неоднородность посевов и угнетённые зоны, позволяет планировать дифференцированное внесение удобрений, оценивать фазы развития и потенциал урожайности.', 'NDVI = (NIR − Red) / (NIR + Red) = (B08 − B04) / (B08 + B04) по Sentinel-2 L2A (10 м); значения от −1 до 1; статистика — по пикселям внутри контура.'],
             sc: [['> 0,7 · очень густая растительность', '#15803d'], ['0,5–0,7 · густая', '#22c55e'], ['0,3–0,5 · умеренная', '#a3e635'], ['0,1–0,3 · разреженная, всходы', '#facc15'], ['< 0,1 · голая почва, вода, застройка', '#a8a29e']] },
@@ -586,7 +708,21 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             D.sat[k] = { blob: res.blob, name: res.name, day: sat.day };
             if (minis[k]) { var rgbU = cv.toDataURL('image/png'), rgbB = satLLB(res.epsg, bx[0], bx[1], bx[2], bx[3]); satOv[k] = addImg(k, rgbU, rgbB, 1); D.satRgb = { url: rgbU, bounds: rgbB, day: sat.day }; }
             if (box) box.innerHTML = tiles([['Дата съёмки', st.date.split('-').reverse().join('.'), '', s.c], ['Облачность сцены', sat.cc == null ? '—' : nf(sat.cc, 0) + ' %', '', '#64748b'], ['Сцен в контуре', nf(sat.scenes.length, 0), '', '#0ea5e9'], ['Разрешение', '10 м', 'Sentinel-2 L2A', '#14b8a6']]) + '<div class="pp-cap">Естественные цвета (B04 · B03 · B02) на весь экстент карты. Источник: Sentinel-2 L2A (ESA Copernicus), 10 м.</div>';
-            satOn(k, s.t); return;
+            satOn(k, s.t);
+            try {   // ложные цвета (CIR: NIR · Red · Green) — рядом, на тот же экстент
+                var rc = await snExportGeoTiff({ key: 'falsecolor', st: st, gj: args.gj, onProgress: function () { }, isAborted: args.isAborted }); if (tok !== seq) return;
+                var im2 = await (await GeoTIFF.fromBlob(rc.blob)).getImage(), w2 = im2.getWidth(), h2 = im2.getHeight(), ras2 = await im2.readRasters({ interleave: true }), spp2 = Math.round(ras2.length / (w2 * h2)), bx2 = im2.getBoundingBox();
+                var cv2 = document.createElement('canvas'); cv2.width = w2; cv2.height = h2;
+                var g2 = cv2.getContext('2d'), id2 = g2.createImageData(w2, h2), i2;
+                for (i2 = 0; i2 < w2 * h2; i2++) { id2.data[i2 * 4] = ras2[i2 * spp2]; id2.data[i2 * 4 + 1] = ras2[i2 * spp2 + 1]; id2.data[i2 * 4 + 2] = ras2[i2 * spp2 + 2]; id2.data[i2 * 4 + 3] = spp2 > 3 ? ras2[i2 * spp2 + 3] : 255; }
+                g2.putImageData(id2, 0, 0);
+                if (tok !== seq) return;
+                D.sat.s2cir = { blob: rc.blob, name: rc.name, day: sat.day };
+                if (minis.s2cir) satOv.s2cir = addImg('s2cir', cv2.toDataURL('image/png'), satLLB(rc.epsg, bx2[0], bx2[1], bx2[2], bx2[3]), 1);
+                var lg2 = document.getElementById('ppLeg_s2cir'); if (lg2) lg2.innerHTML = '<div class="pp-legsrc">Ложные цвета (NIR · Red · Green → R · G · B): красный — растительность, тёмный — вода, голубоватый и серый — голая почва и застройка. Источник: Sentinel-2 L2A (ESA Copernicus), 10 м.</div>';
+                satOn('s2cir', 'Sentinel-2 · ложные цвета');
+            } catch (e2) { if (tok !== seq) return; console.warn('Паспорт: ложные цвета', e2); var lg3 = document.getElementById('ppLeg_s2cir'); if (lg3) lg3.innerHTML = '<div class="pp-legsrc">Не удалось получить снимок в ложных цветах: ' + esc(e2 && e2.message || e2) + '</div>'; }
+            return;
         }
         args.raw = true;
         var r = await snExportGeoTiff(args); if (tok !== seq) return;
@@ -659,6 +795,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (satOv[k]) { try { satOv[k].remove(); } catch (e) { /* нет */ } satOv[k] = null; }
         if (satOv[k + '_u']) { try { satOv[k + '_u'].remove(); } catch (e) { /* нет */ } satOv[k + '_u'] = null; }
         if (D.sat) delete D.sat[k];
+        if (k === 's2rgb') {
+            if (satOv.s2cir) { try { satOv.s2cir.remove(); } catch (e) { /* нет */ } satOv.s2cir = null; }
+            if (D.sat) delete D.sat.s2cir;
+            var b2 = body.querySelector('[data-sat-tif="s2cir"]'); if (b2) { b2.disabled = true; b2.title = 'GeoTIFF станет доступен после расчёта'; }
+            var lg = document.getElementById('ppLeg_s2cir'); if (lg) lg.innerHTML = '';
+        }
         var b = body.querySelector('[data-sat-tif="' + k + '"]'); if (b) { b.disabled = true; b.title = 'GeoTIFF станет доступен после расчёта'; }
         if (box) box.innerHTML = SPIN;
         try { await satBlock(s, sat, D.gj, tok); if (tok === seq) summary(); }
@@ -706,9 +848,13 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         return sec(3, 'satellite', 'Спутниковые снимки и индексы', 'Sentinel-2: вегетация, влажность, вода, нарушения покрова', CC.sat,
             '<div class="pp-note">' + (sat ? 'Снимок Sentinel-2 L2A от <b>' + satDay(sat.day) + '</b>' + (sat.cc != null ? ' · облачность ' + nf(sat.cc, 0) + ' %' : '') + ' · сцен: ' + sat.scenes.length + '. Дату каждого блока можно сменить кнопкой календаря под картой. Облака и тени не исключаются — выбирайте дату с малой облачностью.' : 'Дата снимка не выбрана: выберите её кнопкой календаря под картой нужного блока (или во вкладке «Анализ»).') + '</div>' +
             SATS.map(function (s) {
+                var tifBtn = function (q) { return '<button type="button" class="pp-btn" data-sat-tif="' + q + '" disabled title="' + (sat ? 'GeoTIFF станет доступен после расчёта' : 'Нет даты снимка') + '"><i class="fas fa-download"></i> GeoTIFF</button>'; };
+                var two = s.k === 's2rgb';
                 return blk({
                     t: s.t, i: s.i, c: s.c, info: s.f, id: 'ppSatB_' + s.k, body: sat ? SPIN : '<div class="pp-note">Дата не выбрана — выберите её кнопкой с календарём под картой.</div>',
-                    map: mapBox(s.k, calHtml(s.k) + '<button type="button" class="pp-btn" data-sat-tif="' + s.k + '" disabled title="' + (sat ? 'GeoTIFF станет доступен после расчёта' : 'Нет даты снимка') + '"><i class="fas fa-download"></i> GeoTIFF</button>')
+                    cls: two ? 'pp-wide' : '',
+                    map: two ? '<div class="pp-mpair">' + mapBox(s.k, calHtml(s.k) + tifBtn(s.k), 'Естественные цвета (R · G · B)') + mapBox('s2cir', tifBtn('s2cir'), 'Ложные цвета (NIR · R · G)') + '</div>'
+                        : mapBox(s.k, calHtml(s.k) + tifBtn(s.k))
                 });
             }).join(''));
     }
@@ -1355,7 +1501,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         // имя фигуры (стандартное или своё из «Списка объектов») + площадь — если это не кадастровый участок и не выписка
         D.name = D.cad ? '' : (forced ? (forced.meta.name || '') : (l._gcName || l._gcDef || (function () { var n = ''; if (typeof drawnItems !== 'undefined') drawnItems.eachLayer(function (g) { if (!n && g !== l && g.hasLayer && g.hasLayer(l)) n = g._gcName || g._gcDef || ''; }); return n; })()));
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : D.name ? ' «' + D.name + '» · ' + nf(D.area / 1e4, 2) + ' га' : '');
-        var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
+        var T = { gen: 'Участок', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', s2cir: 'Sentinel-2 · ложные цвета', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
         SOILS.forEach(function (p) { T['soil_' + p] = 'Почва'; });
         Object.keys(T).forEach(function (k) { mini(k, gj, T[k]); });
         mk3d('m3a', gj, null);
@@ -2047,7 +2193,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         };
         Object.keys(snaps.map).forEach(function (k) { put('[data-map="' + k + '"]', snaps.map[k]); });
         Object.keys(snaps.m3).forEach(function (k) { put('[data-map3="' + k + '"]', snaps.m3[k]); });
-        Array.prototype.forEach.call(cp.querySelectorAll('.leaflet-control-container, .pp-dl, .pp-cal, #ppSt, .pp-top .pp-tbs, .pp-top button, [data-pp-all]'), function (e) { if (e.parentNode) e.parentNode.removeChild(e); });
+        Array.prototype.forEach.call(cp.querySelectorAll('.leaflet-control-container, .pp-dl, .pp-cal, #ppSt, #ppNav, .pp-top .pp-tbs, .pp-top button, [data-pp-all]'), function (e) { if (e.parentNode) e.parentNode.removeChild(e); });
         cp.removeAttribute('style');
         var cs = ppCssText(), d = new Date(), ttl = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : '');
         var extra = 'html.pp-printing,html.pp-printing body{overflow:auto!important}html.pp-printing body{padding:18px 0 30px}' +

@@ -107,23 +107,36 @@ def upstream_get(path, headers):
         return e.code, response_headers(e.headers.items()), e.read()
 
 
+import queue
+_S3_POOL = queue.LifoQueue()   # общий пул постоянных соединений с S3 (сервер создаёт новый поток на каждое подключение браузера, поэтому соединения «по потокам» не переиспользовались)
+
+
 def upstream_get_direct(path, headers):
-    """GET к S3 по постоянному соединению (своё на каждый поток); при обрыве — одна повторная попытка."""
+    """GET к S3 по соединению из общего пула (через прокси — туннелем); при обрыве — одна повторная попытка на новом соединении."""
     for attempt in (0, 1):
-        conn = getattr(local, 'conn', None)
+        conn = None
+        if not attempt:
+            try:
+                conn = _S3_POOL.get_nowait()
+            except queue.Empty:
+                pass
         if conn is None:
-            conn = local.conn = new_s3_conn()
+            conn = new_s3_conn()
         try:
             conn.request('GET', path, headers=headers)
             r = conn.getresponse()
             data = r.read()
-            return r.status, response_headers(r.getheaders()), data
+            out = r.status, response_headers(r.getheaders()), data
+            if _S3_POOL.qsize() < 32:
+                _S3_POOL.put(conn)
+            else:
+                conn.close()
+            return out
         except Exception:
             try:
                 conn.close()
             except Exception:
                 pass
-            local.conn = None
             if attempt:
                 raise
 
