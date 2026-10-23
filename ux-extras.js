@@ -998,7 +998,7 @@
     }
     var hdWx = ctxGroup('fa-cloud-sun-rain', 'Погода и климат', [ctxWx, mkItem('fa-chart-line', 'Климат участка', 'climate', 'Климат участка'), mkItem('fa-seedling', 'Тепло и вегетация', 'gdd', 'Тепло и вегетация'), mkItem('fa-snowflake', 'Заморозки', 'frost', 'Заморозки'), mkItem('fa-wind', 'Ветер и окна работ', 'windwork', 'Ветер и окна работ')]);
     var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-wheat-awn', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
-    var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), mkItem('fa-draw-polygon', 'Границы и форма', 'shape', 'Границы и форма'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
+    var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), mkItem('fa-draw-polygon', 'Границы, форма и кадастр', 'shape', 'Границы, форма и кадастр'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
     var hdDl = ctxGroup('fa-file-arrow-down', 'Скачать границы', [ctxKml, ctxGj, ctxShp, ctxDxf]);
     var ctxAll = [ctxSep, ctxAn, hdTr, hdTr._sub, hdDl, hdDl._sub];
     ctxAll.forEach(function (el) { el.style.display = 'none'; if (mnu) mnu.appendChild(el); });
@@ -1071,7 +1071,7 @@
             { icon: 'fa-mountain', label: 'Профиль', bp: 'profile' },
             { icon: 'fa-route', label: 'Логистика', bp: 'logistics' },
             { icon: 'fa-flask', label: 'Почвенный анализ', bp: 'chem' },
-            { icon: 'fa-draw-polygon', label: 'Границы и форма', bp: 'shape' },
+            { icon: 'fa-draw-polygon', label: 'Границы, форма и кадастр', bp: 'shape' },
             { icon: 'fa-cloud-sun-rain', label: 'Погода и климат', sub: [
                 { icon: 'fa-cloud-sun-rain', label: 'Погода', bp: 'weather' }, { icon: 'fa-chart-line', label: 'Климат участка', bp: 'climate' },
                 { icon: 'fa-seedling', label: 'Тепло и вегетация', bp: 'gdd' }, { icon: 'fa-snowflake', label: 'Заморозки', bp: 'frost' },

@@ -431,6 +431,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#ppBody .pp-pack.on .pp-cadsub .pp-cadtbl .pp-vt{flex:0 0 auto;min-height:0;max-height:420px}',
         '#ppBody .pp-cadtbl td,#ppBody .pp-cadtbl th{white-space:nowrap}#ppBody .pp-cadtbl td:nth-child(n+7),#ppBody .pp-cadtbl th:nth-child(n+7){white-space:normal;min-width:150px;text-align:left}#ppBody .pp-cadtbl td:nth-child(2),#ppBody .pp-cadtbl th:nth-child(2){text-align:left}',
         '#ppBody .pp-cadtbl tbody tr{cursor:pointer}#ppBody .pp-cadtbl tbody tr:hover td{background:#fffbeb}#ppBody .pp-cadtbl tbody tr.pp-cadsel td{background:#fde68a;color:#78350f;font-weight:600}',
+        '[data-bp-pane="shape"] .pp-cadtbl .pp-vt{max-height:260px}[data-bp-pane="shape"] .pp-cadtbl td,[data-bp-pane="shape"] .pp-cadtbl th{white-space:nowrap}[data-bp-pane="shape"] .pp-cadtbl td:nth-child(n+7),[data-bp-pane="shape"] .pp-cadtbl th:nth-child(n+7){white-space:normal;min-width:150px;text-align:left}[data-bp-pane="shape"] .pp-cadtbl td:nth-child(2),[data-bp-pane="shape"] .pp-cadtbl th:nth-child(2){text-align:left}[data-bp-pane="shape"] .pp-cadtbl tbody tr{cursor:pointer}[data-bp-pane="shape"] .pp-cadtbl tbody tr:hover td{background:#fffbeb}[data-bp-pane="shape"] .pp-cadtbl tbody tr.pp-cadsel td{background:#fde68a;color:#78350f;font-weight:600}',
         '#ppBody .pp-pack:not(.on){display:flex;flex-direction:column;gap:14px}#ppBody .pp-pack .pp-sub{margin:0}',
         '#ppBody .pp-pack.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}',
         '#ppBody .pp-pack.on .pp-pc{display:flex;flex-direction:column;gap:14px;min-width:0}#ppBody .pp-pack.on.pk-m .pp-pc{align-self:start}',
@@ -652,13 +653,10 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
 
     // ---------- пересечения с кадастровыми участками (слой «Земельные участки из ЕГРН» НСПД; опрос — window.gcCadIntersect из ux-extras.js) ----------
-    function cadRun(gj, tok) {
+    function cadCalc(gj, alive, onProgress) {
         if (!window.gcCadIntersect) return Promise.reject(new Error('модуль кадастра (ux-extras.js) не загружен'));
-        return window.gcCadIntersect(gj, {
-            alive: function () { return tok === seq; },
-            onProgress: function (d, t) { var e = tok === seq && !D.cadx && document.getElementById('ppCadBody'); if (e) e.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД: ' + d + ' из ' + t + ' точек…</div>'; }
-        }).then(function (r) {
-            if (tok !== seq) return;
+        return window.gcCadIntersect(gj, { alive: alive, onProgress: onProgress }).then(function (r) {
+            if (!alive()) return null;
             var plots = polysOf(gj).map(function (p) { return turf.polygon(p); }), tot = turf.area(gj), items = [], cover = 0;
             r.items.forEach(function (it) {
                 var parts = [], ia = 0;
@@ -668,20 +666,25 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 if (ia >= 1) { it.ia = ia; it.parts = parts; items.push(it); cover += ia; }
             });
             items.sort(function (a, b) { return b.ia - a.ia; });
-            D.cadx = { items: items, cover: cover, tot: tot, req: r.req, bad: r.bad, step: r.step };
-            cadShow();
+            return { items: items, cover: cover, tot: tot, req: r.req, bad: r.bad, step: r.step };
+        });
+    }
+    function cadRun(gj, tok) {
+        return cadCalc(gj, function () { return tok === seq; }, function (d, t) { var e = tok === seq && !D.cadx && document.getElementById('ppCadBody'); if (e) e.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД: ' + d + ' из ' + t + ' точек…</div>'; }).then(function (x) {
+            if (!x) return;
+            D.cadx = x; cadShow();
         });
     }
     // лист Excel «Кадастр»: сводка, карта (если есть снимок) и таблица участков; используется и в кнопке «Excel» блока, и в выгрузке всего паспорта
-    function cadSheet(ST, snaps) {
-        var d = D.cadx, sh = new Sheet('Кадастр', 'F59E0B'), t = document.getElementById('ppTitle'), sum = 0, pc = Math.min(100, d.cover / d.tot * 100), im = snaps && snaps.map && snaps.map.cadx;
+    function cadSheet(ST, snaps, dd) {
+        var d = dd || D.cadx, sh = new Sheet('Кадастр', 'F59E0B'), t = document.getElementById('ppTitle'), sum = 0, pc = Math.min(100, d.cover / d.tot * 100), im = snaps && snaps.map && snaps.map.cadx;
         sh.colw = [5, 24, 16, 13, 11, 16, 13, 38, 30, 34]; sh.imgCol = 0;
         var hd = ST.get({ b: 1, color: 'FFFFFF', fill: '334155', border: 1, wrap: 1, v: 'center', h: 'center' }), tx = ST.get({ border: 1, wrap: 1 }), tb = ST.get({ border: 1, wrap: 1, b: 1 }),
             n0 = ST.get({ border: 1, h: 'right', nf: '#,##0' }), n1 = ST.get({ border: 1, h: 'right', nf: '0.0' }), n3 = ST.get({ border: 1, h: 'right', nf: '0.000' }),
             t0 = ST.get({ border: 1, b: 1, h: 'right', nf: '#,##0.0', fill: 'F1F5F9' }), t3 = ST.get({ border: 1, b: 1, h: 'right', nf: '0.000', fill: 'F1F5F9' }), tl = ST.get({ border: 1, b: 1, fill: 'F1F5F9' }),
             kl = ST.get({ b: 1, border: 1, fill: 'F1F5F9' }), kv = ST.get({ border: 1, h: 'right' }), nt = ST.get({ i: 1, color: '64748B', wrap: 1 });
         sh.add([{ v: 'Пересечения контура с кадастровыми участками', s: ST.get({ b: 1, sz: 16, color: 'B45309' }), span: 10 }], 26);
-        sh.add([{ v: (t ? norm(t.textContent) : 'Паспорт участка') + ' · площадь контура ' + nf(d.tot / 1e4, 2) + ' га · ' + new Date().toLocaleString('ru-RU'), s: ST.get({ i: 1, color: '64748B' }), span: 10 }]);
+        sh.add([{ v: (dd ? 'Границы, форма и кадастр' : t ? norm(t.textContent) : 'Паспорт участка') + ' · площадь контура ' + nf(d.tot / 1e4, 2) + ' га · ' + new Date().toLocaleString('ru-RU'), s: ST.get({ i: 1, color: '64748B' }), span: 10 }]);
         sh.add([]);
         [['Участков пересекает контур', d.items.length], ['Покрыто кадастровыми границами', nf(pc, 1) + ' % (' + nf(d.cover / 1e4, 2) + ' га)'], ['Вне кадастровых границ', nf(100 - pc, 1) + ' % (' + nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га)']].forEach(function (r) { sh.add([{ v: r[0], s: kl, span: 3 }, { v: r[1], s: kv, span: 2 }]); });
         sh.add([]);
@@ -992,8 +995,8 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
 
     // ---------- границы и форма участка: раздел «Анализ» (панель shape) — свои инструменты рисования, тот же расчёт, что в «Общей информации» паспорта ----------
-    var dp = document.querySelector('[data-bp-pane="shape"]'), shpSeq = 0, shpTxt = '', SHP_HINT = 'Нарисуйте полигон, прямоугольник или круг (или импортируйте контур) — анализ запустится сам.';
-    var shp = { shape: null, gj: null, handler: null, tool: null, editing: false }, shpGrp = dp ? L.featureGroup().addTo(map) : null;
+    var dp = document.querySelector('[data-bp-pane="shape"]'), shpSeq = 0, shpTxt = '', SHP_HINT = 'Нарисуйте полигон, прямоугольник или круг (или импортируйте контур) — анализ границ, формы и пересечений с кадастром запустится сам.';
+    var shp = { shape: null, gj: null, handler: null, tool: null, editing: false }, shpGrp = dp ? L.featureGroup().addTo(map) : null, shpCadGrp = dp ? L.featureGroup().addTo(map) : null;
     var SHP_ST = { color: '#6366f1', weight: 2, fillColor: '#6366f1', fillOpacity: 0.08 };
     function shpMark() {
         if (!dp) return;
@@ -1020,7 +1023,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         shp.gj = toGJ(layer); shpRun();
     }
     function shpDel() {
-        shpCancel(); shpEdit(false); shpGrp.clearLayers(); shp.shape = null; shp.gj = null; shpSeq++; shpTxt = '';
+        shpCancel(); shpEdit(false); shpGrp.clearLayers(); shpCadGrp.clearLayers(); shp.cadx = null; shp.shape = null; shp.gj = null; shpSeq++; shpTxt = '';
         var out = document.getElementById('ppShpOut'); if (out) { out.className = 'pp-note'; out.innerHTML = SHP_HINT; }
         shpInfo();
     }
@@ -1069,12 +1072,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="shp" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
             '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="shp" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
             '<div class="an-hint" data-shp-info></div></div>' +
-            '<div class="dw-block"><div class="dw-title">Границы, размеры и форма</div><div id="ppShpOut" class="pp-note">' + SHP_HINT + '</div></div>';
+            '<div class="dw-block"><div class="dw-title">Границы, размеры, форма и кадастр</div><div id="ppShpOut" class="pp-note">' + SHP_HINT + '</div></div>';
         shpInfo();
     }
     function shpRun() {
         var out = document.getElementById('ppShpOut'); if (!out) return;
-        var gj = shp.gj, tok = ++shpSeq; shpInfo();
+        var gj = shp.gj, tok = ++shpSeq; shpInfo(); shp.cadx = null; if (shpCadGrp) shpCadGrp.clearLayers();
         if (!gj) { out.className = 'pp-note'; out.innerHTML = SHP_HINT; return; }
         var a = turf.area(gj), per = 0, nv = 0, c = turf.centroid(gj).geometry.coordinates, bb = turf.bbox(gj), cp = shp.shape && shp.shape.feature && shp.shape.feature.properties, cad = cp && cp.cad_number, cr = cadRows(cp, a);
         var polys = polysOf(gj), np = polys.length, rows = [], txt = ['№\tШирота\tДолгота'];
@@ -1086,10 +1089,66 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var K = compactionK(a, per);
         out.className = '';
         out.innerHTML = sizeTiles(a, per, nv, c, bb, K) + compactChart(K, ' K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') + centerKv(c, cad, a, 'ppShpAddr') + cadChart(cp, cr) +
+            '<div id="ppShpCad"><div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД…</div></div>' +
             '<div class="pp-ch pp-vtw"><h5>Координаты вершин полигона <button type="button" class="pp-btn pp-vcopy" data-shp-copy title="Скопировать таблицу (столбцы через табуляцию — вставляется в Excel)"><i class="fas fa-copy"></i> Копировать</button></h5><div class="pp-vt"><table><thead><tr><th>№</th><th>Широта</th><th>Долгота</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div><div class="pp-cap">WGS-84, градусы; внешний контур' + (np > 1 ? ' каждой части участка' : '') + '.</div></div>';
+        shpCadRun(gj, tok);
         reverseGeocode(c).then(function (j) {
             var el = tok === shpSeq && document.getElementById('ppShpAddr'); if (el) el.textContent = j.display_name || 'адрес не найден';
         }).catch(function () { var el = tok === shpSeq && document.getElementById('ppShpAddr'); if (el) el.textContent = 'не удалось определить (нет связи с геокодером)'; });
+    }
+    // ---- кадастр в разделе «Границы, форма и кадастр»: тот же расчёт и выгрузки, что в паспорте; контуры участков рисуются на основной карте ----
+    function shpCadSel(i) {
+        var d = shp.cadx, el = document.getElementById('ppShpCad'); if (!d) return;
+        d.sel = d.sel === i ? -1 : i;
+        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-ci]'), function (tr) { tr.classList.toggle('pp-cadsel', +tr.getAttribute('data-ci') === d.sel); });
+        (d.lay || []).forEach(function (l, k) {
+            var on = k === d.sel, c = CAD_ST[on ? 's' : 'n'];
+            l.base.setStyle(c[0]); l.parts.forEach(function (x) { x.setStyle(c[1]); });
+            if (on) { l.base.bringToFront(); l.parts.forEach(function (x) { x.bringToFront(); }); }
+        });
+        if (d.sel >= 0) { try { map.fitBounds(d.lay[d.sel].base.getBounds().pad(0.3)); } catch (e) { /* без перехода */ } }
+    }
+    function shpCadXlsx() {
+        var d = shp.cadx; if (!d || !d.items.length) return;
+        var ST = new Styles(), t = new Date(), p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+        save(buildXlsx([cadSheet(ST, null, d)], ST), 'kadastr_' + t.getFullYear() + p2(t.getMonth() + 1) + p2(t.getDate()) + '.xlsx');
+        updateStatus('✅ Таблица пересечений с кадастром сохранена в Excel');
+    }
+    function shpCadShow() {
+        var d = shp.cadx, el = document.getElementById('ppShpCad'); if (!el || !d) return;
+        var its = d.items, pc = Math.min(100, d.cover / d.tot * 100); d.sel = -1; d.lay = [];
+        shpCadGrp.clearLayers();
+        its.forEach(function (it) {
+            d.lay.push({ base: L.geoJSON({ type: 'Feature', geometry: it.geometry, properties: {} }, { style: CAD_ST.n[0], interactive: false }).addTo(shpCadGrp), parts: it.parts.map(function (x) { return L.geoJSON(x, { style: CAD_ST.n[1], interactive: false }).addTo(shpCadGrp); }) });
+        });
+        var rows = its.map(function (it, i) {
+            return '<tr data-ci="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.num || '—') + '</b></td><td>' + nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га)</td><td>' + nf(it.ia / d.tot * 100, 1) + ' %</td><td>' + (it.area ? nf(it.area, 0) + ' м²' : '—') + '</td><td>' + (it.area ? nf(Math.min(100, it.ia / it.area * 100), 1) + ' %' : '—') + '</td><td>' + esc(it.use || '—') + '</td><td>' + esc(it.cat || '—') + '</td><td>' + (it.rights.length ? it.rights.map(function (r) { return esc(r[0]) + ': ' + esc(r[1]); }).join('<br>') : esc(it.own || '—')) + '</td></tr>';
+        }).join('');
+        var cap = 'Источник — слой «Земельные участки из ЕГРН» НСПД (Росреестр). «Права» — форма собственности и иные сведения о правах, которые отдаёт публичная карта (правообладатели не раскрываются). Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + (d.bad ? ', без ответа — ' + d.bad : '') + '; участки уже шага сетки могут быть пропущены. На карте участки показаны оранжевым, пересечения с контуром — красным; нажмите на строку, чтобы выделить участок.';
+        var bt = [['xlsx', 'file-excel', 'Excel', 'Таблица пересечений в Excel'], ['kml', 'file-export', 'KML', 'Границы участков целиком с атрибутами — KML'], ['geojson', 'file-export', 'GeoJSON', 'Границы участков целиком с атрибутами — GeoJSON'], ['shp', 'file-export', 'SHP', 'Границы участков целиком с атрибутами — Shapefile (ZIP)'], ['dxf', 'file-export', 'DXF', 'Границы участков целиком — DXF (AutoCAD, UTM)']].map(function (x) { return '<button type="button" class="pp-btn pp-vcopy" data-cadx="' + x[0] + '" title="' + x[3] + '"><i class="fas fa-' + x[1] + '"></i> ' + x[2] + '</button>'; }).join('');
+        el.innerHTML = '<div class="pp-ch"><h5>Пересечения с кадастровыми участками</h5>' +
+            tiles([['Участков пересекает контур', nf(its.length, 0), '', CC.gen], ['Покрыто кадастром', nf(pc, 1) + ' %', nf(d.cover / 1e4, 2) + ' га', '#f59e0b'], ['Вне кадастровых границ', nf(100 - pc, 1) + ' %', nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га', '#64748b']]) +
+            (its.length ? '<div class="pp-cadtbl">' + chart('Список участков <span style="display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:8px;vertical-align:middle">' + bt + '</span>', '<div class="pp-vt"><table><thead><tr><th>№</th><th>Кадастровый номер</th><th>Пересечение</th><th>% контура</th><th>Площадь по ЕГРН</th><th>% участка</th><th>Вид использования</th><th>Категория земель</th><th>Права</th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' : '<div class="pp-note">Кадастровых участков в пределах контура не найдено (опрошено ' + d.req + ' точек). ' + esc(cap) + '</div>') + '</div>';
+        Array.prototype.forEach.call(el.querySelectorAll('[data-cadx]'), function (b) {
+            b.onclick = function (ev) {
+                ev.stopPropagation();
+                var f = b.getAttribute('data-cadx');
+                if (f === 'xlsx') shpCadXlsx();
+                else if (window.gcCadExport) window.gcCadExport(f, d.items);
+                else updateStatus('⚠️ Экспорт недоступен: не загружен модуль кадастра (ux-extras.js)', true);
+            };
+        });
+        Array.prototype.forEach.call(el.querySelectorAll('tr[data-ci]'), function (tr) { tr.onclick = function () { shpCadSel(+tr.getAttribute('data-ci')); }; });
+    }
+    function shpCadRun(gj, tok) {
+        var alive = function () { return tok === shpSeq; }, box = function () { return alive() && document.getElementById('ppShpCad'); };
+        setTimeout(function () {   // небольшая пауза: при перетаскивании вершин не опрашиваем НСПД на каждом шаге
+            if (!alive()) return;
+            cadCalc(gj, alive, function (n, t) { var e = box(); if (e) e.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД: ' + n + ' из ' + t + ' точек…</div>'; }).then(function (x) {
+                if (!x || !alive()) return;
+                shp.cadx = x; shpCadShow();
+            }).catch(function (e) { var el = box(); if (el) el.innerHTML = '<div class="pp-note">Не удалось получить кадастровые участки: ' + esc(e && e.message || e) + '</div>'; });
+        }, 700);
     }
     if (dp) {
         dp.addEventListener('click', function (e) {
