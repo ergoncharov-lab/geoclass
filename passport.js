@@ -432,6 +432,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '#ppBody .pp-cadtbl td,#ppBody .pp-cadtbl th{white-space:nowrap}#ppBody .pp-cadtbl td:nth-child(n+7),#ppBody .pp-cadtbl th:nth-child(n+7){white-space:normal;min-width:150px;text-align:left}#ppBody .pp-cadtbl td:nth-child(2),#ppBody .pp-cadtbl th:nth-child(2){text-align:left}',
         '#ppBody .pp-cadtbl tbody tr{cursor:pointer}#ppBody .pp-cadtbl tbody tr:hover td{background:#fffbeb}#ppBody .pp-cadtbl tbody tr.pp-cadsel td{background:#fde68a;color:#78350f;font-weight:600}',
         '[data-bp-pane="shape"] .pp-cadtbl .pp-vt{max-height:260px}[data-bp-pane="shape"] .pp-cadtbl td,[data-bp-pane="shape"] .pp-cadtbl th{white-space:nowrap}[data-bp-pane="shape"] .pp-cadtbl td:nth-child(n+7),[data-bp-pane="shape"] .pp-cadtbl th:nth-child(n+7){white-space:normal;min-width:150px;text-align:left}[data-bp-pane="shape"] .pp-cadtbl td:nth-child(2),[data-bp-pane="shape"] .pp-cadtbl th:nth-child(2){text-align:left}[data-bp-pane="shape"] .pp-cadtbl tbody tr{cursor:pointer}[data-bp-pane="shape"] .pp-cadtbl tbody tr:hover td{background:#fffbeb}[data-bp-pane="shape"] .pp-cadtbl tbody tr.pp-cadsel td{background:#fde68a;color:#78350f;font-weight:600}',
+        '[data-bp-pane="shape"] .pp-cadtbl tbody tr.pp-cadsel td{background:#dbeafe!important;color:#1e3a8a!important;font-weight:700;box-shadow:inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}[data-bp-pane="shape"] .pp-cadtbl tbody tr.pp-cadsel td:first-child{box-shadow:inset 3px 0 0 #2563eb,inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}[data-bp-pane="shape"] .pp-cadtbl tr.pp-cadd td{width:auto;text-align:left;white-space:normal;padding:5px 10px;font-weight:400}[data-bp-pane="shape"] .pp-cadtbl tbody tr.pp-cadd.pp-cadsel td{background:#eff6ff!important;color:#1e3a8a!important;font-weight:400;box-shadow:none}.pp-cadg{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;font-size:11px;line-height:1.35}.pp-cadg span{color:#64748b}.pp-cadg b{font-weight:600;text-align:left}[data-bp-pane="shape"] .pp-cadchev{width:1%;color:#94a3b8}.pp-cadchev i{transition:transform .15s}tr.pp-cadr.pp-cadsel .pp-cadchev i{transform:rotate(180deg)}.pp-cadmenu{position:relative;display:inline-block;margin-left:8px;vertical-align:middle}.pp-cadmenu summary{list-style:none;cursor:pointer;height:28px;padding:0 10px;font-size:11px}.pp-cadmenu summary::-webkit-details-marker{display:none}.pp-cadmenu-l{position:absolute;z-index:60;top:100%;left:0;margin-top:4px;min-width:150px;display:flex;flex-direction:column;background:var(--card,#fff);border:1px solid var(--line,#e2e8f0);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px}.pp-cadmenu-l button{justify-content:flex-start;border:0;background:none;width:100%;height:28px;font-size:11px}.pp-cadmenu-l button:hover{background:rgba(0,0,0,.06)}',
         '#ppBody .pp-pack:not(.on){display:flex;flex-direction:column;gap:14px}#ppBody .pp-pack .pp-sub{margin:0}',
         '#ppBody .pp-pack.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}',
         '#ppBody .pp-pack.on .pp-pc{display:flex;flex-direction:column;gap:14px;min-width:0}#ppBody .pp-pack.on.pk-m .pp-pc{align-self:start}',
@@ -689,6 +690,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         [['Участков пересекает контур', d.items.length], ['Покрыто кадастровыми границами', nf(pc, 1) + ' % (' + nf(d.cover / 1e4, 2) + ' га)'], ['Вне кадастровых границ', nf(100 - pc, 1) + ' % (' + nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га)']].forEach(function (r) { sh.add([{ v: r[0], s: kl, span: 3 }, { v: r[1], s: kv, span: 2 }]); });
         sh.add([]);
         if (im) { addImgs(sh, sh.rows.length, [imgOf(im, 520)]); sh.add([]); }
+        sh.af = 'A' + (sh.rows.length + 1) + ':J' + (sh.rows.length + 1 + d.items.length);
         sh.add(['№', 'Кадастровый номер', 'Пересечение, м²', 'Пересечение, га', '% контура', 'Площадь по ЕГРН, м²', '% кадастрового участка', 'Вид разрешённого использования', 'Категория земель', 'Права (форма собственности)'].map(function (h) { return { v: h, s: hd }; }), 32);
         d.items.forEach(function (it, i) {
             var rt = it.rights.length ? it.rights.map(function (r) { return r[0] + ': ' + r[1]; }).join('; ') : (it.own || ''), ln = Math.max(1, Math.ceil((it.use || '').length / 38), Math.ceil(rt.length / 34), Math.ceil((it.cat || '').length / 30));
@@ -1088,7 +1090,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         shpTxt = txt.join('\n');
         var K = compactionK(a, per);
         out.className = '';
-        out.innerHTML = sizeTiles(a, per, nv, c, bb, K) + compactChart(K, ' K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') + centerKv(c, cad, a, 'ppShpAddr') + cadChart(cp, cr) +
+        out.innerHTML = sizeTiles(a, per, nv, c, bb, K).replace(/<\/div>$/, '<div id="ppShpCadT" style="display:contents"></div></div>') + compactChart(K, ' K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') + centerKv(c, cad, a, 'ppShpAddr') + cadChart(cp, cr) +
             '<div id="ppShpCad"><div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД…</div></div>' +
             '<div class="pp-ch pp-vtw"><h5>Координаты вершин полигона <button type="button" class="pp-btn pp-vcopy" data-shp-copy title="Скопировать таблицу (столбцы через табуляцию — вставляется в Excel)"><i class="fas fa-copy"></i> Копировать</button></h5><div class="pp-vt"><table><thead><tr><th>№</th><th>Широта</th><th>Долгота</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div><div class="pp-cap">WGS-84, градусы; внешний контур' + (np > 1 ? ' каждой части участка' : '') + '.</div></div>';
         shpCadRun(gj, tok);
@@ -1100,7 +1102,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     function shpCadSel(i) {
         var d = shp.cadx, el = document.getElementById('ppShpCad'); if (!d) return;
         d.sel = d.sel === i ? -1 : i;
-        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-ci]'), function (tr) { tr.classList.toggle('pp-cadsel', +tr.getAttribute('data-ci') === d.sel); });
+        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-ci],tr[data-cd]'), function (tr) { var dc = tr.hasAttribute('data-cd'), on = +tr.getAttribute(dc ? 'data-cd' : 'data-ci') === d.sel; tr.classList.toggle('pp-cadsel', on); if (dc) tr.hidden = !on; });
         (d.lay || []).forEach(function (l, k) {
             var on = k === d.sel, c = CAD_ST[on ? 's' : 'n'];
             l.base.setStyle(c[0]); l.parts.forEach(function (x) { x.setStyle(c[1]); });
@@ -1121,18 +1123,24 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         its.forEach(function (it) {
             d.lay.push({ base: L.geoJSON({ type: 'Feature', geometry: it.geometry, properties: {} }, { style: CAD_ST.n[0], interactive: false }).addTo(shpCadGrp), parts: it.parts.map(function (x) { return L.geoJSON(x, { style: CAD_ST.n[1], interactive: false }).addTo(shpCadGrp); }) });
         });
+        var g = function (k, v) { return '<span>' + k + '</span><b>' + v + '</b>'; };
         var rows = its.map(function (it, i) {
-            return '<tr data-ci="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.num || '—') + '</b></td><td>' + nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га)</td><td>' + nf(it.ia / d.tot * 100, 1) + ' %</td><td>' + (it.area ? nf(it.area, 0) + ' м²' : '—') + '</td><td>' + (it.area ? nf(Math.min(100, it.ia / it.area * 100), 1) + ' %' : '—') + '</td><td>' + esc(it.use || '—') + '</td><td>' + esc(it.cat || '—') + '</td><td>' + (it.rights.length ? it.rights.map(function (r) { return esc(r[0]) + ': ' + esc(r[1]); }).join('<br>') : esc(it.own || '—')) + '</td></tr>';
+            var rt = it.rights.length ? it.rights.map(function (r) { return esc(r[0]) + ': ' + esc(r[1]); }).join('; ') : esc(it.own || '—');
+            return '<tr class="pp-cadr" data-ci="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.num || '—') + '</b></td><td class="pp-cadchev"><i class="fas fa-chevron-down"></i></td></tr>' +
+                '<tr class="pp-cadd" data-cd="' + i + '" hidden><td colspan="3"><div class="pp-cadg">' + g('Пересечение', nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га) · ' + nf(it.ia / d.tot * 100, 1) + ' % контура') +
+                g('Площадь по ЕГРН', it.area ? nf(it.area, 0) + ' м² · пересечено ' + nf(Math.min(100, it.ia / it.area * 100), 1) + ' %' : '—') + g('Вид использования', esc(it.use || '—')) + g('Категория земель', esc(it.cat || '—')) + g('Права', rt) + '</div></td></tr>';
         }).join('');
-        var cap = 'Источник — слой «Земельные участки из ЕГРН» НСПД (Росреестр). «Права» — форма собственности и иные сведения о правах, которые отдаёт публичная карта (правообладатели не раскрываются). Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + (d.bad ? ', без ответа — ' + d.bad : '') + '; участки уже шага сетки могут быть пропущены. На карте участки показаны оранжевым, пересечения с контуром — красным; нажмите на строку, чтобы выделить участок.';
-        var bt = [['xlsx', 'file-excel', 'Excel', 'Таблица пересечений в Excel'], ['kml', 'file-export', 'KML', 'Границы участков целиком с атрибутами — KML'], ['geojson', 'file-export', 'GeoJSON', 'Границы участков целиком с атрибутами — GeoJSON'], ['shp', 'file-export', 'SHP', 'Границы участков целиком с атрибутами — Shapefile (ZIP)'], ['dxf', 'file-export', 'DXF', 'Границы участков целиком — DXF (AutoCAD, UTM)']].map(function (x) { return '<button type="button" class="pp-btn pp-vcopy" data-cadx="' + x[0] + '" title="' + x[3] + '"><i class="fas fa-' + x[1] + '"></i> ' + x[2] + '</button>'; }).join('');
+        var cap = 'Источник — слой «Земельные участки из ЕГРН» НСПД (Росреестр). «Права» — форма собственности и иные сведения о правах, которые отдаёт публичная карта (правообладатели не раскрываются). Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + (d.bad ? ', без ответа — ' + d.bad : '') + '; участки уже шага сетки могут быть пропущены. На карте участки показаны оранжевым, пересечения с контуром — красным; нажмите на номер, чтобы выделить участок и раскрыть сведения о нём. В Excel выгружается полная таблица.';
+        var bt = '<details class="pp-cadmenu"><summary class="pp-btn pp-vcopy" title="Экспорт участков"><i class="fas fa-download"></i> Экспорт <i class="fas fa-chevron-down"></i></summary><div class="pp-cadmenu-l">' + [['xlsx', 'file-excel', 'Excel', 'Таблица пересечений в Excel'], ['kml', 'file-export', 'KML', 'Границы участков целиком с атрибутами — KML'], ['geojson', 'file-export', 'GeoJSON', 'Границы участков целиком с атрибутами — GeoJSON'], ['shp', 'file-export', 'SHP', 'Границы участков целиком с атрибутами — Shapefile (ZIP)'], ['dxf', 'file-export', 'DXF', 'Границы участков целиком — DXF (AutoCAD, UTM)']].map(function (x) { return '<button type="button" class="pp-btn" data-cadx="' + x[0] + '" title="' + x[3] + '"><i class="fas fa-' + x[1] + '"></i> ' + x[2] + '</button>'; }).join('') + '</div></details>';
+        var ct = document.getElementById('ppShpCadT');
+        if (ct) ct.innerHTML = tiles([['Участков пересекает контур', nf(its.length, 0), '', CC.gen], ['Покрыто кадастром', nf(pc, 1) + ' %', nf(d.cover / 1e4, 2) + ' га', '#f59e0b'], ['Вне кадастровых границ', nf(100 - pc, 1) + ' %', nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га', '#64748b']]).replace(/^<div class="pp-tiles">|<\/div>$/g, '');
         el.innerHTML = '<div class="pp-ch"><h5>Пересечения с кадастровыми участками</h5>' +
-            tiles([['Участков пересекает контур', nf(its.length, 0), '', CC.gen], ['Покрыто кадастром', nf(pc, 1) + ' %', nf(d.cover / 1e4, 2) + ' га', '#f59e0b'], ['Вне кадастровых границ', nf(100 - pc, 1) + ' %', nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га', '#64748b']]) +
-            (its.length ? '<div class="pp-cadtbl">' + chart('Список участков <span style="display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:8px;vertical-align:middle">' + bt + '</span>', '<div class="pp-vt"><table><thead><tr><th>№</th><th>Кадастровый номер</th><th>Пересечение</th><th>% контура</th><th>Площадь по ЕГРН</th><th>% участка</th><th>Вид использования</th><th>Категория земель</th><th>Права</th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' : '<div class="pp-note">Кадастровых участков в пределах контура не найдено (опрошено ' + d.req + ' точек). ' + esc(cap) + '</div>') + '</div>';
+            (its.length ? '<div class="pp-cadtbl">' + chart('Список участков ' + bt, '<div class="pp-vt"><table><thead><tr><th>№</th><th>Кадастровый номер</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' : '<div class="pp-note">Кадастровых участков в пределах контура не найдено (опрошено ' + d.req + ' точек). ' + esc(cap) + '</div>') + '</div>';
         Array.prototype.forEach.call(el.querySelectorAll('[data-cadx]'), function (b) {
             b.onclick = function (ev) {
                 ev.stopPropagation();
                 var f = b.getAttribute('data-cadx');
+                var mn = b.closest('details'); if (mn) mn.removeAttribute('open');
                 if (f === 'xlsx') shpCadXlsx();
                 else if (window.gcCadExport) window.gcCadExport(f, d.items);
                 else updateStatus('⚠️ Экспорт недоступен: не загружен модуль кадастра (ux-extras.js)', true);
@@ -1168,6 +1176,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             var b = e.target.closest('[data-shp-copy]'); if (!b || !shpTxt) return; copyText(b, shpTxt);
         });
         document.addEventListener('click', function (e) {
+            Array.prototype.forEach.call(document.querySelectorAll('.pp-cadmenu[open]'), function (m) { if (!m.contains(e.target)) m.removeAttribute('open'); });
             var t = e.target.closest && e.target.closest('.bp-tab, .panel-tab');
             if (t && !(t.classList.contains('bp-tab') && t.dataset.bpTab === 'shape')) shpCancel();
         });
@@ -2089,7 +2098,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         return XHD + '<worksheet ' + XNS + ' ' + RNS + '><sheetPr>' + (this.tab ? '<tabColor rgb="FF' + this.tab + '"/>' : '') + '<pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:' + xcol(Math.max(mx, 1) - 1) + Math.max(this.rows.length, 1) + '"/>' +
             '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
             '<cols>' + (this.colw || COLW).map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>' +
-            '<sheetData>' + rowsX + '</sheetData>' + (this.merges.length ? '<mergeCells count="' + this.merges.length + '">' + this.merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '') +
+            '<sheetData>' + rowsX + '</sheetData>' + (this.af ? '<autoFilter ref="' + this.af + '"/>' : '') + (this.merges.length ? '<mergeCells count="' + this.merges.length + '">' + this.merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '') +
             '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' + (drawRid ? '<drawing r:id="' + drawRid + '"/>' : '') + '</worksheet>';
     };
     function buildXlsx(sheets, ST) {
