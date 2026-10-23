@@ -1143,6 +1143,60 @@
         cadClick({ latlng: map.mouseEventToLatLng(ev), originalEvent: ev });
     });
 
+    // ---- пересечения контура с участками слоя «Земельные участки из ЕГРН» НСПД (для паспорта участка) ----
+    // GetFeatureInfo опрашивается по сетке точек внутри контура и по его границе; точки, уже попавшие в найденный участок, пропускаются
+    window.gcCadIntersect = function (gj, o) {
+        o = o || {};
+        return proxyP.then(function (ok) {
+            if (!ok) throw new Error(NOPROXY);
+            var n = nid(byId('z')), g = gj && (gj.geometry || gj), polys = g ? (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []) : [];
+            if (!polys.length || typeof turf === 'undefined') return { items: [], req: 0, bad: 0, step: 0 };
+            var tp = polys.map(function (p) { return turf.polygon(p); }), bb = turf.bbox({ type: 'Feature', geometry: g, properties: {} });
+            var ky = 110574, kx = 111320 * Math.cos((bb[1] + bb[3]) / 2 * Math.PI / 180);
+            var inside = function (p, arr) { var pt = turf.point(p); return arr.some(function (t) { return turf.booleanPointInPolygon(pt, t); }); };
+            var gen = function (s) {
+                var out = [], x, y;
+                for (y = bb[1] + s / ky / 2; y < bb[3]; y += s / ky) for (x = bb[0] + s / kx / 2; x < bb[2]; x += s / kx) if (inside([x, y], tp)) out.push([x, y]);
+                polys.forEach(function (pl) { pl.forEach(function (r) { for (var i = 0; i < r.length - 1; i++) { var a = r[i], b = r[i + 1], k = Math.max(1, Math.ceil(Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * ky) / s)); for (var j = 0; j < k; j++) out.push([a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k]); } }); });
+                return out;
+            };
+            var MAXR = o.max || 240, s = Math.max(30, Math.sqrt((bb[2] - bb[0]) * kx * (bb[3] - bb[1]) * ky / 150)), pts = gen(s), guard = 0;
+            while (pts.length > MAXR && guard++ < 12) { s *= 1.25; pts = gen(s); }
+            var res = 40075016.68 / (256 * Math.pow(2, 18)), found = [], keys = {}, bad = 0, done = 0, asked = 0, total = pts.length, queue = pts.slice();
+            var take = function (f) {
+                var gm = f && f.geometry; if (!gm || !gm.coordinates || !/Polygon/.test(gm.type)) return;
+                var pr = f.properties || f, ro = rowsOf(pr), m = flat(pr && pr.options ? pr.options : pr, {}), key = ro.num || JSON.stringify(gm.coordinates).slice(0, 60);
+                if (keys[key]) return; keys[key] = 1;
+                var fld = function (lb) { var fl = FIELDS.filter(function (x) { return x[0] === lb; })[0]; for (var i = 0; fl && i < fl[1].length; i++) { var v = m[fl[1][i]]; if (v != null && v !== '') return String(v); } return ''; };
+                var ar = parseFloat(fld('Площадь').replace(',', '.').replace(/\s/g, '')), rights = [], seenR = {};
+                Object.keys(m).forEach(function (k) { var v = m[k]; if (/ownership|right|owner|собствен/i.test(k) && typeof v !== 'object' && v !== '' && !/^\d+$/.test(String(v))) { v = fmt('s', v); if (!seenR[v]) { seenR[v] = 1; rights.push([labelRu(k), v]); } } });
+                var cg = { type: gm.type, coordinates: cv(gm.coordinates) };
+                found.push({ f: f, num: ro.num, geometry: cg, area: isFinite(ar) ? ar : null, use: fld('Разрешённое использование'), cat: fld('Категория земель'), kind: fld('Вид объекта'), own: fld('Форма собственности'), rights: rights, list: ro.list, more: ro.more, _tp: (cg.type === 'Polygon' ? [cg.coordinates] : cg.coordinates).map(function (p) { return turf.polygon(p); }) });
+            };
+            var one = function (p) {
+                var m = L.CRS.EPSG3857.project(L.latLng(p[1], p[0])), cx = (Math.floor(m.x / res) + 0.5) * res, cy = (Math.floor(m.y / res) + 0.5) * res, r = res * 50.5, bx = [cx - r, cy - r, cx + r, cy + r].map(r3).join(',');
+                var u = base(n) + '?REQUEST=GetFeatureInfo&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=&TRANSPARENT=true&LAYERS=' + n + '&QUERY_LAYERS=' + n + '&CRS=EPSG:3857&BBOX=' + bx + '&WIDTH=101&HEIGHT=101&I=50&J=50&INFO_FORMAT=application/json&FEATURE_COUNT=5';
+                var pr = fiCache[u] ? Promise.resolve(fiCache[u]) : fetch(viaProxy(u)).then(okText).then(function (t) { fiCache[u] = t; return t; });
+                return pr.then(function (t) { feats(t).f.forEach(take); }).catch(function () { bad++; });
+            };
+            var step = function () {
+                if (o.alive && !o.alive()) return;
+                var batch = [], p;
+                while (queue.length && batch.length < 8) { p = queue.shift(); if (found.some(function (it) { return inside(p, it._tp); })) { done++; continue; } batch.push(p); }
+                if (!batch.length) return;
+                asked += batch.length;
+                return Promise.all(batch.map(one)).then(function () { done += batch.length; if (o.onProgress) o.onProgress(done, total); return step(); });
+            };
+            return Promise.resolve(step()).then(function () {
+                if (asked && bad === asked) throw new Error('НСПД не ответил (проверьте интернет и доступ к НСПД)');
+                return { items: found, req: asked, bad: bad, step: Math.round(s) };
+            });
+        });
+    };
+
+    // выгрузка найденных участков целиком (контуры и атрибуты) в тех же форматах, что и из кадастрового слоя на карте: kml | geojson | shp | dxf
+    window.gcCadExport = function (fmt, items) { exportAs(fmt, (items || []).map(function (it) { return { c: byId('z'), f: it.f }; })); };
+
     // ---- поиск по кадастровому номеру: вызывается из основной строки поиска сайта (участок, здание, квартал); слой при этом может быть выключен ----
     var CADRE = /^\d{1,2}:\d{1,2}(:\d{1,8}){0,2}$/;
     window.gcCadIsNumber = function (q) { return CADRE.test(String(q || '').trim()); };
