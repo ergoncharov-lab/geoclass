@@ -134,6 +134,14 @@
     (function () {
         var box = document.getElementById('abSlider'); if (!box) return;
         var sl = [].slice.call(box.querySelectorAll('.ab-slide')), dots = box.querySelector('.ab-dots'), cur = 0, timer = null, hover = false, drag = null;
+        var PICS = ['', 'ab-passport', 'ab-relief', 'ab-logistics', 'ab-soil', 'ab-shape', 'ab-sentinel', 'ab-ndvi', 'ab-ndmi', 'ab-nbr', 'ab-compare'];
+            sl.forEach(function (s, i) {
+                if (!PICS[i]) return;
+                var d = document.createElement('div'); d.className = 'ab-pic';
+                d.innerHTML = '<img src="img/' + PICS[i] + '.png" alt="" loading="lazy" onerror="this.parentNode.style.display=\'none\'">';
+                s.appendChild(d);
+            });
+
         sl.forEach(function (_, i) { var b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Слайд ' + (i + 1)); b.addEventListener('click', function () { go(i, true); }); dots.appendChild(b); });
         function go(i, user) {
             cur = (i + sl.length) % sl.length;
