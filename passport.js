@@ -442,6 +442,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '@media(max-width:1250px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:minmax(0,420px) minmax(0,420px) minmax(200px,1fr)!important;gap:14px}}',
         '@media(max-width:1100px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:repeat(2,minmax(0,1fr))!important}#ppBody .pp-sub.pp-wide .pp-dcol{grid-column:1/-1}}',
         '@media(max-width:700px){#ppBody .pp-sub.pp-wide > .pp-mc,#ppBody .pp-pack > .pp-sub.pp-wide > .pp-mc{grid-template-columns:minmax(0,1fr)!important}}',
+        '#ppNav.pp-nav:not(.rdy){display:none!important}',
         '#ppNav.pp-nav{order:11;flex:1 1 100%;min-width:0;display:flex;flex-direction:column;gap:6px;padding:2px 0 0}',
         '#ppNav .nv-s{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:5px}',
         '#ppNav .nv-b{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 8px;border:1px solid #e2e8f0;border-radius:9px;background:linear-gradient(180deg,#fff,#f1f5f9);color:#334155;font:600 12px/1 system-ui,sans-serif;cursor:pointer;overflow:hidden;transition:transform .15s,box-shadow .15s,background .15s,color .15s,border-color .15s}',
@@ -598,6 +599,14 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             setTimeout(function () { navLock = 0; navSpy(); }, 950);
         });
         c.h.parentNode.insertBefore(nv, c.h.nextSibling); navMark(); navSubs(); navStat(); navSpy();
+        // пока панель паспорта разворачивается (и ещё узкая), меню скрыто — иначе на долю секунды видно «сплюснутое» меню
+        var fr = 0, rdy = function () {
+            if (!nv.isConnected) return;
+            var w = c.top.offsetWidth, open = !!document.querySelector('.app-container.passport-open');
+            if ((open && w >= 440) || ++fr > 100) { nv.classList.add('rdy'); navSpy(); return; }
+            requestAnimationFrame(rdy);
+        };
+        if (old && old.classList.contains('rdy')) nv.classList.add('rdy'); else rdy();
     }
     function stNav(top, h) {
         navCtx = { top: top, h: h }; navSig = ''; navBuild();
@@ -1492,6 +1501,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     function render() {
         var tok = ++seq; clearMinis(); D = {}; retry = null;
+        setTimeout(unwait, 40);
         var l = forced ? { feature: { properties: { cad_number: forced.meta.cad || '' } } } : pick(), t = document.getElementById('ppTitle');
         if (!l) { if (t) t.textContent = 'Паспорт участка'; body.innerHTML = '<div class="pp-sec"><div class="pp-sec-b"><div class="pp-note">Нет фигуры для паспорта. Нарисуйте участок (или загрузите контур / выписку Росреестра), выделите его на карте и нажмите «Обновить по фигуре».</div></div></div>'; return; }
         var gj = forced ? forced.gj : toGJ(l); D.gj = gj;
@@ -1550,7 +1560,10 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var app = document.querySelector('#map-section .app-container');
         app.classList.add('passport-open'); document.dispatchEvent(new Event('passport-open'));
     };
-    document.addEventListener('passport-open', function () { if (!keep) forced = null; keep = false; setTimeout(render, 380); });   // после анимации раскрытия панели
+    // пока панель раскрывается (анимация клипа с боковой колонки на всю область), старое содержимое паспорта было видно «сплюснутым» — прячем его до готовности нового
+    var waitT = 0, waitEl = function () { return body.closest('.pp') || body; };
+    function unwait() { clearTimeout(waitT); waitEl().style.visibility = ''; }
+    document.addEventListener('passport-open', function () { waitEl().style.visibility = 'hidden'; clearTimeout(waitT); waitT = setTimeout(unwait, 2500); if (!keep) forced = null; keep = false; setTimeout(render, 380); });   // после анимации раскрытия панели
     document.addEventListener('click', function (e) {   // плашка раздела с ошибкой: обновляется только он
         var c = e.target.closest && e.target.closest('#ppSt .pp-stc.err');
         if (c && retry) retry(c.getAttribute('data-st'));
