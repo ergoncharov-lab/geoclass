@@ -597,11 +597,16 @@ function snIdbPut(k, canvas) {
 }
 // пробует взять уже готовый тайл из кэша; true — тайл нарисован
 async function snFromCache(key, z, x, y, canvas) {
+    const t0 = performance.now(), r = await snFromCache0(key, z, x, y, canvas);
+    if (r) snLog(r, key, z, x, y, t0);
+    return !!r;
+}
+async function snFromCache0(key, z, x, y, canvas) {
     const st = SENTINEL.state[key];
     if (!st || !st.date || !st.scenes || !st.scenes.length) return false;
     const n = Math.pow(2, z), sig = snSig(key, z, ((x % n) + n) % n, y), ctx = canvas.getContext('2d');
     const mem = snMemGet(sig);
-    if (mem) { ctx.putImageData(mem, 0, 0); return true; }
+    if (mem) { ctx.putImageData(mem, 0, 0); return 'memory'; }
     const blob = await snIdbGet(sig);
     if (!blob) return false;
     try {
@@ -610,7 +615,7 @@ async function snFromCache(key, z, x, y, canvas) {
         ctx.drawImage(bmp, 0, 0);
         if (bmp.close) bmp.close();
         snMemPut(sig, ctx.getImageData(0, 0, 256, 256));
-        return true;
+        return 'indexeddb';
     } catch (e) { return false; }
 }
 
@@ -622,6 +627,49 @@ function snWarn(e) {
         setTimeout(() => { SENTINEL.warned = false; }, 8000);
     }
 }
+
+// Логирование загрузки Sentinel в консоль (F12): каждый тайл (источник и время), сводка раз в 2 с, сетевые запросы.
+// Выключить: snDebug(false); включить: snDebug(true). Сводка за всё время: snStats()
+const SN_LOG = { on: true, tiles: { memory: [], indexeddb: [], cache: [], network: [] }, net: { n: 0, bytes: 0, ms: 0, hit: 0, slow: 0 }, timer: 0, t0: performance.now() };
+function snLog(src, key, z, x, y, t0) {
+    const ms = Math.round(performance.now() - t0), a = SN_LOG.tiles[src === 'cache' ? 'indexeddb' : src] || SN_LOG.tiles.network;
+    a.push(ms);
+    SN_LOG.cur[src === 'network' ? 'n' : 'c']++;
+    snLabel();
+    if (!SN_LOG.on) return;
+    if (src === 'network' && ms > 4000) console.warn('[Sentinel] медленный тайл', key, z + '/' + x + '/' + y, ms + ' мс');
+    clearTimeout(SN_LOG.timer);
+    SN_LOG.timer = setTimeout(snStats, 2000);
+}
+// счётчик рядом с надписью «Загрузка снимков…»: сколько тайлов готово и откуда они (кэш на компьютере / сеть)
+SN_LOG.cur = { c: 0, n: 0 };
+function snLabel() {
+    const c = SN_LOG.cur, tot = c.c + c.n;
+    const txt = 'Загрузка снимков…' + (tot ? ' ' + tot + ' шт. (кэш ' + c.c + ', сеть ' + c.n + ')' : '');
+    document.querySelectorAll('.sn-loading span').forEach(e => { if (e.textContent !== txt) e.textContent = txt; });
+}
+function snStats() {
+    const T = SN_LOG.tiles, med = a => a.length ? a.slice().sort((p, q) => p - q)[a.length >> 1] : 0, N = SN_LOG.net;
+    console.log('[Sentinel] тайлов: память ' + T.memory.length + ' (' + med(T.memory) + ' мс), IndexedDB ' + T.indexeddb.length + ' (' + med(T.indexeddb) + ' мс), сеть ' + T.network.length + ' (медиана ' + med(T.network) + ' мс)' +
+        ' | запросов к S3: ' + N.n + ', из кэша блоков: ' + N.hit + ', загружено ' + (N.bytes / 1048576).toFixed(1) + ' МБ, медленных (>3 с): ' + N.slow);
+}
+// «прямой» путь к S3 в этой сети не работает (например, сертификат подменяет прокси компании) — помним 12 часов
+SENTINEL.directBadAt = 0;
+try { SENTINEL.directBadAt = Number(localStorage.getItem('gcSnDirectBad') || 0); } catch (e) { }
+const snDirectBad = () => Date.now() - SENTINEL.directBadAt < 10 * 6e4;   // 10 минут: сети и сертификаты бывают нестабильны, потом снова пробуем прямой путь
+function snMarkDirectBad() {
+    if (!snDirectBad() && SN_LOG.on) console.warn('[Sentinel] прямое соединение с S3 не работает в этой сети — дальше только через локальный прокси');
+    SENTINEL.directBadAt = Date.now();
+    try { localStorage.setItem('gcSnDirectBad', String(Date.now())); } catch (e) { }
+}
+// Заранее устанавливаем соединения (DNS + TLS, через прокси компании это ~3 с на каждое): к моменту выбора даты они уже готовы
+(function () {
+    ['https://sentinel-cogs.s3.us-west-2.amazonaws.com', 'https://earth-search.aws.element84.com'].forEach(h => {
+        try { const l = document.createElement('link'); l.rel = 'preconnect'; l.href = h; l.crossOrigin = 'anonymous'; document.head.appendChild(l); } catch (e) { }
+    });
+})();
+window.snDebug = v => { SN_LOG.on = v !== false; return SN_LOG.on; };
+window.snStats = snStats;
 
 function snItem(id) {
     if (!SENTINEL.items[id]) {
@@ -677,13 +725,20 @@ function snHosts(href) {
                 key = location.origin + '/__geoclass_cache__?u=' + encodeURIComponent(url) + '&r=' + encodeURIComponent(range);
                 const hit = await cache.match(key);
                 if (hit) {
+                    if (url.indexOf('sentinel-s2-l2a-cogs/') > -1) SN_LOG.net.hit++;
                     const h = new Headers();
                     ['content-type', 'content-range'].forEach(n => { const v = hit.headers.get(n); if (v) h.set(n, v); });
                     return new Response(hit.body, { status: Number(hit.headers.get('x-status')) || 200, headers: h });
                 }
             }
         } catch (e) { cache = null; }
+        const tq = performance.now();
         const resp = await origFetch(input, init);
+        if (cache && key && !isIsric) {
+            const dt = performance.now() - tq, N = SN_LOG.net;
+            N.n++; N.ms += dt; if (dt > 3000) { N.slow++; if (SN_LOG.on) console.warn('[Sentinel] медленный запрос к S3', Math.round(dt) + ' мс', resp.status); }
+            const cl = Number(resp.headers.get('content-length')); if (cl) N.bytes += cl;
+        }
         if (cache && resp.ok && (resp.status === 200 || resp.status === 206)) {
             resp.clone().arrayBuffer().then(async buf => {
                 const b = new Uint8Array(buf, 0, 2);
@@ -693,6 +748,43 @@ function snHosts(href) {
                 await cache.put(key, new Response(buf, { status: 200, headers: h }));
                 if (++puts % 200 === 0) prune(cache);
             }).catch(() => {});
+        }
+        return resp;
+    };
+})();
+
+// Постоянный кэш каталога Sentinel на компьютере пользователя (Cache API браузера): карточки снимков и результаты поиска по датам.
+// Карточка снимка не меняется — хранится 30 дней; поиск по прошедшим датам — 24 ч, по текущим — 10 мин; без сети отдаётся последняя сохранённая копия.
+// Также просим браузер не удалять кэш (storage.persist), чтобы снимки не пропадали при нехватке места.
+(function () {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { }); } catch (e) { }
+    if (!window.caches || !window.isSecureContext) return;
+    const prev = window.fetch.bind(window);
+    window.fetch = async function (input, init) {
+        let c, key, ttl, hit;
+        try {
+            const isStr = typeof input === 'string';
+            const url = new URL(isStr ? input : input.url, location.href).href;
+            const method = ((init && init.method) || (!isStr && input.method) || 'GET').toUpperCase();
+            if (url.indexOf(SENTINEL.stacUrl) === 0) {
+                if (method === 'GET' && /\/items\/[^/?]+$/.test(url)) { key = url; ttl = 30 * 864e5; }
+                else if (method === 'POST' && /\/search$/.test(url) && init && typeof init.body === 'string') {
+                    const end = Date.parse(String(JSON.parse(init.body).datetime || '').split('/')[1]);
+                    ttl = end && end < Date.now() - 3 * 864e5 ? 864e5 : 6e5;
+                    key = url + '?b=' + encodeURIComponent(init.body);
+                }
+            }
+            if (key) {
+                c = await caches.open('geoclass-meta-v1');
+                hit = await c.match(key);
+                if (hit && Date.now() - Number(hit.headers.get('x-t')) < ttl) return hit.clone();
+            }
+        } catch (e) { c = null; }
+        let resp;
+        try { resp = await prev(input, init); }
+        catch (e) { if (hit) return hit.clone(); throw e; }   // нет сети — берём сохранённую копию
+        if (c && key && resp.ok) {
+            resp.clone().arrayBuffer().then(buf => c.put(key, new Response(buf, { status: 200, headers: { 'content-type': 'application/json', 'x-t': String(Date.now()) } }))).catch(() => { });
         }
         return resp;
     };
@@ -712,7 +804,9 @@ function snProxyAvailable() {
 async function snCandidates(href) {
     const list = snHosts(href);
     const m = /^https:\/\/sentinel-cogs\.s3\.[a-z0-9-]+\.amazonaws\.com\/(.+)$/.exec(href);
-    if (m && await snProxyAvailable()) list.unshift('/s3/' + m[1]);
+    if (m && await snProxyAvailable()) {
+        list.push('/s3/' + m[1]);   // напрямую браузер быстрее (HTTP/2 к S3); локальный прокси — запасной путь, если прямой не работает
+    }
     return list;
 }
 const snHostOf = u => { try { return new URL(u, location.href).host + (u.charAt(0) === '/' ? ' (локальный прокси)' : ''); } catch (e) { return u; } };
@@ -723,25 +817,47 @@ function snOpen(href) {
         SENTINEL.files[href] = (async () => {
             const cands = await snCandidates(href);
             let lastErr;
-            for (let attempt = 0; attempt < cands.length; attempt++) {
-                const ci = (SENTINEL.hostIdx + attempt) % cands.length;
+            // открываем один и тот же файл по нескольким путям (локальный прокси / напрямую / запасные хосты): следующий путь стартует,
+            // если предыдущий упал или молчит 2,5 с; побеждает первый ответивший. Так в сетях, где прокси компании блокирует или тормозит один из путей, работает другой.
+            const tryOne = async url => {
+                const imgs = [], t0 = performance.now();
+                await snRace((async () => {
+                    const tiff = await GeoTIFF.fromUrl(url, { blockSize: 256 * 1024, cacheSize: 200 });
+                    const n = await tiff.getImageCount();
+                    for (let i = 0; i < n; i++) {
+                        const im = await tiff.getImage(i);
+                        const sub = im.fileDirectory && im.fileDirectory.NewSubfileType;
+                        if (i > 0 && (sub & 4)) continue;   // маски пропускаем
+                        imgs.push({ im: im, w: im.getWidth(), h: im.getHeight() });
+                    }
+                })(), 12000, 'нет ответа от ' + snHostOf(url) + ' (таймаут 12 с)');
+                const full = imgs[0].im, o = full.getOrigin(), r = full.getResolution();
+                const keys = full.getGeoKeys() || {};
+                if (SN_LOG.on) console.log('[Sentinel] файл открыт через ' + snHostOf(url) + ' за ' + Math.round(performance.now() - t0) + ' мс');
+                return { key: href, imgs: imgs, ox: o[0], oy: o[1], rx: Math.abs(r[0]), ry: Math.abs(r[1]),
+                         W: imgs[0].w, H: imgs[0].h, epsg: keys.ProjectedCSTypeGeoKey || 0 };
+            };
+            const race = urls => new Promise((resolve, reject) => {
+                let next = 0, fails = 0, done = false, tm = 0;
+                const launch = () => {
+                    if (done || next >= urls.length) return;
+                    const u = urls[next++];
+                    clearTimeout(tm);
+                    if (next < urls.length && (urls[next].charAt(0) === '/') !== (u.charAt(0) === '/')) tm = setTimeout(launch, 4000);   // по таймеру стартует только другой тип пути (прокси ↔ напрямую); запасные адреса S3 — лишь после ошибки, чтобы не качать файл дважды
+                    tryOne(u).then(r => { if (!done) { done = true; clearTimeout(tm); resolve({ r: r, u: u }); } },
+                        e => { lastErr = e; if (SN_LOG.on) console.warn('[Sentinel] путь не сработал: ' + snHostOf(u) + ' — ' + (e && e.message || e)); if (++fails >= urls.length) { clearTimeout(tm); if (!done) reject(e); } else launch(); });
+                };
+                launch();
+            });
+            for (let attempt = 0; attempt < 2; attempt++) {
+                // если прямой путь признан нерабочим — сначала только прокси; прямые адреса — лишь запасной вариант на второй попытке
+                const lst = (attempt === 0 && snDirectBad() && cands.some(u => u.charAt(0) === '/')) ? cands.filter(u => u.charAt(0) === '/') : cands;
+                const order = lst.map((_, i) => lst[(SENTINEL.hostIdx + i) % lst.length]);
                 try {
-                    const imgs = [];
-                    await snRace((async () => {
-                        const tiff = await GeoTIFF.fromUrl(cands[ci], { blockSize: 1024 * 1024, cacheSize: 400 });
-                        const n = await tiff.getImageCount();
-                        for (let i = 0; i < n; i++) {
-                            const im = await tiff.getImage(i);
-                            const sub = im.fileDirectory && im.fileDirectory.NewSubfileType;
-                            if (i > 0 && (sub & 4)) continue;   // маски пропускаем
-                            imgs.push({ im: im, w: im.getWidth(), h: im.getHeight() });
-                        }
-                    })(), 12000, 'нет ответа от ' + snHostOf(cands[ci]) + ' (таймаут 12 с)');
-                    const full = imgs[0].im, o = full.getOrigin(), r = full.getResolution();
-                    const keys = full.getGeoKeys() || {};
-                    SENTINEL.hostIdx = ci;
-                    return { key: href, imgs: imgs, ox: o[0], oy: o[1], rx: Math.abs(r[0]), ry: Math.abs(r[1]),
-                             W: imgs[0].w, H: imgs[0].h, epsg: keys.ProjectedCSTypeGeoKey || 0 };
+                    const w = await race(order);
+                    SENTINEL.hostIdx = Math.max(0, lst.indexOf(w.u));
+                    w.r.url = w.u;
+                    return w.r;
                 } catch (e) {
                     lastErr = e;
                     await snDelay(400 * (attempt + 1));
@@ -781,8 +897,15 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb, maxDim) {
                 20000, 'чтение снимка: нет ответа от S3 (таймаут 20 с)');
         } catch (e) {
             lastErr = e; snPoolFail(e);
+            if (f.url && f.url.charAt(0) !== '/' && SENTINEL.proxyOk) break;   // прямой путь не работает — не тратим повторы
             await snDelay(500 * (attempt + 1));
         }
+    }
+    if (!bands && f.url && f.url.charAt(0) !== '/' && SENTINEL.proxyOk) {   // переходим на локальный прокси и читаем то же окно заново
+        snMarkDirectBad();
+        delete SENTINEL.files[f.key];
+        SENTINEL.hostIdx = 0;
+        return snRead(await snOpen(f.key), minE, minN, maxE, maxN, g, rgb, maxDim);
     }
     if (!bands) {   // файл недоступен: забываем его, при следующем тайле откроем через другой хост
         delete SENTINEL.files[f.key];
@@ -933,6 +1056,11 @@ function snGrid(x0, y0, size) {
 // Сначала смотрит в кэш (память → IndexedDB); все сцены дня читаются параллельно, данные — блоками 512×512 (4 тайла на запрос).
 // dead() — функция «тайл уже не нужен»; skipCache — кэш уже проверен снаружи; quiet — не показывать предупреждения (фоновая предзагрузка)
 async function snRenderTile(key, z, x, y, canvas, dead, skipCache, quiet) {
+    const t0 = performance.now();
+    try { return await snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0); }
+    finally { snLog('network', key, z, x, y, t0); }
+}
+async function snRenderTile0(key, z, x, y, canvas, dead, skipCache, quiet, t0) {
     const st = SENTINEL.state[key];
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 256, 256);
@@ -940,7 +1068,7 @@ async function snRenderTile(key, z, x, y, canvas, dead, skipCache, quiet) {
     if (typeof GeoTIFF === 'undefined' || typeof proj4 === 'undefined') throw new Error('не загрузились библиотеки geotiff / proj4');
     const n = Math.pow(2, z);
     x = ((x % n) + n) % n;
-    if (!skipCache && await snFromCache(key, z, x, y, canvas)) return;
+    if (!skipCache && await snFromCache(key, z, x, y, canvas)) { snLog('cache', key, z, x, y, t0); return; }
     if (dead && dead()) return;
     const sig = snSig(key, z, x, y);
     const size = 40075016.686 / n, x0 = -20037508.343 + x * size, y0 = 20037508.343 - y * size;
@@ -2751,7 +2879,16 @@ function snShpZip(feats, base) {
             if (x1 > x0 && y1 > y0) { x = (x0 + x1) / 2; y = (y0 + y1) / 2; small = (x1 - x0) < 190 || (y1 - y0) < 60; }
         }
         el.classList.toggle('sm', small);
-        el.style.left = x != null ? x + 'px' : '50%'; el.style.top = y != null ? y + 'px' : '50%';
+        if (x != null) { el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.transform = 'translate(-50%,-50%)'; }
+        else {   // нет фигуры: надпись в левом верхнем углу карты, правее виджетов слева
+            let lx = 10, ty = 10;
+            try {
+                const cr = cont.getBoundingClientRect(), tools = document.querySelector('.map-tl-tools .mc-group') || document.querySelector('.map-tl-tools');
+                const tr = tools && tools.getBoundingClientRect();
+                if (tr && tr.width && tr.height) { lx = tr.right - cr.left + 10; ty = tr.top - cr.top + Math.max(0, (tr.height - 40) / 2); }
+            } catch (e) { }
+            el.style.left = lx + 'px'; el.style.top = ty + 'px'; el.style.transform = 'none';
+        }
         el.hidden = false;
     }
     function placeLo() {
@@ -2769,7 +2906,7 @@ function snShpZip(feats, base) {
         if (k === 'tiles') {
             if (!layer) { if (!v) { lt.forEach(dropLo); lt.clear(); } }
             else if (!v) { lt.delete(layer); dropLo(layer); }
-            else lt.add(layer);
+            else { if (!lt.size) { SN_LOG.cur = { c: 0, n: 0 }; snLabel(); } lt.add(layer); }
         } else lf[k] = v;
         placeLo();
     };
@@ -3036,7 +3173,7 @@ function snShpZip(feats, base) {
         renderMonth();
         const bbox = searchBBox();
         if (!bbox) {
-            groups = []; note = 'Приблизьте карту (масштаб 7 и крупнее) или нарисуйте область, чтобы найти снимки';
+            groups = []; pick = false; note = 'Приблизьте карту (масштаб 7 и крупнее) или нарисуйте область, чтобы найти снимки';
             renderAll(); return;
         }
         note = '';
@@ -3692,10 +3829,10 @@ function snShpZip(feats, base) {
         clipKey = null;   // подложка не меняется — снимок рисуется внутри фигуры
         const st = SENTINEL.state[lay], ref = (st && st.date) || SENTINEL.lastDay;
         month = monthStart(ref ? dayDate(ref) : new Date());
-        if (shapeGJ && currentLayer !== lay && !(st && st.date)) { pick = true; month = monthStart(new Date()); }
+        if (!(st && st.date)) { pick = true; month = monthStart(new Date()); }   // дата не выбрана — берём последнюю без облачности (для фигуры или для видимой области карты)
         else syncClip();
         renderAll();
-        if (!(st && st.date)) updateStatus(pick ? '🛰️ Ищем последнюю дату без облачности для фигуры…' : '📅 Нарисуйте фигуру — снимок загрузится только внутри неё (дату можно выбрать в календаре)');
+        if (!(st && st.date)) updateStatus(pick ? (shapeGJ ? '🛰️ Ищем последнюю дату без облачности для фигуры…' : '🛰️ Ищем последнюю дату без облачности для области карты…') : '📅 Нарисуйте фигуру — снимок загрузится только внутри неё (дату можно выбрать в календаре)');
         load(pick ? 3 : ref ? 0 : 2);
         scheduleCalc();
     }

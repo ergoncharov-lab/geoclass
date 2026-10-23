@@ -73,12 +73,46 @@ NSPD_HDR_XHR = dict(NSPD_HDR, **{'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8', '
                                   'Sec-Fetch-Site': 'same-origin', 'Referer': 'https://nspd.gov.ru/map?thematic=PKK'})
 
 
+# Прокси для S3: GEO_S3_PROXY=http://host:port или тот, что система (PAC) выбирает для S3 — как в браузере (нужно в сетях с прокси компании).
+# Соединение с S3 (через прокси — туннелем CONNECT) постоянное, своё на каждый поток: не тратим ~секунды на новое подключение при каждом запросе.
+S3_PROXY = os.environ.get('GEO_S3_PROXY') or win_proxy_for('https://' + UPSTREAM_HOST)
+S3_OPENER = make_opener(S3_PROXY) if S3_PROXY else None
+_S3_CTX = ssl.create_default_context()
+_S3_CTX.check_hostname = False
+_S3_CTX.verify_mode = ssl.CERT_NONE   # как в make_opener: прокси компании может подменять сертификат
+
+
+def new_s3_conn():
+    if S3_PROXY:
+        u = urllib.parse.urlparse(S3_PROXY if '://' in S3_PROXY else 'http://' + S3_PROXY)
+        c = http.client.HTTPSConnection(u.hostname, u.port or 8080, timeout=25, context=_S3_CTX)
+        c.set_tunnel(UPSTREAM_HOST)
+        return c
+    return http.client.HTTPSConnection(UPSTREAM_HOST, timeout=25)
+
+
 def upstream_get(path, headers):
+    """GET к S3 по постоянному соединению (через прокси, если он есть); при обрыве — одна повторная попытка, затем запасной путь через urllib."""
+    try:
+        return upstream_get_direct(path, headers)
+    except Exception as e:
+        if S3_OPENER is None:
+            raise
+        print('S3: постоянное соединение не удалось (%s), пробуем через urllib' % e)
+    rq = urllib.request.Request('https://' + UPSTREAM_HOST + path, headers=headers)
+    try:
+        with S3_OPENER.open(rq, timeout=25) as r:
+            return r.status, response_headers(r.getheaders()), r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, response_headers(e.headers.items()), e.read()
+
+
+def upstream_get_direct(path, headers):
     """GET к S3 по постоянному соединению (своё на каждый поток); при обрыве — одна повторная попытка."""
     for attempt in (0, 1):
         conn = getattr(local, 'conn', None)
         if conn is None:
-            conn = local.conn = http.client.HTTPSConnection(UPSTREAM_HOST, timeout=60)
+            conn = local.conn = new_s3_conn()
         try:
             conn.request('GET', path, headers=headers)
             r = conn.getresponse()
@@ -483,4 +517,5 @@ if __name__ == '__main__':
     print('Сайт: http://localhost:%d   (Ctrl+C — остановить)' % PORT)
     print('Кэш снимков: %s' % CACHE_DIR)
     print('Прокси для НСПД: %s' % (NSPD_PROXY or 'нет (напрямую)'))
+    print('Прокси для снимков S3: %s' % (S3_PROXY or 'нет (напрямую)'))
     http.server.ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
