@@ -35,7 +35,7 @@
     // блок: o.t — заголовок, o.i — значок, o.c — цвет, o.info — [что это, зачем нужно, как считается], o.map — колонка слева (квадратная карта), o.id/o.body — данные справа
     function blk(o) {
         var f = o.info;
-        return '<div class="pp-sub' + (o.map ? '' : ' nomap') + (o.cls ? ' ' + o.cls : '') + '"' + (o.c ? ' style="--ac:' + o.c + '"' : '') + '><div class="pp-sub-h"><span class="pp-ic sm"><i class="fas fa-' + o.i + '"></i></span><h4>' + o.t + '</h4>' +
+        return '<div class="pp-sub closed' + (o.map ? '' : ' nomap') + (o.cls ? ' ' + o.cls : '') + '"' + (o.c ? ' style="--ac:' + o.c + '"' : '') + '><div class="pp-sub-h"><span class="pp-ic sm"><i class="fas fa-' + o.i + '"></i></span><h4>' + o.t + '</h4>' +
             (o.cal || '') + '<button type="button" class="pp-i-btn"><i class="fas fa-circle-info"></i> Расшифровка</button></div>' +
             '<div class="pp-info"><div><b>Что это</b>' + f[0] + '</div><div><b>Зачем нужно</b>' + f[1] + '</div><div><b>Как рассчитывается</b>' + f[2] + '</div></div>' +
             '<div class="pp-mc">' + (o.map ? '<div class="pp-mcol">' + o.map + '</div>' : '') + '<div class="pp-dcol"' + (o.id ? ' id="' + o.id + '"' : '') + '>' + (o.body || '') + '</div></div></div>';

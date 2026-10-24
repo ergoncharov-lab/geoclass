@@ -3,7 +3,7 @@
    2) паспорт участка листается вбок: каждый раздел и каждый блок внутри — отдельная страница
    3) кнопки миниатюрные, длинные тексты свёрнуты (раскрываются по нажатию)
    Элементы, которые создаёт mobile.js, вне мобильного режима скрыты. */
-.mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, #mbPpBar { display: none; }
+.mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, .mb-search-btn, #mbPpBar { display: none; }
 
 @media (max-width: 960px) {
     :root { --gc-nav: 52px; }
@@ -79,12 +79,27 @@
     .s-after > section.site-sec .s-head { margin-bottom: 8px; }
     .s-after > section.site-sec .s-head h2 { font-size: 20px; }
     .s-fgrid, .s-fgrid.c3, .s-mods, .s-steps, .s-srcgrid { grid-template-columns: 1fr 1fr !important; gap: 6px; }
-    .s-fcard, .s-mod { padding: 9px !important; gap: 8px; cursor: pointer; }
-    .s-fcard h3, .s-mod h3 { font-size: 12.5px; }
-    .s-fcard p, .s-mod p { display: none; }
-    .s-fcard.mb-open p, .s-mod.mb-open p { display: block; font-size: 12px; margin-top: 4px; }
-    .s-fcard.mb-open, .s-mod.mb-open { grid-column: 1 / -1; }
+    .s-mod { padding: 9px !important; gap: 8px; cursor: pointer; }
+    .s-mod h3 { font-size: 12.5px; }
+    .s-mod p { display: none; }
+    .s-mod.mb-open p { display: block; font-size: 12px; margin-top: 4px; }
+    .s-mod.mb-open { grid-column: 1 / -1; }
     .s-ico { width: 30px; height: 30px; font-size: 13px; flex: none; }
+    /* «Возможности»: мелкие карточки с коротким текстом, без ссылок — всё в один экран */
+    #features .s-fgrid, #features .s-fgrid.c3 { gap: 5px; }
+    #features .s-fcard, #features .s-fcard.s-paid { padding: 6px 7px !important; gap: 6px; border-radius: 10px; align-items: flex-start; }
+    #features .s-fcard:hover { transform: none; }
+    #features .s-fcard .s-ico { width: 22px; height: 22px; border-radius: 7px; font-size: 10px; }
+    #features .s-fcard h3 { font-size: 11px; line-height: 1.2; margin: 0 0 1px; }
+    #features .s-fcard p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-size: 9.5px; line-height: 1.3; margin: 0; }
+    #features .s-fcard.s-paid b { margin-top: 3px; font-size: 9px; line-height: 1.2; }
+    #features .s-links { display: none !important; }
+    #features .s-fgrid.c3 .s-fcard:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    #features .s-head { margin-bottom: 4px; }
+    #features .s-head .s-eyebrow { display: none; }
+    #features .s-head h2 { font-size: 17px; }
+    #features .mb-fold { margin: 3px 0; padding: 5px 10px; font-size: 11.5px; }
+    #features .s-flabel { margin: 5px 0 3px; font-size: 10px; }
     .s-flabel { font-size: 11px; margin: 8px 0 4px; }
     .s-modlabel { display: none; }
     .s-step { padding: 8px; }
@@ -93,17 +108,39 @@
     .s-srccard { padding: 10px !important; }
     .s-srccard h3 { font-size: 13px; }
     .s-srccard p { font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    #contacts .s-contact { gap: 10px; }
-    #contacts .s-ct-right h2 { font-size: 20px !important; margin-bottom: 6px !important; }
-    #contacts .s-ct-right p { font-size: 13px !important; }
-    .s-faq details summary { padding: 9px 12px; font-size: 13px; }
+    #contacts .s-head { margin-bottom: 4px !important; }
+    #contacts .s-head .s-eyebrow { display: none; }
+    #contacts .s-head h2 { font-size: 18px !important; }
+    #contacts .s-contact { gap: 8px; }
+    #contacts .s-faq-in { padding: 0 !important; }
+    #contacts .s-faq details { margin: 0 0 4px; }
+    #contacts .s-faq details summary { padding: 7px 10px; font-size: 12px; line-height: 1.25; }
+    #contacts .s-faq details p { margin: 0; padding: 0 10px 8px; font-size: 11.5px; line-height: 1.4; }
+    #contacts .s-ct-right { gap: 6px; }
+    #contacts .s-ct-right .s-eyebrow, #contacts .s-ct-right p { display: none !important; }
+    #contacts .s-ct-right h2 { font-size: 16px !important; line-height: 1.2; margin: 0 0 4px !important; }
+    #contacts .s-ct-right ul { display: flex; flex-wrap: wrap; gap: 3px 12px; margin: 0; padding: 0; font-size: 11.5px; }
+    #contacts .s-ct-right li { margin: 0; padding: 0; }
+    #contacts .mb-fold { margin: 2px 0; padding: 6px 10px; }
     .s-form input, .s-form textarea { font-size: 16px; padding: 8px 10px; }
 
     /* ---------- карта: миниатюрные кнопки, виджеты справа сворачиваются ---------- */
     .mc-group .widget-btn, .mc-group > .map-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; font-size: 13px; }
     #map-section .map-controls-right { gap: 6px; }
     .mb-mc-toggle { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 11px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.18); cursor: pointer; }
-    #map-section .map-controls-right.mb-mc-off > :not(.mb-mc-toggle) { display: none !important; }
+    .mb-search-btn { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 11px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.18); cursor: pointer; }
+    .mb-search-btn.on { background: var(--sc-green); border-color: var(--sc-green); color: #fff; }
+    #map-section .map-controls-right.mb-mc-off > :not(.mb-mc-toggle):not(.mb-search-btn) { display: none !important; }
+    /* поиск убран из шторки: открывается по кнопке-лупе на карте */
+    .sp-search { justify-content: flex-end; }
+    .sp-search .map-search { display: none; }
+    .sp-search .map-search.mb-pop { display: block; position: fixed; left: 10px; right: 10px; top: calc(var(--hdr) + 10px); width: auto; max-width: none; z-index: 2450; }
+    .sp-search .map-search.mb-pop .search-box { box-shadow: 0 8px 28px rgba(15,23,42,.3); background: var(--sc-white); }
+    html.mb-search-open #mainPanel { z-index: 2400 !important; }
+    /* виджет обучения и всплывающие советы на телефоне не показываем */
+    #tourWidget, #tourBtn, .gh-tour { display: none !important; }
+    /* «Моё местоположение» и стрелка севера — слева, над масштабной линейкой */
+    #map-section .map-controls-br { right: auto; left: 10px; bottom: calc(var(--sh) + 50px); align-items: flex-start; }
     .gc-rail-btn { flex: 0 0 56px; width: 56px; padding: 3px 1px; }
     .gc-rail-btn i { font-size: 15px; }
     .gc-rail-btn span { font-size: 9px; }

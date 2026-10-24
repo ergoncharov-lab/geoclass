@@ -69,7 +69,7 @@
             if (card) { var o = !card.classList.contains('mb-open'); $$('.s-cat-card.mb-open').forEach(function (c) { c.classList.remove('mb-open'); }); card.classList.toggle('mb-open', o); }
             return;
         }
-        var c = e.target.closest && e.target.closest('.s-fcard, .s-mod');
+        var c = e.target.closest && e.target.closest('.s-mod');
         if (c) c.classList.toggle('mb-open');
     });
 
@@ -80,6 +80,25 @@
         var icon = function (off) { tg.innerHTML = '<i class="fas fa-' + (off ? 'sliders' : 'xmark') + '"></i>'; };
         icon(true); mcr.classList.add('mb-mc-off'); mcr.insertBefore(tg, mcr.firstChild);
         tg.addEventListener('click', function () { icon(mcr.classList.toggle('mb-mc-off')); });
+    }
+
+    // поиск: в шторке скрыт, открывается по кнопке-лупе на карте
+    var sbox = $('#map-section .map-search'), sinp = document.getElementById('searchInput');
+    if (mcr && sbox && !mcr.querySelector('.mb-search-btn')) {
+        var sbtn = document.createElement('button'); sbtn.type = 'button'; sbtn.className = 'mb-search-btn'; sbtn.title = 'Поиск'; sbtn.innerHTML = '<i class="fas fa-search"></i>';
+        mcr.insertBefore(sbtn, mcr.firstChild);
+        var openS = function (on) {
+            sbox.classList.toggle('mb-pop', on); root.classList.toggle('mb-search-open', on); sbtn.classList.toggle('on', on);
+            if (on && sinp) setTimeout(function () { sinp.focus(); }, 60);
+        };
+        sbtn.addEventListener('click', function () { openS(!sbox.classList.contains('mb-pop')); });
+        document.addEventListener('click', function (e) {
+            if (!sbox.classList.contains('mb-pop') || e.target.closest('.mb-search-btn')) return;
+            if (e.target.closest('.map-search')) { if (e.target.closest('#searchResults')) setTimeout(function () { openS(false); }, 250); return; }   // выбрали результат — закрываем
+            openS(false);
+        }, true);
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sbox.classList.contains('mb-pop')) openS(false); });
+        onMq(function () { if (!mob()) openS(false); });
     }
 
     // паспорт или справка открыты — страница под ними не прокручивается
