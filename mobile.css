@@ -172,6 +172,19 @@
     .app-container.mb-tiles #mainPanel .sp-grid .sp-tile i, .app-container.mb-tiles #mainPanel .sp-grid .sp-tile.sp-hero i { width: 30px; height: 30px; margin: 0; font-size: 13px; box-shadow: none; }
     .app-container.mb-tiles #mainPanel .sp-grid .sp-tile span, .app-container.mb-tiles #mainPanel .sp-grid .sp-tile.sp-hero span { font-size: 10.5px; text-align: left; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
     @keyframes mbTilesIn { from { transform: translateX(-130%); opacity: 0; } to { transform: none; opacity: 1; } }
+    /* нажали на кнопку раздела (например «Профиль участка») — его инструменты открываются справа боковой панелью, колонка кнопок остаётся слева */
+    .app-container.mb-tiles #mainPanel[data-view="bp"] .tab-pane[data-pane="main"] { display: block !important; height: 0; min-height: 0; padding: 0; margin: 0; overflow: visible; }
+    .app-container.mb-tiles #mainPanel[data-view="bp"] .tab-pane[data-pane="main"] > :not(.sp-home) { display: none !important; }
+    .app-container.mb-tiles #mainPanel[data-view="bp"] .sp-home { height: 0; min-height: 0; padding: 0; margin: 0; border: 0; overflow: visible; }
+    .app-container.mb-tiles #mainPanel[data-view="bp"] .sp-grid .sp-tile { padding: 3px; }
+    .app-container.mb-tiles #mainPanel[data-view="bp"] .sp-grid .sp-tile span { display: none; }
+    #map-section .app-container:not(.passport-open) #mainPanel[data-view="bp"] {
+        left: auto; right: 0; top: 0; bottom: var(--gc-nav); height: auto; width: min(340px, calc(100vw - 54px)) !important; z-index: 1100 !important;
+        border-radius: 16px 0 0 16px; box-shadow: -6px 0 24px rgba(15,23,42,.24); overflow-y: auto; overflow-x: hidden;
+    }
+    #map-section .app-container:not(.passport-open) #mainPanel[data-view="bp"] .sp-grab { display: none; }
+    #map-section .app-container:not(.passport-open) #mainPanel[data-view="bp"] .sp-head { min-height: 0; padding: 8px 10px 4px; }
+    #map-section .app-container:not(.passport-open) #mainPanel[data-view="bp"] #bottomPanel .bp-pane.active { padding: 4px 10px 18px; }
     /* виджет обучения и всплывающие советы на телефоне не показываем */
     #tourWidget, #tourBtn, .gh-tour { display: none !important; }
     /* «Моё местоположение» и стрелка севера — слева, над масштабной линейкой */

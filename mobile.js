@@ -113,7 +113,7 @@
     }
 
     // закладки внизу как были; нажатие на закладку — кнопки раздела выезжают колонкой слева, шторка остаётся свёрнутой
-    var rail = document.getElementById('gcRail'), tkey = null;
+    var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), tkey = null;
     if (app && rail) {
         var tilesOff = function () { app.classList.remove('mb-tiles'); tkey = null; };
         document.addEventListener('click', function (e) {
@@ -127,11 +127,15 @@
                 setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);
                 return;
             }
-            if (!app.classList.contains('mb-tiles')) return;
-            var tl = e.target.closest('#mainPanel .sp-tile');
-            if (tl) { tilesOff(); if (!tl.classList.contains('sp-stub')) setTimeout(function () { if (window.gcSheet) window.gcSheet('half'); }, 0); return; }
-            tilesOff();   // нажали в другое место — колонка убирается
+            if (!app.classList.contains('mb-tiles') || e.target.closest('#mainPanel')) return;
+            if (panelEl && panelEl.getAttribute('data-view') === 'home') tilesOff();   // клик по карте убирает колонку (пока не открыт инструмент)
         });
+        // инструмент («bp») открывается справа, колонка остаётся; другие разделы (отчёты, источники, маршрут…) — в шторке
+        if (panelEl && window.MutationObserver) new MutationObserver(function () {
+            if (!mob() || !app.classList.contains('mb-tiles')) return;
+            var v = panelEl.getAttribute('data-view');
+            if (v !== 'home' && v !== 'bp') { tilesOff(); if (window.gcSheet) window.gcSheet('half'); }
+        }).observe(panelEl, { attributes: true, attributeFilter: ['data-view'] });
         onMq(function () { if (!mob()) tilesOff(); });
     }
 
