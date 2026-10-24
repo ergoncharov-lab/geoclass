@@ -87,6 +87,13 @@
     if (mcr && sbox && !mcr.querySelector('.mb-search-btn')) {
         var sbtn = document.createElement('button'); sbtn.type = 'button'; sbtn.className = 'mb-search-btn'; sbtn.title = 'Поиск'; sbtn.innerHTML = '<i class="fas fa-search"></i>';
         mcr.insertBefore(sbtn, mcr.firstChild);
+        // маршрут: кнопка на карте нажимает штатную «Маршрут» и раскрывает шторку
+        var rbtn = document.createElement('button'); rbtn.type = 'button'; rbtn.className = 'mb-route-btn'; rbtn.title = 'Построить маршрут'; rbtn.innerHTML = '<i class="fas fa-diamond-turn-right"></i>';
+        mcr.insertBefore(rbtn, tg || null);
+        rbtn.addEventListener('click', function () {
+            var r = document.getElementById('routeBtn'); if (r) r.click();
+            setTimeout(function () { if (window.gcSheet) window.gcSheet('half'); }, 0);
+        });
         var openS = function (on) {
             sbox.classList.toggle('mb-pop', on); root.classList.toggle('mb-search-open', on); sbtn.classList.toggle('on', on);
             if (on && sinp) setTimeout(function () { sinp.focus(); }, 60);
@@ -99,6 +106,17 @@
         }, true);
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sbox.classList.contains('mb-pop')) openS(false); });
         onMq(function () { if (!mob()) openS(false); });
+    }
+
+    // местоположение и погода: на карте — сверху; на десктопе блок возвращается на место в шторке
+    var loc = document.getElementById('spLoc'), stage = mcr && mcr.parentNode;
+    if (loc && stage) {
+        var ph = document.createComment('spLoc'); loc.parentNode.insertBefore(ph, loc);
+        var placeLoc = function () {
+            if (mob()) { if (loc.parentNode !== stage) stage.appendChild(loc); loc.classList.add('mb-loc'); }
+            else { if (loc.parentNode !== ph.parentNode) ph.parentNode.insertBefore(loc, ph.nextSibling); loc.classList.remove('mb-loc'); }
+        };
+        onMq(placeLoc); placeLoc();
     }
 
     // паспорт или справка открыты — страница под ними не прокручивается

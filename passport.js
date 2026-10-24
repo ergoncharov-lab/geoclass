@@ -1698,7 +1698,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (!l) { if (t) t.textContent = 'Паспорт участка'; body.innerHTML = '<div class="pp-sec"><div class="pp-sec-b"><div class="pp-note">Нет фигуры для паспорта. Нарисуйте участок (или загрузите контур / выписку Росреестра), выделите его на карте и нажмите «Обновить по фигуре».</div></div></div>'; return; }
         var gj = forced ? forced.gj : toGJ(l); D.gj = gj;
         var head = general(l, gj);
-        body.innerHTML = '<div class="pp-bar"><span><i class="fas fa-circle-info"></i> У каждого блока есть кнопка «Расшифровка»: что показывает, зачем нужен и как рассчитывается.</span><button type="button" class="pp-btn" data-pp-all><i class="fas fa-eye-slash"></i> Скрыть все</button></div><div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec().replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"') + weatherSec() + sumSec();
+        body.innerHTML = '<div class="pp-kpis" id="ppKpi"></div>' + head + classification() + satellites() + soilSec() + elevSec() + logSec().replace('<section class="pp-sec"', '<section class="pp-sec pp-compact"') + weatherSec() + sumSec();
         document.getElementById('ppKpi').innerHTML = kpiHtml(); packInit();
         // имя фигуры (стандартное или своё из «Списка объектов») + площадь — если это не кадастровый участок и не выписка
         D.name = D.cad ? '' : (forced ? (forced.meta.name || '') : (l._gcName || l._gcDef || (function () { var n = ''; if (typeof drawnItems !== 'undefined') drawnItems.eachLayer(function (g) { if (!n && g !== l && g.hasLayer && g.hasLayer(l)) n = g._gcName || g._gcDef || ''; }); return n; })()));
