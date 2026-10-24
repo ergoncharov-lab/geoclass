@@ -108,3 +108,24 @@ mark { background: #fde68a; border-radius: 3px; }
 .h-search { display: block; width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid #263238; background: #151c1b; color: #e2e8f0; font: inherit; font-size: 13px; outline: none; }
 .h-search:focus { border-color: var(--green); }
 @media (max-width: 860px) { .h-nav { padding: 0 10px; align-items: center; } .h-sbox { position: static; flex: none; padding: 8px 0; } .h-search { width: 170px; } }
+
+/* ===== мобильная версия справки (до 860 px): компактнее, всё читается в одну колонку ===== */
+@media (max-width: 860px) {
+    body { font-size: 13.5px; }
+    .h-main { --pad: 12px; padding-bottom: 44px; }
+    .h-nav a { padding: 5px 10px; font-size: 12.5px; }
+    .h-sec { padding-top: 12px; }
+    .h-sec > h2 { font-size: 19px; gap: 9px; }
+    .h-sec > h2 .n { width: 28px; height: 28px; font-size: 13px; border-radius: 9px; }
+    .h-lead { font-size: 13px; margin-bottom: 10px; }
+    .h-sub { font-size: 16px; margin: 16px 0 8px; }
+    .h-card { padding: 11px 12px; }
+    .h-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .h-fact { padding: 10px; }
+    .h-fact b { font-size: 19px; }
+    .h-note, .h-warn, .h-tip { padding: 9px 11px; font-size: 12.8px; }
+    table { font-size: 12px; }
+    th, td { padding: 7px 8px; }
+    .h-top { right: 12px; bottom: 12px; width: 34px; height: 34px; font-size: 15px; }
+}
+@media (max-width: 480px) { .h-grid { grid-template-columns: 1fr; } }

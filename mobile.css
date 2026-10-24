@@ -1,0 +1,184 @@
+/* ===== МОБИЛЬНАЯ ВЕРСИЯ (до 960 px) — подключается последним; десктопные стили не затрагиваются =====
+   1) блоки сайта закреплены на экране, листание смахиванием (scroll-snap по вертикали)
+   2) паспорт участка листается вбок: каждый раздел и каждый блок внутри — отдельная страница
+   3) кнопки миниатюрные, длинные тексты свёрнуты (раскрываются по нажатию)
+   Элементы, которые создаёт mobile.js, вне мобильного режима скрыты. */
+.mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, #mbPpBar { display: none; }
+
+@media (max-width: 960px) {
+    :root { --gc-nav: 52px; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    html.mb-lock, html.mb-lock body { overflow: hidden; }
+
+    /* ---------- 1. БЛОКИ: каждый — ровно на экран под шапкой, внутри при необходимости прокручивается ---------- */
+    #top, #map-section, #data-catalog, .s-after > section.site-sec {
+        box-sizing: border-box; height: calc(100vh - var(--hdr)); height: calc(100dvh - var(--hdr)); min-height: 0;
+        scroll-snap-align: start; scroll-snap-stop: always; scroll-margin-top: var(--hdr);
+    }
+    #map-section { overflow: hidden; }
+    #top, #data-catalog, .s-after > section.site-sec {
+        display: flex; flex-direction: column; justify-content: flex-start; overflow-x: hidden; overflow-y: auto;
+        overscroll-behavior-y: auto; padding: 12px 0 !important; -webkit-overflow-scrolling: touch;
+    }
+    #top > .s-wrap, #data-catalog > .s-wrap, .s-after > section.site-sec > .s-wrap { margin-top: auto; margin-bottom: auto; padding: 0 12px; }
+    #contacts > .s-footer { margin-top: auto; flex: none; padding: 8px 0; font-size: 12px; }
+    .s-wm, .s-orbit { display: none !important; }
+    .s-prompt { display: none !important; }
+    .gc-tips { display: none !important; }
+
+    /* точки-индикатор блоков справа (кроме блока карты) */
+    .mb-dots { display: flex; position: fixed; right: 5px; top: 50%; transform: translateY(-50%); z-index: 1900; flex-direction: column; align-items: center; gap: 5px; padding: 6px 3px; border-radius: 10px; background: rgba(12,17,16,.4); }
+    .mb-dots button { position: relative; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: rgba(255,255,255,.55); cursor: pointer; transition: height .2s, background .2s; }
+    .mb-dots button::after { content: ''; position: absolute; inset: -5px -8px; }
+    .mb-dots button.on { height: 16px; border-radius: 4px; background: var(--mint); }
+    html.mb-in-map .mb-dots, html.mb-lock .mb-dots { display: none; }
+
+    /* полоса под картой: подсказка про смахивание */
+    .s-mapbar { gap: 6px; }
+    .s-mapbar a { padding: 7px 11px; font-size: 12px; }
+    .mb-swipe { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-style: normal; font-weight: 600; color: var(--muted); white-space: nowrap; }
+    .mb-swipe i { animation: mbUp 1.2s ease-in-out infinite; }
+    @keyframes mbUp { 0%, 100% { transform: translateY(2px); opacity: .45; } 50% { transform: translateY(-2px); opacity: 1; } }
+
+    /* ---------- кнопки-«сворачиватели» ---------- */
+    .mb-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin: 6px 0; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2; text-align: left; cursor: pointer; }
+    .mb-fold i { color: var(--green); font-size: 12px; }
+    .mb-fold .mb-fc { margin-left: auto; font-size: 10px; color: var(--muted); transition: transform .2s; }
+    .mb-fold.mb-open .mb-fc { transform: rotate(180deg); }
+    .s-hero .mb-fold { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.26); color: #fff; }
+    .s-hero .mb-fold i { color: var(--mint); }
+    .mb-folded:not(.mb-open) { display: none !important; }
+
+    /* ---------- главный экран ---------- */
+    #top .s-wrap, #data-catalog .s-wrap { gap: 8px; }
+    .s-hero h1, .s-catalog h1 { font-size: 26px; margin-bottom: 8px; }
+    .s-hero p.lead { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
+    .s-hero-main, .s-hero-about, .s-cat-head { padding: 14px !important; }
+    .s-hero-tag { padding: 4px 10px; font-size: 11px; margin-bottom: 8px; }
+    .s-btn { padding: 8px 12px; font-size: 12.5px; gap: 6px; border-radius: 10px; }
+    #top .s-hero-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #top .s-hero-actions .s-btn { padding: 8px 6px; font-size: 12px; justify-content: center; }
+    .s-facts { gap: 6px; margin-top: 10px; }
+    .s-facts b { font-size: 16px; }
+    .s-facts span { font-size: 10.5px; }
+    .s-hero .s-tiles { grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+    .s-tile { padding: 9px; }
+    .s-tile b { font-size: 12.5px; }
+    .s-tile span { font-size: 11px; }
+
+    /* ---------- каталог данных: аккордеон по карточкам ---------- */
+    .s-cat-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .s-cat-card { padding: 10px 12px !important; }
+    .s-cat-top { position: relative; padding-right: 22px; cursor: pointer; }
+    .s-cat-top::after { content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; right: 2px; top: 50%; transform: translateY(-50%); font-size: 11px; transition: transform .2s; }
+    .s-cat-card.mb-open .s-cat-top::after { transform: translateY(-50%) rotate(180deg); }
+    .s-cat-card:not(.mb-open) .s-cat-opts, .s-cat-card:not(.mb-open) .s-cat-foot { display: none; }
+    .s-cat-order { padding: 10px 12px !important; }
+
+    /* ---------- остальные блоки: компактные карточки, описания по нажатию ---------- */
+    .s-after > section.site-sec .s-head { margin-bottom: 8px; }
+    .s-after > section.site-sec .s-head h2 { font-size: 20px; }
+    .s-fgrid, .s-fgrid.c3, .s-mods, .s-steps, .s-srcgrid { grid-template-columns: 1fr 1fr !important; gap: 6px; }
+    .s-fcard, .s-mod { padding: 9px !important; gap: 8px; cursor: pointer; }
+    .s-fcard h3, .s-mod h3 { font-size: 12.5px; }
+    .s-fcard p, .s-mod p { display: none; }
+    .s-fcard.mb-open p, .s-mod.mb-open p { display: block; font-size: 12px; margin-top: 4px; }
+    .s-fcard.mb-open, .s-mod.mb-open { grid-column: 1 / -1; }
+    .s-ico { width: 30px; height: 30px; font-size: 13px; flex: none; }
+    .s-flabel { font-size: 11px; margin: 8px 0 4px; }
+    .s-modlabel { display: none; }
+    .s-step { padding: 8px; }
+    .s-step h3 { font-size: 12.5px; }
+    .s-step p { font-size: 11.5px; }
+    .s-srccard { padding: 10px !important; }
+    .s-srccard h3 { font-size: 13px; }
+    .s-srccard p { font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    #contacts .s-contact { gap: 10px; }
+    #contacts .s-ct-right h2 { font-size: 20px !important; margin-bottom: 6px !important; }
+    #contacts .s-ct-right p { font-size: 13px !important; }
+    .s-faq details summary { padding: 9px 12px; font-size: 13px; }
+    .s-form input, .s-form textarea { font-size: 16px; padding: 8px 10px; }
+
+    /* ---------- карта: миниатюрные кнопки, виджеты справа сворачиваются ---------- */
+    .mc-group .widget-btn, .mc-group > .map-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; font-size: 13px; }
+    #map-section .map-controls-right { gap: 6px; }
+    .mb-mc-toggle { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 11px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.18); cursor: pointer; }
+    #map-section .map-controls-right.mb-mc-off > :not(.mb-mc-toggle) { display: none !important; }
+    .gc-rail-btn { flex: 0 0 56px; width: 56px; padding: 3px 1px; }
+    .gc-rail-btn i { font-size: 15px; }
+    .gc-rail-btn span { font-size: 9px; }
+    #mainPanel .sp-head { padding: 24px 10px 6px; }
+    .sp-route { width: 38px; height: 38px; font-size: 16px; }
+    .sp-back-btn, .rt-ib { width: 32px; height: 32px; }
+    .sp-tile i { width: 40px; height: 40px; font-size: 15px; }
+    .sp-tile span { font-size: 9.5px; }
+    #bottomPanel .dw-tool { height: 36px; min-height: 36px; }
+    #bottomPanel .dw-act { min-height: 34px; font-size: 12px; padding: 4px 6px; }
+    #bottomPanel .dw-tool-grid { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); }
+    .pp-btn { padding: 4px 8px; font-size: 11.5px; border-radius: 8px; }
+}
+
+/* ---------- 2. ПАСПОРТ УЧАСТКА: страницы вбок (только экран, на печать не влияет) ---------- */
+@media screen and (max-width: 960px) {
+    #map-section .app-container.passport-open #mainPanel { display: flex !important; flex-direction: column; overflow: hidden !important; }
+    .passport-open #passportPane.pp { display: flex !important; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden !important; padding: 0 !important; background: var(--sc-bg-soft); }
+
+    /* шапка: [к карте] название … [иконки] / полоса загрузки */
+    #passportPane .pp-top { position: static !important; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 !important; padding: 6px 8px !important; box-shadow: none; border-bottom: 1px solid var(--sc-line); }
+    #passportPane .pp-top h2 { flex: 1 1 0; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #passportPane .pp-top .sp { display: none; }
+    #passportPane .pp-top .pp-tb { font-size: 0 !important; width: 30px; height: 30px !important; padding: 0 !important; gap: 0; }
+    #passportPane .pp-top .pp-tb i { font-size: 13px !important; margin: 0; }
+    #passportPane .pp-top .pp-tbs { order: 3; flex-wrap: nowrap; gap: 4px; margin-left: 0; }
+    #passportPane #ppCollapseAll, #passportPane #ppNav { display: none !important; }
+    #passportPane #ppSt.pp-stbar { order: 10; padding: 3px 8px 6px; margin: 0; border-radius: 8px; }
+    #passportPane #ppSt .pp-stp { font-size: 12px; min-width: 30px; }
+
+    /* полоса страниц: разделы-«чипсы», счётчик, стрелки, прогресс */
+    #mbPpBar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px 0; background: var(--sc-white); border-bottom: 1px solid var(--sc-line); }
+    #mbPpBar .mb-chs { flex: 1 1 0; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+    #mbPpBar .mb-chs::-webkit-scrollbar { display: none; }
+    #mbPpBar .mb-ch { flex: none; display: inline-flex; align-items: center; gap: 5px; max-width: 150px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+    #mbPpBar .mb-ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #mbPpBar .mb-ch i { font-size: 10px; color: var(--c, var(--sc-green)); }
+    #mbPpBar .mb-ch.on { background: var(--c, var(--sc-green)); border-color: var(--c, var(--sc-green)); color: #fff; }
+    #mbPpBar .mb-ch.on i { color: #fff; }
+    #mbPpBar .mb-cnt { flex: none; font-size: 11px; font-weight: 700; color: var(--sc-muted); min-width: 38px; text-align: center; }
+    #mbPpBar .mb-ar { flex: none; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 11px; cursor: pointer; }
+    #mbPpBar .mb-ar:disabled { opacity: .35; }
+    #mbPpBar .mb-pg { flex: 0 0 100%; height: 3px; margin: 3px -6px 0; background: var(--sc-line-soft); }
+    #mbPpBar .mb-pg b { display: block; height: 100%; width: 0; background: var(--sc-green); transition: width .25s; }
+
+    /* лента страниц */
+    #passportPane #ppBody { flex: 1 1 auto; min-height: 0; display: flex !important; flex-direction: row; align-items: stretch; gap: 0; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    #passportPane #ppBody::-webkit-scrollbar { display: none; }
+    #passportPane #ppBody > .pp-sec, #passportPane #ppBody .mb-flat { display: contents !important; }
+    #passportPane #ppBody .mb-hide { display: none !important; }
+    #passportPane #ppBody .mb-slide {
+        display: block !important; flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; align-self: stretch; height: auto;
+        overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-snap-align: start; scroll-snap-stop: always;
+        margin: 0 !important; padding: 0 12px 22px !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: var(--sc-white);
+    }
+    /* подпись раздела вверху каждой страницы */
+    #passportPane #ppBody .mb-slide::before {
+        content: attr(data-mb-sec); display: block; position: sticky; top: 0; z-index: 3; margin: 0 -12px 10px; padding: 6px 12px;
+        font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--mbac, var(--sc-green));
+        background: color-mix(in srgb, var(--mbac, #059669) 12%, #fff); border-bottom: 1px solid color-mix(in srgb, var(--mbac, #059669) 25%, #fff);
+    }
+    /* содержимое страницы — в одну колонку */
+    #passportPane #ppBody .pp-kpis.mb-slide { display: block !important; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc { display: flex !important; flex-direction: column; gap: 10px !important; grid-template-columns: none !important; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mcol, #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: block !important; position: static !important; width: 100% !important; max-width: none !important; margin: 0 !important; }
+    #passportPane #ppBody .mb-slide .pp-mapw { max-width: none !important; width: 100%; }
+    #passportPane #ppBody .mb-slide .pp-map { width: 100%; height: auto !important; min-height: 0 !important; max-height: 58vh; aspect-ratio: 1 / 1 !important; }
+    #passportPane #ppBody .mb-slide .pp-dcol { width: 100% !important; min-width: 0; }
+    #passportPane #ppBody .mb-slide .pp-sub-h { flex-wrap: wrap; gap: 6px; }
+    #passportPane #ppBody .mb-slide .pp-sub-h h4 { font-size: 14px; }
+    #passportPane #ppBody .mb-slide .pp-i-btn { padding: 3px 8px; font-size: 11px; }
+    #passportPane #ppBody .mb-slide .pp-vt, #passportPane #ppBody .mb-slide .pp-ch { max-width: 100%; overflow-x: auto; }
+    #passportPane #ppBody .mb-slide table { max-width: 100%; }
+    #passportPane #ppBody .mb-slide .pp-tiles { grid-template-columns: 1fr 1fr; }
+    #passportPane #ppBody .mb-slide .pp-solar, #passportPane #ppBody .mb-slide .pp-cols { grid-template-columns: minmax(0, 1fr) !important; }
+    /* мини-карты: касание не перехватывается картой, чтобы страницу можно было смахнуть */
+    #passportPane #ppBody .leaflet-container { touch-action: pan-x pan-y !important; }
+}
