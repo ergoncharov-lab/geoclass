@@ -976,7 +976,7 @@
     head.appendChild(grab);
     var st = 'peek', drag = null;
     function dims() {
-        var h = Math.max(200, app.clientHeight - 0);
+        var h = Math.max(200, app.clientHeight - (rail && rail.offsetHeight || 58));
         return { peek: Math.min(head.offsetHeight + 2, Math.round(h * 0.45)), half: Math.round(h * 0.5), full: h - 10 };
     }
     function apply(s) { st = s; if (!mq.matches) return; app.setAttribute('data-sheet', s); app.style.setProperty('--sh', dims()[s] + 'px'); }

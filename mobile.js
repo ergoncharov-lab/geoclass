@@ -36,13 +36,6 @@
     window.addEventListener('resize', dotsUpdate);
     onMq(dotsUpdate); dotsUpdate();
 
-    // под картой — подсказка: страница листается смахиванием по этой полосе (карта сама забирает жесты)
-    var mbar = $('#map-section .s-mapbar');
-    if (mbar) {
-        var em = document.createElement('em'); em.className = 'mb-swipe'; em.innerHTML = '<i class="fas fa-angles-up"></i> Смахните вверх';
-        mbar.insertBefore(em, mbar.lastElementChild);
-    }
-
     /* ---------- 2. сворачиваемые блоки ---------- */
     function fold(target, label, icon) {
         if (!target || target.getAttribute('data-mb-fold')) return;
@@ -117,6 +110,29 @@
             else { if (loc.parentNode !== ph.parentNode) ph.parentNode.insertBefore(loc, ph.nextSibling); loc.classList.remove('mb-loc'); }
         };
         onMq(placeLoc); placeLoc();
+    }
+
+    // закладки внизу как были; нажатие на закладку — кнопки раздела выезжают колонкой слева, шторка остаётся свёрнутой
+    var rail = document.getElementById('gcRail'), tkey = null;
+    if (app && rail) {
+        var tilesOff = function () { app.classList.remove('mb-tiles'); tkey = null; };
+        document.addEventListener('click', function (e) {
+            if (!mob() || !e.target.closest) return;
+            var rb = e.target.closest('#gcRail .gc-rail-btn');
+            if (rb) {
+                var k = rb.getAttribute('data-rail');
+                if (k === 'help' || k === 'bookmarks') { tilesOff(); return; }
+                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); if (window.gcSheet) window.gcSheet('half'); return; }
+                app.classList.add('mb-tiles'); tkey = k;
+                setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);
+                return;
+            }
+            if (!app.classList.contains('mb-tiles')) return;
+            var tl = e.target.closest('#mainPanel .sp-tile');
+            if (tl) { tilesOff(); if (!tl.classList.contains('sp-stub')) setTimeout(function () { if (window.gcSheet) window.gcSheet('half'); }, 0); return; }
+            tilesOff();   // нажали в другое место — колонка убирается
+        });
+        onMq(function () { if (!mob()) tilesOff(); });
     }
 
     // паспорт или справка открыты — страница под ними не прокручивается
