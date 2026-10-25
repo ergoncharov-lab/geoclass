@@ -6659,6 +6659,11 @@ function setMeasureChipsActive(mode) {
     });
 }
 
+// кнопки «Длина» и «Площадь» на карте подсвечиваются по текущему режиму измерения
+function syncMeasureBtns() {
+    document.querySelectorAll('[data-mmode]').forEach(b => b.classList.toggle('active', b.dataset.mmode === measureMode));
+}
+
 function activateMeasureMode(mode) {
     deactivateAllTools();
     deactivateMeasureMode();
@@ -6666,7 +6671,7 @@ function activateMeasureMode(mode) {
 
     measureMode = mode;
     measureFinished = false;
-    document.getElementById('measureBtn').classList.add('active');
+    syncMeasureBtns();
     setMeasureChipsActive(mode);
     showMeasureToolbar(mode);
 
@@ -6683,7 +6688,7 @@ function activateMeasureMode(mode) {
 function deactivateMeasureMode() {
     measureMode = null;
     measureFinished = false;
-    document.getElementById('measureBtn').classList.remove('active');
+    syncMeasureBtns();
     setMeasureChipsActive(null);
 
     map.off('click', measureMapClick);
@@ -6963,7 +6968,7 @@ function togglePanel(panelId, btnId) {
     
     if (activePanel) {
         document.getElementById(activePanel).classList.remove('active');
-        document.querySelectorAll('.widget-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.widget-btn').forEach(b => { if (!(b.dataset.mmode && b.dataset.mmode === measureMode)) b.classList.remove('active'); });
     }
     
     panel.classList.add('active');
@@ -6976,7 +6981,7 @@ document.addEventListener('click', function(e) {
     const isWidget = e.target.closest('.side-widget');
     if (!isWidget) {
         document.querySelectorAll('.widget-panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.widget-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.widget-btn').forEach(b => { if (!(b.dataset.mmode && b.dataset.mmode === measureMode)) b.classList.remove('active'); });
         activePanel = null;
     }
 });
@@ -7045,49 +7050,20 @@ document.querySelectorAll('#analyticsPanel .layer-chip').forEach(item => {
 });
 
 // ---------- ИЗМЕРЕНИЯ ----------
-document.getElementById('measureBtn').addEventListener('click', function(e) {
-    e.stopPropagation();
-    togglePanel('measurePanel', 'measureBtn');
-});
-
-document.querySelectorAll('#measurePanel .measure-chip').forEach(item => {
-    item.addEventListener('click', function(e) {
+// Две отдельные кнопки: «Длина» и «Площадь». Нажатие сразу включает инструмент (кликайте по карте), повторное — выключает.
+document.querySelectorAll('[data-mmode]').forEach(btn => {
+    btn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const mode = this.dataset.mode;
-        
-        if (mode === 'clear') {
-            clearMeasurements();
-            document.querySelectorAll('#measurePanel .measure-chip').forEach(el => {
-                el.classList.remove('active');
-            });
-            document.getElementById('measurePanel').classList.remove('active');
-            document.getElementById('measureBtn').classList.remove('active');
-            activePanel = null;
-            return;
-        }
-        
+        const mode = this.dataset.mmode;
+        // открытые панели других виджетов закрываем
+        document.querySelectorAll('.widget-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.widget-btn').forEach(b => { if (!b.dataset.mmode && b.id !== 'mode3dBtn' && !(b.id === 'swipeBtn' && swipeState.active)) b.classList.remove('active'); });
+        activePanel = null;
         if (measureMode === mode) {
             deactivateMeasureMode();
-            document.querySelectorAll('#measurePanel .measure-chip').forEach(el => {
-                el.classList.remove('active');
-            });
-            document.getElementById('measurePanel').classList.remove('active');
-            document.getElementById('measureBtn').classList.remove('active');
-            activePanel = null;
             return;
         }
-        
-        // Активируем режим измерения
         activateMeasureMode(mode);
-        
-        document.querySelectorAll('#measurePanel .measure-chip').forEach(el => {
-            el.classList.toggle('active', el.dataset.mode === mode);
-        });
-        
-        // Закрываем панель после выбора
-        document.getElementById('measurePanel').classList.remove('active');
-        document.getElementById('measureBtn').classList.remove('active');
-        activePanel = null;
     });
 });
 
@@ -7651,7 +7627,7 @@ document.getElementById('swipeBtn').addEventListener('click', function(e) {
     document.querySelectorAll('.widget-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.widget-btn').forEach(b => {
         if (b.id === 'swipeBtn') return;
-        if (b.id === 'measureBtn' && measureMode) return;
+        if (b.dataset.mmode && b.dataset.mmode === measureMode) return;
         if (b.id === 'mode3dBtn' && m3d.active) return;
         b.classList.remove('active');
     });
@@ -11090,7 +11066,7 @@ m3El('refreshMapBtn').addEventListener('click', () => {
 // В 3D рисование и измерения (они работают на Leaflet) недоступны — подсказываем вместо молчаливого отказа
 document.querySelector('.map-container').addEventListener('click', e => {
     if (!m3d.active) return;
-    if (e.target.closest('.draw-row, #measureWidget, [data-bp-pane="draw"] .dw-tool')) {
+    if (e.target.closest('.draw-row, #measureWidget, #measureAreaWidget, [data-bp-pane="draw"] .dw-tool')) {
         e.stopPropagation();
         e.preventDefault();
         updateStatus('ℹ️ Рисование и измерения работают в 2D — выключите 3D кнопкой «2D» на карте', true);

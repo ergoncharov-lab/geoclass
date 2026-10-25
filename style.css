@@ -1870,7 +1870,7 @@ body.resizing-x *, body.resizing-y * { user-select: none; }
 .map-stage.mode-3d .map-bottom-left { display: none; }
 /* инструменты, работающие только на 2D-карте, в 3D приглушены */
 .map-stage.mode-3d .draw-row,
-.map-stage.mode-3d #measureWidget { opacity: 0.45; }
+.map-stage.mode-3d #measureWidget, .map-stage.mode-3d #measureAreaWidget { opacity: 0.45; }
 .map3d.m3-placing .maplibregl-canvas { cursor: crosshair; }
 .map3d .maplibregl-ctrl-attrib { font-size: 10px; }
 

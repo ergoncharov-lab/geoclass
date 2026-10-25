@@ -1,7 +1,7 @@
 /* Мобильная версия (до 960 px). Подключается последним. На десктопе ничего не меняет: всё, что создаётся здесь, скрыто в mobile.css.
    1) индикатор блоков + подсказка «смахните вверх» (само листание — CSS scroll-snap)
    2) сворачиваемые тексты и карточки
-   3) виджеты карты справа сворачиваются в одну кнопку
+   3) все виджеты карты (поиск, маршрут, местоположение, север, рисование, длина, площадь и виджеты справа) собраны в один раскрывающийся виджет
    4) паспорт участка: страницы, листаемые вбок */
 (function () {
     var mq = window.matchMedia('(max-width: 960px)'), root = document.documentElement;
@@ -66,23 +66,32 @@
         if (c) c.classList.toggle('mb-open');
     });
 
-    /* ---------- 3. виджеты карты справа — свёрнуты в одну кнопку ---------- */
-    var mcr = $('#map-section .map-controls-right');
+    /* ---------- 3. виджеты карты — один раскрывающийся виджет ----------
+       Кнопка справа вверху раскрывает колонки: [поиск, маршрут, моё местоположение, север] [рисование, длина, площадь] и прежние виджеты справа.
+       Кнопки местоположения, севера, рисования и измерений — те же элементы, что и на десктопе: на телефоне они переносятся в виджет, на десктопе возвращаются на место. */
+    var mcr = $('#map-section .map-controls-right'), tg = null, gNav = null, gTools = null;
+    function mcOff(off) {
+        if (!mcr || !tg) return;
+        mcr.classList.toggle('mb-mc-off', off);
+        tg.innerHTML = '<i class="fas fa-' + (off ? 'sliders' : 'xmark') + '"></i>';
+    }
     if (mcr && !mcr.querySelector('.mb-mc-toggle')) {
-        var tg = document.createElement('button'); tg.type = 'button'; tg.className = 'mb-mc-toggle'; tg.title = 'Виджеты карты';
-        var icon = function (off) { tg.innerHTML = '<i class="fas fa-' + (off ? 'sliders' : 'xmark') + '"></i>'; };
-        icon(true); mcr.classList.add('mb-mc-off'); mcr.insertBefore(tg, mcr.firstChild);
-        tg.addEventListener('click', function () { icon(mcr.classList.toggle('mb-mc-off')); });
+        tg = document.createElement('button'); tg.type = 'button'; tg.className = 'mb-mc-toggle'; tg.title = 'Виджеты карты';
+        mcr.insertBefore(tg, mcr.firstChild); mcOff(true);
+        tg.addEventListener('click', function () { mcOff(!mcr.classList.contains('mb-mc-off')); });
+        gNav = document.createElement('div'); gNav.className = 'mc-group mb-g mb-g-nav';
+        gTools = document.createElement('div'); gTools.className = 'mc-group mb-g mb-g-tools';
+        mcr.insertBefore(gNav, tg.nextSibling); mcr.insertBefore(gTools, gNav.nextSibling);
     }
 
-    // поиск: в шторке скрыт, открывается по кнопке-лупе на карте
+    // поиск: в шторке скрыт, открывается по кнопке-лупе в виджете
     var sbox = $('#map-section .map-search'), sinp = document.getElementById('searchInput');
-    if (mcr && sbox && !mcr.querySelector('.mb-search-btn')) {
-        var sbtn = document.createElement('button'); sbtn.type = 'button'; sbtn.className = 'mb-search-btn'; sbtn.title = 'Поиск'; sbtn.innerHTML = '<i class="fas fa-search"></i>';
-        mcr.insertBefore(sbtn, mcr.firstChild);
-        // маршрут: кнопка на карте нажимает штатную «Маршрут» и раскрывает шторку
-        var rbtn = document.createElement('button'); rbtn.type = 'button'; rbtn.className = 'mb-route-btn'; rbtn.title = 'Построить маршрут'; rbtn.innerHTML = '<i class="fas fa-diamond-turn-right"></i>';
-        mcr.insertBefore(rbtn, tg || null);
+    if (gNav && sbox) {
+        var sbtn = document.createElement('button'); sbtn.type = 'button'; sbtn.className = 'map-btn mb-search-btn'; sbtn.title = 'Поиск'; sbtn.innerHTML = '<i class="fas fa-search"></i>';
+        gNav.appendChild(sbtn);
+        // маршрут: кнопка в виджете нажимает штатную «Маршрут» и раскрывает шторку
+        var rbtn = document.createElement('button'); rbtn.type = 'button'; rbtn.className = 'map-btn mb-route-btn'; rbtn.title = 'Построить маршрут'; rbtn.innerHTML = '<i class="fas fa-diamond-turn-right"></i>';
+        gNav.appendChild(rbtn);
         rbtn.addEventListener('click', function () {
             var r = document.getElementById('routeBtn'); if (r) r.click();
             setTimeout(function () { if (window.gcSheet) window.gcSheet('half'); }, 0);
@@ -101,6 +110,52 @@
         onMq(function () { if (!mob()) openS(false); });
     }
 
+    // перенос настоящих кнопок (с обработчиками) в виджет и обратно; на месте остаётся комментарий-метка
+    var moved = [], tlTools = $('#map-section .map-tl-tools');
+    function relocate(el, to) {
+        if (!el || !to) return;
+        var rec = null; moved.forEach(function (m) { if (m.el === el) rec = m; });
+        if (!rec) { rec = { el: el, ph: document.createComment('mb:' + (el.id || 'x')) }; el.parentNode.insertBefore(rec.ph, el); moved.push(rec); }
+        to.appendChild(el);
+    }
+    function placeWidgets() {
+        if (!gNav || !gTools) return;
+        if (mob()) {
+            relocate(document.getElementById('locateBtn'), gNav);
+            relocate(document.getElementById('northBtn'), gNav);
+            ['drawWidget', 'measureWidget', 'measureAreaWidget'].forEach(function (id) { relocate(document.getElementById(id), gTools); });
+        } else {
+            moved.forEach(function (m) { if (m.ph.parentNode && m.el.parentNode !== m.ph.parentNode) m.ph.parentNode.insertBefore(m.el, m.ph); });
+        }
+        if (tlTools) tlTools.classList.toggle('mb-tl-empty', mob());
+    }
+    onMq(placeWidgets); placeWidgets();
+
+    if (mcr && tg) {
+        // выбрали действие (поиск, маршрут, место, рисование, длина, площадь) — виджет сворачивается и освобождает карту; север — остаётся открытым
+        mcr.addEventListener('click', function (e) {
+            if (!mob() || !e.target.closest || e.target.closest('#northBtn')) return;
+            if (e.target.closest('.mb-g button')) setTimeout(function () { mcOff(true); }, 0);
+            if (e.target.closest('[data-mmode]')) setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);   // замер включён — шторка не должна закрывать карту
+        }, true);
+        // нажатие по карте (вне виджета, поиска и шторки) тоже сворачивает виджет
+        document.addEventListener('click', function (e) {
+            if (!mob() || !e.target.closest || mcr.classList.contains('mb-mc-off')) return;
+            if (e.target.closest('.map-controls-right, .map-search, .widget-panel, #mainPanel')) return;
+            mcOff(true);
+        });
+        onMq(function () { if (!mob()) mcOff(true); });
+    }
+
+    // ручки у шторки больше нет: повторное нажатие на уже открытую закладку нижнего меню сворачивает шторку
+    var railBar = document.getElementById('gcRail');
+    if (railBar) railBar.addEventListener('click', function (e) {
+        var b = mob() && e.target.closest && e.target.closest('.gc-rail-btn');
+        if (!b || b.getAttribute('data-rail') === 'help') return;
+        var was = b.classList.contains('on'), shA = $('#map-section .app-container'), sh = shA && shA.getAttribute('data-sheet');
+        if (was && sh && sh !== 'peek') setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 40);
+    }, true);
+
     // местоположение и погода: на карте — сверху; на десктопе блок возвращается на место в шторке
     var loc = document.getElementById('spLoc'), stage = mcr && mcr.parentNode;
     if (loc && stage) {
@@ -113,30 +168,28 @@
     }
 
     // закладки внизу как были; нажатие на закладку — кнопки раздела выезжают колонкой слева, шторка остаётся свёрнутой
-    var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), appEl = $('#map-section .app-container'), tkey = null, curView = 'home', pvView = '';
-    if (appEl && rail) {
-        var tilesOff = function () { appEl.classList.remove('mb-tiles'); tkey = null; };
+    var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), tkey = null;
+    if (app && rail) {
+        var tilesOff = function () { app.classList.remove('mb-tiles'); tkey = null; };
         document.addEventListener('click', function (e) {
             if (!mob() || !e.target.closest) return;
             var rb = e.target.closest('#gcRail .gc-rail-btn');
             if (rb) {
                 var k = rb.getAttribute('data-rail');
-                var fromTool = pvView === 'bp' && curView === 'home'; pvView = '';
                 if (k === 'help' || k === 'bookmarks') { tilesOff(); return; }
-                if (appEl.classList.contains('mb-tiles') && tkey === k && !fromTool) { tilesOff(); if (window.gcSheet) window.gcSheet('half'); return; }   // повторное нажатие — свернуть (если только не вышли из инструмента этой же кнопкой)
-                appEl.classList.add('mb-tiles'); tkey = k;
+                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); if (window.gcSheet) window.gcSheet('half'); return; }
+                app.classList.add('mb-tiles'); tkey = k;
                 setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);
                 return;
             }
-            if (!appEl.classList.contains('mb-tiles') || e.target.closest('#mainPanel')) return;
+            if (!app.classList.contains('mb-tiles') || e.target.closest('#mainPanel')) return;
             if (panelEl && panelEl.getAttribute('data-view') === 'home') tilesOff();   // клик по карте убирает колонку (пока не открыт инструмент)
         });
         // инструмент («bp») открывается справа, колонка остаётся; другие разделы (отчёты, источники, маршрут…) — в шторке
         if (panelEl && window.MutationObserver) new MutationObserver(function () {
-            var v = panelEl.getAttribute('data-view'); pvView = curView; curView = v;
-            if (!mob() || !appEl.classList.contains('mb-tiles')) return;
-            if (v === 'bp') { setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0); return; }   // инструмент открыт справа — шторка не нужна
-            if (v !== 'home') { tilesOff(); if (window.gcSheet) window.gcSheet('half'); }
+            if (!mob() || !app.classList.contains('mb-tiles')) return;
+            var v = panelEl.getAttribute('data-view');
+            if (v !== 'home' && v !== 'bp') { tilesOff(); if (window.gcSheet) window.gcSheet('half'); }
         }).observe(panelEl, { attributes: true, attributeFilter: ['data-view'] });
         onMq(function () { if (!mob()) tilesOff(); });
     }

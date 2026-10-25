@@ -591,7 +591,7 @@
                 <details class="ct-grp"><summary><i class="fas fa-file-lines"></i> Отчёты и паспорт участка</summary><ul class="hp"><li>Нажмите на отчёт в списке — паспорт раскроется на всю область карты.</li><li>«К карте» или Esc возвращают обычный вид.</li><li>Из паспорта можно скачать PDF.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-store"></i> Каталог геоданных</summary><ul class="hp"><li>Данные разбиты на группы: векторы OSM, спутниковые снимки, готовые карты.</li><li>Раскройте группу, выберите набор и оформите заказ (в разработке).</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-layer-group"></i> Подложки и слои (кнопки справа)</summary><ul class="hp"><li>«Базовые карты», «Спутник» и «Аналитические подложки» меняют основу карты.</li><li>Легенда аналитического слоя — на вкладке «Главная» нижней панели.</li><li>«Шторка» делит карту на две подложки для сравнения.</li></ul></details>
-                <details class="ct-grp"><summary><i class="fas fa-ruler-combined"></i> Измерения, сетка и навигация</summary><ul class="hp"><li>«Измерения» — длина и площадь по клику; «Очистить» убирает результат.</li><li>«Сетка координат» — формат, шаг и цвет настраиваются в выпадающей панели.</li><li>Колесо — масштаб, правая кнопка мыши или Shift + колесо — поворот, стрелка севера сбрасывает его.</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-ruler-combined"></i> Измерения, сетка и навигация</summary><ul class="hp"><li>«Длина» и «Площадь» — отдельные кнопки, замер включается сразу и идёт по клику; «Очистить» убирает результат.</li><li>«Сетка координат» — формат, шаг и цвет настраиваются в выпадающей панели.</li><li>Колесо — масштаб, правая кнопка мыши или Shift + колесо — поворот, стрелка севера сбрасывает его.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-pen-ruler"></i> Рисование (нижняя панель)</summary><ul class="hp"><li>Вкладка «Рисование»: значки, текст, линии и фигуры со стилями.</li><li>«Выбрать» позволяет менять стиль, «Двигать» — перемещать, «Вершины» — править контур.</li><li>Ctrl+Z / Ctrl+Y — отмена и повтор, «GeoJSON» — выгрузка рисунков.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-mountain"></i> Профиль рельефа</summary><ul class="hp"><li>«По линии»: нарисуйте линию — получите график высот и уклонов.</li><li>«По площади»: гипсометрическая кривая и ступени высот полигона.</li><li>Результаты выгружаются в CSV и PNG.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-cube"></i> 3D-режим</summary><ul class="hp"><li>Кнопка «3D» среди виджетов справа на карте включает 3D: рельеф, здания OSM, деревья.</li><li>Сцену можно вращать и наклонять, потянув кнопку «3D / 2D» на карте; добавленные модели выделяются и двигаются мышью. Освещение, готовые модели и импорт GLB/GLTF — вкладка «3D».</li><li>Рисование и измерения работают только в 2D.</li></ul></details>
@@ -1268,25 +1268,14 @@
         <div class="map-tl-tools"><div class="mc-group mc-row">
             <div class="side-widget" id="drawWidget"><button class="map-btn widget-btn" id="drawMapBtn" title="Рисование"><i class="fas fa-pen-ruler"></i></button></div>
             <div class="side-widget" id="measureWidget">
-                <button class="map-btn widget-btn" id="measureBtn" title="Измерения">
-                    <i class="fas fa-ruler-combined"></i>
+                <button class="map-btn widget-btn" id="measureBtn" data-mmode="distance" title="Длина: измерение расстояния (инструмент включается сразу)">
+                    <i class="fas fa-ruler"></i>
                 </button>
-                <div class="widget-panel widget-panel-horizontal" id="measurePanel">
-                    <div class="widget-panel-body-horizontal">
-                        <div class="measure-chip" data-mode="distance">
-                            <i class="fas fa-ruler"></i>
-                            <span>Расстояние</span>
-                        </div>
-                        <div class="measure-chip" data-mode="area">
-                            <i class="fas fa-vector-square"></i>
-                            <span>Площадь</span>
-                        </div>
-                        <div class="measure-chip" data-mode="clear">
-                            <i class="fas fa-trash-alt"></i>
-                            <span>Очистить</span>
-                        </div>
-                    </div>
-                </div>
+            </div>
+            <div class="side-widget" id="measureAreaWidget">
+                <button class="map-btn widget-btn" id="measureAreaBtn" data-mmode="area" title="Площадь: измерение площади (инструмент включается сразу)">
+                    <i class="fas fa-vector-square"></i>
+                </button>
             </div>
             <!-- КНОПКА «ПРОЙТИ ОБУЧАЮЩИЙ КУРС»: значок правее «Измерений», текст выплывает при наведении -->
             <div class="side-widget" id="tourWidget"><button type="button" class="map-btn widget-btn" id="tourBtn" aria-label="Пройти обучающий курс"><i class="fas fa-graduation-cap"></i><span class="tour-lbl">Пройти обучающий курс</span></button></div>
