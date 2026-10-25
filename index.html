@@ -39,7 +39,6 @@
 <header class="s-header" id="siteHeader">
   <div class="s-wrap">
     <a class="s-brand" href="#top"><img class="s-logo" src="logo.png" alt=""> TerraClass</a>
-    <button class="s-burger" id="siteBurger" aria-label="Меню"><i class="fas fa-bars"></i></button>
     <nav class="s-nav" id="siteNav">
       <a href="#top">Главная</a>
       <a href="#map-section" class="s-nav-map"><i class="fas fa-map-location-dot"></i> Карта</a>
@@ -50,6 +49,8 @@
       <a href="#contacts">Вопросы и контакты</a>
       <a href="#map-section" class="s-cta" id="siteFullAnalysis"><i class="fas fa-file-lines"></i> Полный анализ</a>
     </nav>
+    <button type="button" class="s-user" id="siteUser" title="Войти или зарегистрироваться" aria-label="Вход и регистрация" aria-haspopup="dialog"><i class="far fa-user"></i></button>
+    <button class="s-burger" id="siteBurger" aria-label="Меню"><i class="fas fa-bars"></i></button>
   </div>
 </header>
 
@@ -284,7 +285,6 @@
             <!-- МЕНЮ РАЗДЕЛОВ: цветные кнопки, как в Яндекс Картах. По нажатию кнопки скрываются, остаётся стрелка «назад» -->
             <div class="section sp-home">
                 <div class="sp-group on" data-group="main">
-                    <div class="sp-group-title" style="margin-top:4px">Главное</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
                         <button type="button" class="sp-tile" data-goto="sources" style="--c:#10b981" title="Источники анализа&#10;Что откуда берётся: снимки, рельеф, почвы, погода, дороги, адреса и кадастр — сервисы и разрешение данных."><i class="fas fa-database"></i><span>Источники анализа</span></button>
@@ -294,17 +294,15 @@
                     </div>
                 </div>
                 <div class="sp-group" data-group="analysis">
-                    <div class="sp-group-title" style="margin-top:4px">Анализ</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="analysis" style="--c:#10b981" title="Анализ участка&#10;Загрузите контур участка (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его на карте и запустите анализ. В этом разделе — список объектов участка и запуск расчёта."><i class="fas fa-magnifying-glass-chart"></i><span>Анализ участка</span></button>
                         <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
                         <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
                         <button type="button" class="sp-tile" data-bp="chem" style="--c:#a855f7" title="Почвенный анализ&#10;Почвенные показатели (pH, углерод, азот, глина, песок и др.) по нарисованной фигуре: статистика и зоны на карте. Данные SoilGrids 250 м."><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
-                        <button type="button" class="sp-tile" data-bp="shape" style="--c:#6366f1" title="Границы, форма и кадастр&#10;Площадь, периметр, габариты и компактность контура, координаты вершин и адрес участка — тот же анализ, что в блоке «Общая информация» паспорта, плюс пересечения с кадастровыми участками (НСПД) с выгрузкой в Excel, KML, GeoJSON, SHP и DXF."><i class="fas fa-draw-polygon"></i><span>Границы, форма и кадастр</span></button>
+                        <button type="button" class="sp-tile" data-bp="shape" style="--c:#6366f1" title="Границы, форма и кадастр&#10;Площадь, периметр, габариты и компактность контура, координаты вершин и адрес участка — тот же анализ, что в блоке «Общая информация» паспорта, плюс пересечения с кадастровыми участками и ООПТ (НСПД) с выгрузкой в Excel, KML, GeoJSON, SHP и DXF."><i class="fas fa-draw-polygon"></i><span>Границы, форма и кадастр</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="images">
-                    <div class="sp-group-title" style="margin-top:4px">Снимки</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="dates" style="--c:#ec4899" title="Снимки&#10;Снимки Sentinel-2 (10 м) по датам: естественные и ложные цвета (CIR), календарь, превью с облачностью, рисование области и скачивание цветного GeoTIFF в максимальном разрешении."><i class="fas fa-calendar-days"></i><span>Снимки</span></button>
                         <button type="button" class="sp-tile" data-bp="ndvi" style="--c:#22c55e" title="NDVI — вегетационный индекс&#10;Показывает густоту и состояние растительности: низкие значения — вода, голая почва и застройка, высокие — густые посевы и лес. Есть «Контрастный NDVI» с настраиваемой шкалой и калькулятор статистики по полигону. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-leaf"></i><span>NDVI</span></button>
@@ -314,7 +312,6 @@
                     </div>
                 </div>
                 <div class="sp-group" data-group="tools">
-                    <div class="sp-group-title" style="margin-top:4px">Инструменты</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="draw" style="--c:#3b82f6" title="Рисование&#10;Фигуры, линии, значки и текст прямо на карте: выберите инструмент — появятся его параметры (цвет, толщина, заливка, размер). Объекты можно выбирать, двигать, править вершины, копировать, отменять действия и сохранять в GeoJSON."><i class="fas fa-pen-ruler"></i><span>Рисование</span></button>
                         <button type="button" class="sp-tile" data-bp="export" style="--c:#8b5cf6" title="Экспорт карты&#10;Сохранение текущего вида карты: PDF (GeoPDF), PNG, JPEG, WebP и GeoTIFF с пространственной привязкой. Настройте лист, ориентацию, разрешение, поля, заголовок, легенду, масштабную линейку, стрелку севера и сетку координат."><i class="fas fa-file-export"></i><span>Экспорт</span></button>
@@ -324,7 +321,6 @@
                     </div>
                 </div>
                 <div class="sp-group" data-group="layers">
-                    <div class="sp-group-title" style="margin-top:4px">Слои</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="soil" style="--c:#84cc16" title="Почвы&#10;Векторная почвенная карта 1:2,5 млн: контуры почв и коды, клик по контуру — сведения."><i class="fas fa-seedling"></i><span>Почвы</span></button>
                         <button type="button" class="sp-tile" data-bp="objects" style="--c:#ef4444" title="Объекты на карте&#10;Всё, что вы нарисовали или загрузили в этом сеансе: участки, линии, значки, текст — с площадью и длиной, показом на карте и удалением."><i class="fas fa-shapes"></i><span>Объекты на карте</span></button>
@@ -334,7 +330,6 @@
                     </div>
                 </div>
                 <div class="sp-group" data-group="catalog">
-                    <div class="sp-group-title" style="margin-top:4px">Каталог данных</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile sp-stub" style="--c:#d97706" title="Данные OSM&#10;Раздел в разработке."><i class="fas fa-vector-square"></i><span>Данные OSM</span></button>
                         <button type="button" class="sp-tile sp-stub" style="--c:#ec4899" title="Снимки&#10;Раздел в разработке."><i class="fas fa-satellite"></i><span>Снимки</span></button>
@@ -344,7 +339,6 @@
                     </div>
                 </div>
                 <div class="sp-group" data-group="weather">
-                    <div class="sp-group-title" style="margin-top:4px">Погода</div>
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-bp="weather" style="--c:#0ea5e9" title="Прогноз погоды&#10;Текущая погода и прогноз на 7 дней по нарисованному участку (Open-Meteo): температура, осадки, влажность, ветер."><i class="fas fa-cloud-sun-rain"></i><span>Прогноз</span></button>
                         <button type="button" class="sp-tile" data-bp="climate" style="--c:#6366f1" title="Климат участка&#10;Климатограмма за 10 лет (ERA5): температура и осадки по месяцам, ГТК Селянинова."><i class="fas fa-chart-line"></i><span>Климат</span></button>
@@ -361,21 +355,6 @@
 
         <!-- ВКЛАДКА 2 «АНАЛИЗ УЧАСТКА» -->
         <div class="tab-pane" data-pane="analysis" role="tabpanel">
-            <div class="section an-howto">
-                <div class="section-title"><i class="fas fa-list-check"></i> Как запустить анализ</div>
-                <ol><li>Найдите место через поиск в левом верхнем углу карты.</li><li>Загрузите контур файлом или нарисуйте участок.</li><li>Проверьте площадь и свойства объекта.</li><li>Выберите дату снимка Sentinel-2 в календаре.</li><li>Нажмите «Запустить анализ участка».</li></ol>
-            </div>
-<!-- ЗАГРУЗКА ДАННЫХ -->
-        <div class="section">
-            <div class="section-title"><i class="fas fa-file-import"></i> Загрузка данных</div>
-            <div class="file-area" onclick="document.getElementById('vectorFileInput').click()">
-                <i class="fas fa-upload"></i>
-                <p>Загрузить векторный файл</p>
-                <div class="file-name" id="vectorFileName">KML, GeoJSON, Excel, XML Росреестра</div>
-            </div>
-            <input type="file" id="vectorFileInput" accept=".kml,.geojson,.json,.xlsx,.xls,.xml" />
-        </div>
-
                 <!-- ИНСТРУМЕНТЫ РИСОВАНИЯ УЧАСТКА (перенесены с карты) -->
         <div class="section">
             <div class="section-title"><i class="fas fa-pen-ruler"></i> Нарисовать участок</div>
@@ -398,9 +377,11 @@
                         <button class="map-btn" id="clearMapBtn" title="Очистить всё">
                             <i class="fas fa-eraser"></i>
                         </button>
+                        <button class="map-btn" id="anImportBtn" type="button" title="Загрузить контур из файла (KML, GeoJSON, Excel, XML Росреестра)" onclick="document.getElementById('vectorFileInput').click()"><i class="fas fa-file-import"></i></button>
                         <button class="map-btn" data-gc-io="export" data-gc-for="an" title="Экспорт контуров (KML, GeoJSON)"><i class="fas fa-file-export"></i></button>
+                        <input type="file" id="vectorFileInput" accept=".kml,.geojson,.json,.xlsx,.xls,.xml" hidden /><span id="vectorFileName" hidden></span>
             </div>
-            <div class="an-hint">Выберите фигуру и кликните по карте. Полигон — клики по вершинам, двойной клик завершает. <i class="fas fa-edit"></i> правка, <i class="fas fa-trash"></i> удаление выбранного, <i class="fas fa-eraser"></i> очистка всего.</div>
+            <div class="an-hint">Выберите фигуру и кликните по карте. Полигон — клики по вершинам, двойной клик завершает. <i class="fas fa-edit"></i> правка, <i class="fas fa-trash"></i> удаление выбранного, <i class="fas fa-eraser"></i> очистка всего, <i class="fas fa-file-import"></i> загрузка контура из файла.</div>
         </div>
 
 <!-- ИНФОРМАЦИЯ ОБ ОБЪЕКТЕ -->
@@ -449,7 +430,7 @@
             <div class="an-hint">Сначала выберите дату снимка Sentinel-2. Анализ выполняется в фоне, результат появится на вкладке «Отчёты».</div>
         </div>
             <div class="tab-art" data-art="analysis">
-                <div class="tab-art-txt"><b>Анализ участка</b><p>Оценка земельного участка по спутниковым снимкам и открытым данным.</p><ul><li>Загрузка данных — контур из файла (KML, GeoJSON, Excel, XML Росреестра)</li><li>Нарисовать участок — контур прямо на карте</li><li>Свойства объекта — площадь, периметр, координаты</li><li>Дата снимка Sentinel-2 — основа для запуска анализа</li></ul></div>
+                <div class="tab-art-txt"><b>Анализ участка</b><p>Оценка земельного участка по спутниковым снимкам и открытым данным.</p><ul><li>Значок загрузки — контур из файла (KML, GeoJSON, Excel, XML Росреестра)</li><li>Нарисовать участок — контур прямо на карте</li><li>Свойства объекта — площадь, периметр, координаты</li><li>Дата снимка Sentinel-2 — основа для запуска анализа</li></ul></div>
             </div>
         </div><!-- /tab-pane analysis -->
 
@@ -1582,7 +1563,6 @@
     </div>
 </div>
 
-  <div class="s-mapbar"><a href="#top"><i class="fas fa-arrow-up"></i> Главная</a><span>Колесо над картой — масштаб. К другим блокам — кнопками меню сайта</span><a href="#about">О сервисе <i class="fas fa-arrow-down"></i></a></div>
 </section>
 
 <!-- ============ БЛОК: КАТАЛОГ ДАННЫХ (после карты; стиль как у первого блока, фон — catalog.jpg рядом с index.html) ============ -->

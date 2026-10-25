@@ -77,9 +77,8 @@
     if (box && sec) {
         var bar = document.createElement('div');
         bar.className = 'ol-bar';
-        bar.innerHTML = '<select id="olSort" title="Сортировка"><option value="date">По дате создания</option><option value="area">По площади ↓</option><option value="name">По названию</option></select><label title="Группировать по типу фигуры"><input type="checkbox" id="olGroup"> По типам</label>';
+        bar.innerHTML = '<label title="Группировать по типу фигуры"><input type="checkbox" id="olGroup"> По типам</label>';
         box.parentNode.insertBefore(bar, box);
-        $('olSort').addEventListener('change', function () { S.sort = this.value; updateObjectList(); });
         $('olGroup').addEventListener('change', function () { S.group = this.checked; updateObjectList(); });
 
         window.updateObjectList = function () {
@@ -1150,7 +1149,7 @@
         o = o || {};
         return proxyP.then(function (ok) {
             if (!ok) throw new Error(NOPROXY);
-            var n = nid(byId('z')), g = gj && (gj.geometry || gj), polys = g ? (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []) : [];
+            var n = nid(byId(o.layer || 'z')), g = gj && (gj.geometry || gj), polys = g ? (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []) : [];
             if (!polys.length || typeof turf === 'undefined') return { items: [], req: 0, bad: 0, step: 0 };
             var tp = polys.map(function (p) { return turf.polygon(p); }), bb = turf.bbox({ type: 'Feature', geometry: g, properties: {} });
             var ky = 110574, kx = 111320 * Math.cos((bb[1] + bb[3]) / 2 * Math.PI / 180);
@@ -1172,7 +1171,7 @@
                 var ar = parseFloat(fld('Площадь').replace(',', '.').replace(/\s/g, '')), rights = [], seenR = {};
                 Object.keys(m).forEach(function (k) { var v = m[k]; if (/ownership|right|owner|собствен/i.test(k) && typeof v !== 'object' && v !== '' && !/^\d+$/.test(String(v))) { v = fmt('s', v); if (!seenR[v]) { seenR[v] = 1; rights.push([labelRu(k), v]); } } });
                 var cg = { type: gm.type, coordinates: cv(gm.coordinates) };
-                found.push({ f: f, num: ro.num, geometry: cg, area: isFinite(ar) ? ar : null, use: fld('Разрешённое использование'), cat: fld('Категория земель'), kind: fld('Вид объекта'), own: fld('Форма собственности'), rights: rights, list: ro.list, more: ro.more, _tp: (cg.type === 'Polygon' ? [cg.coordinates] : cg.coordinates).map(function (p) { return turf.polygon(p); }) });
+                found.push({ f: f, num: ro.num, geometry: cg, area: isFinite(ar) ? ar : null, use: fld('Разрешённое использование'), cat: fld('Категория земель'), kind: fld('Вид объекта'), name: fld('Наименование'), zone: fld('Вид зоны'), stat: fld('Статус'), own: fld('Форма собственности'), rights: rights, list: ro.list, more: ro.more, _tp: (cg.type === 'Polygon' ? [cg.coordinates] : cg.coordinates).map(function (p) { return turf.polygon(p); }) });
             };
             var one = function (p) {
                 var m = L.CRS.EPSG3857.project(L.latLng(p[1], p[0])), cx = (Math.floor(m.x / res) + 0.5) * res, cy = (Math.floor(m.y / res) + 0.5) * res, r = res * 50.5, bx = [cx - r, cy - r, cx + r, cy + r].map(r3).join(',');
@@ -1196,7 +1195,7 @@
     };
 
     // выгрузка найденных участков целиком (контуры и атрибуты) в тех же форматах, что и из кадастрового слоя на карте: kml | geojson | shp | dxf
-    window.gcCadExport = function (fmt, items) { exportAs(fmt, (items || []).map(function (it) { return { c: byId('z'), f: it.f }; })); };
+    window.gcCadExport = function (fmt, items, layer) { exportAs(fmt, (items || []).map(function (it) { return { c: byId(layer || 'z'), f: it.f }; })); };
 
     // ---- поиск по кадастровому номеру: вызывается из основной строки поиска сайта (участок, здание, квартал); слой при этом может быть выключен ----
     var CADRE = /^\d{1,2}:\d{1,2}(:\d{1,8}){0,2}$/;

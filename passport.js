@@ -654,9 +654,14 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
 
     // ---------- пересечения с кадастровыми участками (слой «Земельные участки из ЕГРН» НСПД; опрос — window.gcCadIntersect из ux-extras.js) ----------
-    function cadCalc(gj, alive, onProgress) {
+    // полоса загрузки на время опроса НСПД: d из t точек (t = 0 — ход неизвестен, полоса бегает)
+    function cadBar(label, d, t) {
+        var k = t ? Math.min(100, Math.round(d / t * 100)) : 0;
+        return '<div class="pp-note pp-load"><div class="pp-load-t"><span><i class="fas fa-spinner fa-spin"></i> ' + label + '</span><b>' + (t ? k + ' % · ' + d + ' из ' + t : '…') + '</b></div><div class="pp-bar' + (t ? '' : ' ind') + '"><i style="width:' + (t ? k : 38) + '%"></i></div></div>';
+    }
+    function cadCalc(gj, alive, onProgress, layer) {
         if (!window.gcCadIntersect) return Promise.reject(new Error('модуль кадастра (ux-extras.js) не загружен'));
-        return window.gcCadIntersect(gj, { alive: alive, onProgress: onProgress }).then(function (r) {
+        return window.gcCadIntersect(gj, { alive: alive, onProgress: onProgress, layer: layer, max: layer ? 120 : 0 }).then(function (r) {
             if (!alive()) return null;
             var plots = polysOf(gj).map(function (p) { return turf.polygon(p); }), tot = turf.area(gj), items = [], cover = 0;
             r.items.forEach(function (it) {
@@ -671,7 +676,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         });
     }
     function cadRun(gj, tok) {
-        return cadCalc(gj, function () { return tok === seq; }, function (d, t) { var e = tok === seq && !D.cadx && document.getElementById('ppCadBody'); if (e) e.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД: ' + d + ' из ' + t + ' точек…</div>'; }).then(function (x) {
+        return cadCalc(gj, function () { return tok === seq; }, function (d, t) { var e = tok === seq && !D.cadx && document.getElementById('ppCadBody'); if (e) e.innerHTML = cadBar('Опрос слоя кадастра НСПД', d, t); }).then(function (x) {
             if (!x) return;
             D.cadx = x; cadShow();
         });
@@ -998,7 +1003,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
 
     // ---------- границы и форма участка: раздел «Анализ» (панель shape) — свои инструменты рисования, тот же расчёт, что в «Общей информации» паспорта ----------
     var dp = document.querySelector('[data-bp-pane="shape"]'), shpSeq = 0, shpTxt = '', SHP_HINT = 'Нарисуйте полигон, прямоугольник или круг (или импортируйте контур) — анализ границ, формы и пересечений с кадастром запустится сам.';
-    var shp = { shape: null, gj: null, handler: null, tool: null, editing: false }, shpGrp = dp ? L.featureGroup().addTo(map) : null, shpCadGrp = dp ? L.featureGroup().addTo(map) : null;
+    var shp = { shape: null, gj: null, handler: null, tool: null, editing: false }, shpGrp = dp ? L.featureGroup().addTo(map) : null, shpCadGrp = dp ? L.featureGroup().addTo(map) : null, shpOoptGrp = dp ? L.featureGroup().addTo(map) : null;
     var SHP_ST = { color: '#6366f1', weight: 2, fillColor: '#6366f1', fillOpacity: 0.08 };
     function shpMark() {
         if (!dp) return;
@@ -1014,6 +1019,17 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         if (shp.editing) gcSelect(shp.shape); else if (shp.shape && shp.shape === gcSel) gcDeselect();
         shpMark();
     }
+    // подпись «Запрос к слою НСПД» внутри полигона на карте, пока идёт опрос кадастра и ООПТ
+    var shpLoadMk = null;
+    function shpLoadOff() { if (shpLoadMk) { try { map.removeLayer(shpLoadMk); } catch (e) { /* уже снят */ } shpLoadMk = null; } }
+    function shpLoad(gj, text, k) {
+        if (!dp || !gj) return;
+        var ic = L.divIcon({ className: 'shp-ld', html: '<span><i class="fas fa-spinner fa-spin"></i> ' + text + (k != null ? ' · ' + k + ' %' : '') + '</span>', iconSize: [0, 0] });
+        if (!shpLoadMk) {
+            var c; try { c = turf.pointOnFeature(gj).geometry.coordinates; } catch (e) { c = turf.centroid(gj).geometry.coordinates; }
+            shpLoadMk = L.marker([c[1], c[0]], { icon: ic, interactive: false, keyboard: false, zIndexOffset: 900 }).addTo(map);
+        } else shpLoadMk.setIcon(ic);
+    }
     function shpInfo() {
         var el = dp && dp.querySelector('[data-shp-info]'); if (!el) return;
         var a = shp.gj ? turf.area(shp.gj) : 0;
@@ -1025,7 +1041,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         shp.gj = toGJ(layer); shpRun();
     }
     function shpDel() {
-        shpCancel(); shpEdit(false); shpGrp.clearLayers(); shpCadGrp.clearLayers(); shp.cadx = null; shp.shape = null; shp.gj = null; shpSeq++; shpTxt = '';
+        shpLoadOff(); shpCancel(); shpEdit(false); shpGrp.clearLayers(); shpCadGrp.clearLayers(); shpOoptGrp.clearLayers(); shp.cadx = null; shp.oopt = null; shp.shape = null; shp.gj = null; shpSeq++; shpTxt = '';
         var out = document.getElementById('ppShpOut'); if (out) { out.className = 'pp-note'; out.innerHTML = SHP_HINT; }
         shpInfo();
     }
@@ -1079,7 +1095,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     function shpRun() {
         var out = document.getElementById('ppShpOut'); if (!out) return;
-        var gj = shp.gj, tok = ++shpSeq; shpInfo(); shp.cadx = null; if (shpCadGrp) shpCadGrp.clearLayers();
+        var gj = shp.gj, tok = ++shpSeq; shpLoadOff(); shpInfo(); shp.cadx = null; shp.oopt = null; if (shpCadGrp) shpCadGrp.clearLayers(); if (shpOoptGrp) shpOoptGrp.clearLayers();
         if (!gj) { out.className = 'pp-note'; out.innerHTML = SHP_HINT; return; }
         var a = turf.area(gj), per = 0, nv = 0, c = turf.centroid(gj).geometry.coordinates, bb = turf.bbox(gj), cp = shp.shape && shp.shape.feature && shp.shape.feature.properties, cad = cp && cp.cad_number, cr = cadRows(cp, a);
         var polys = polysOf(gj), np = polys.length, rows = [], txt = ['№\tШирота\tДолгота'];
@@ -1091,7 +1107,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var K = compactionK(a, per);
         out.className = '';
         out.innerHTML = sizeTiles(a, per, nv, c, bb, K).replace(/<\/div>$/, '<div id="ppShpCadT" style="display:contents"></div></div>') + compactChart(K, ' K = 4π·S / P²: 1 — круг, ≈0,78 — квадрат, меньше 0,3 — сильно вытянутый.') + centerKv(c, cad, a, 'ppShpAddr') + cadChart(cp, cr) +
-            '<div id="ppShpCad"><div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД…</div></div>' +
+            '<div id="ppShpCad">' + cadBar('Опрос слоя кадастра НСПД', 0, 0) + '</div><div id="ppShpOopt"><div class="pp-note"><i class="fas fa-hourglass-half"></i> Пересечения с ООПТ: ожидание окончания опроса кадастра…</div></div>' +
             '<div class="pp-ch pp-vtw"><h5>Координаты вершин полигона <button type="button" class="pp-btn pp-vcopy" data-shp-copy title="Скопировать таблицу (столбцы через табуляцию — вставляется в Excel)"><i class="fas fa-copy"></i> Копировать</button></h5><div class="pp-vt"><table><thead><tr><th>№</th><th>Широта</th><th>Долгота</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div><div class="pp-cap">WGS-84, градусы; внешний контур' + (np > 1 ? ' каждой части участка' : '') + '.</div></div>';
         shpCadRun(gj, tok);
         reverseGeocode(c).then(function (j) {
@@ -1148,14 +1164,66 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         });
         Array.prototype.forEach.call(el.querySelectorAll('tr[data-ci]'), function (tr) { tr.onclick = function () { shpCadSel(+tr.getAttribute('data-ci')); }; });
     }
+    // ---- пересечения с ООПТ (слой «ООПТ» НСПД): тот же опрос, что для кадастра, но по слою особо охраняемых природных территорий ----
+    var OOPT_ST = { n: [{ color: '#16a34a', weight: 1.8, fillColor: '#16a34a', fillOpacity: 0.1 }, { color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.45 }] };
+    function shpOoptSel(i) {
+        var d = shp.oopt, el = document.getElementById('ppShpOopt'); if (!d) return;
+        d.sel = d.sel === i ? -1 : i;
+        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-oi],tr[data-od]'), function (tr) { var dc = tr.hasAttribute('data-od'), on = +tr.getAttribute(dc ? 'data-od' : 'data-oi') === d.sel; tr.classList.toggle('pp-cadsel', on); if (dc) tr.hidden = !on; });
+        (d.lay || []).forEach(function (l, k) {
+            var on = k === d.sel, c = on ? CAD_ST.s : OOPT_ST.n;
+            l.base.setStyle(c[0]); l.parts.forEach(function (x) { x.setStyle(c[1]); });
+            if (on) { l.base.bringToFront(); l.parts.forEach(function (x) { x.bringToFront(); }); }
+        });
+        if (d.sel >= 0) { try { map.fitBounds(d.lay[d.sel].base.getBounds().pad(0.3)); } catch (e) { /* без перехода */ } }
+    }
+    function shpOoptShow() {
+        var d = shp.oopt, el = document.getElementById('ppShpOopt'); if (!el || !d) return;
+        var its = d.items, pc = Math.min(100, d.cover / d.tot * 100); d.sel = -1; d.lay = [];
+        shpOoptGrp.clearLayers();
+        its.forEach(function (it) {
+            d.lay.push({ base: L.geoJSON({ type: 'Feature', geometry: it.geometry, properties: {} }, { style: OOPT_ST.n[0], interactive: false }).addTo(shpOoptGrp), parts: it.parts.map(function (x) { return L.geoJSON(x, { style: OOPT_ST.n[1], interactive: false }).addTo(shpOoptGrp); }) });
+        });
+        var g = function (k, v) { return '<span>' + k + '</span><b>' + v + '</b>'; };
+        var rows = its.map(function (it, i) {
+            var nm = it.name || it.num || 'ООПТ без названия';
+            return '<tr class="pp-cadr" data-oi="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(nm) + '</b></td><td class="pp-cadchev"><i class="fas fa-chevron-down"></i></td></tr>' +
+                '<tr class="pp-cadd" data-od="' + i + '" hidden><td colspan="3"><div class="pp-cadg">' + g('Пересечение', nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га) · ' + nf(it.ia / d.tot * 100, 1) + ' % контура') +
+                g('Вид территории', esc(it.zone || it.kind || '—')) + g('Статус', esc(it.stat || '—')) + (it.num ? g('Номер', esc(it.num)) : '') + '</div></td></tr>';
+        }).join('');
+        var cap = 'Источник — слой «ООПТ» НСПД (Росреестр). Показаны особо охраняемые природные территории, границы которых пересекают контур; охранные зоны и неучтённые в публичной карте региональные и местные ООПТ могут отсутствовать, поэтому для юридически значимых выводов запрашивайте сведения у уполномоченных органов. Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + (d.bad ? ', без ответа — ' + d.bad : '') + '. На карте ООПТ показаны зелёным, пересечения с контуром — красным; нажмите на название, чтобы выделить территорию и раскрыть сведения о ней.';
+        var bt = '<details class="pp-cadmenu"><summary class="pp-btn pp-vcopy" title="Экспорт ООПТ"><i class="fas fa-download"></i> Экспорт <i class="fas fa-chevron-down"></i></summary><div class="pp-cadmenu-l">' + [['kml', 'KML'], ['geojson', 'GeoJSON'], ['shp', 'SHP'], ['dxf', 'DXF']].map(function (x) { return '<button type="button" class="pp-btn" data-ooptx="' + x[0] + '" title="Границы ООПТ целиком — ' + x[1] + '"><i class="fas fa-file-export"></i> ' + x[1] + '</button>'; }).join('') + '</div></details>';
+        el.innerHTML = '<div class="pp-ch"><h5>Пересечения с ООПТ</h5>' +
+            (its.length ? tiles([['ООПТ пересекает контур', nf(its.length, 0), '', '#16a34a'], ['Покрыто ООПТ', nf(pc, 1) + ' %', nf(d.cover / 1e4, 2) + ' га', '#dc2626']]) + '<div class="pp-cadtbl">' + chart('Список ООПТ ' + bt, '<div class="pp-vt"><table><thead><tr><th>№</th><th>Название</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' : '<div class="pp-note"><i class="fas fa-circle-check"></i> Пересечений с ООПТ не найдено (опрошено ' + d.req + ' точек). ' + esc(cap) + '</div>') + '</div>';
+        Array.prototype.forEach.call(el.querySelectorAll('[data-ooptx]'), function (b) {
+            b.onclick = function (ev) {
+                ev.stopPropagation();
+                var mn = b.closest('details'); if (mn) mn.removeAttribute('open');
+                if (window.gcCadExport) window.gcCadExport(b.getAttribute('data-ooptx'), d.items, 'p');
+                else updateStatus('⚠️ Экспорт недоступен: не загружен модуль кадастра (ux-extras.js)', true);
+            };
+        });
+        Array.prototype.forEach.call(el.querySelectorAll('tr[data-oi]'), function (tr) { tr.onclick = function () { shpOoptSel(+tr.getAttribute('data-oi')); }; });
+    }
+    function shpOoptRun(gj, tok) {
+        var alive = function () { return tok === shpSeq; }, box = function () { return alive() && document.getElementById('ppShpOopt'); };
+        if (!alive()) return;
+        var e0 = box(); if (e0) e0.innerHTML = cadBar('Опрос слоя ООПТ НСПД', 0, 0);
+        cadCalc(gj, alive, function (n, t) { var e = box(); if (e) e.innerHTML = cadBar('Опрос слоя ООПТ НСПД', n, t); if (alive()) shpLoad(gj, 'Запрос к слою ООПТ НСПД…', t ? Math.min(100, Math.round(n / t * 100)) : null); }, 'p').then(function (x) {
+            if (alive()) shpLoadOff();
+            if (!x || !alive()) return;
+            shp.oopt = x; shpOoptShow();
+        }).catch(function (e) { if (alive()) shpLoadOff(); var el = box(); if (el) el.innerHTML = '<div class="pp-note">Не удалось получить данные об ООПТ: ' + esc(e && e.message || e) + '</div>'; });
+    }
     function shpCadRun(gj, tok) {
         var alive = function () { return tok === shpSeq; }, box = function () { return alive() && document.getElementById('ppShpCad'); };
+        shpLoad(gj, 'Запрос к слою НСПД…');
         setTimeout(function () {   // небольшая пауза: при перетаскивании вершин не опрашиваем НСПД на каждом шаге
             if (!alive()) return;
-            cadCalc(gj, alive, function (n, t) { var e = box(); if (e) e.innerHTML = '<div class="pp-note"><i class="fas fa-spinner fa-spin"></i> Опрос слоя кадастра НСПД: ' + n + ' из ' + t + ' точек…</div>'; }).then(function (x) {
+            cadCalc(gj, alive, function (n, t) { var e = box(); if (e) e.innerHTML = cadBar('Опрос слоя кадастра НСПД', n, t); if (alive()) shpLoad(gj, 'Запрос к слою НСПД…', t ? Math.min(100, Math.round(n / t * 100)) : null); }).then(function (x) {
                 if (!x || !alive()) return;
-                shp.cadx = x; shpCadShow();
-            }).catch(function (e) { var el = box(); if (el) el.innerHTML = '<div class="pp-note">Не удалось получить кадастровые участки: ' + esc(e && e.message || e) + '</div>'; });
+                shp.cadx = x; shpCadShow(); shpOoptRun(gj, tok);
+            }).catch(function (e) { var el = box(); if (el) el.innerHTML = '<div class="pp-note">Не удалось получить кадастровые участки: ' + esc(e && e.message || e) + '</div>'; shpOoptRun(gj, tok); });
         }, 700);
     }
     if (dp) {

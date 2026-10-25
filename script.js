@@ -13755,7 +13755,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     async function run(k, force) {
         if (st.busy) return;
         const need = SECS[k][1], out = panes[k].querySelector('[data-wx2="out"]');
-        if (!st.gj) { out.innerHTML = ''; setStat('Сначала нарисуйте участок или загрузите его из файла — по экстенту карты погода не считается.', true); return; }
+        if (!st.gj) { out.innerHTML = ''; return; }
         const rg = region();
         if (force) st.cache = {};
         st.busy = true; st.again = false; st.ctl = new AbortController();

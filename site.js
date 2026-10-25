@@ -1758,3 +1758,19 @@
         }, 700);
     });
 })();
+
+/* Кнопка входа / регистрации в шапке: пока заглушка — открывает окно «скоро» */
+(function () {
+    var btn = document.getElementById('siteUser'); if (!btn) return;
+    var box = document.createElement('div'); box.className = 's-auth'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Вход и регистрация');
+    box.innerHTML = '<div class="s-auth-box"><button type="button" class="s-auth-x" aria-label="Закрыть"><i class="fas fa-xmark"></i></button>' +
+        '<div class="s-auth-ic"><i class="far fa-user"></i></div><h3>Вход и регистрация</h3>' +
+        '<p>Личный кабинет находится в разработке. Скоро здесь можно будет войти или создать аккаунт, чтобы хранить отчёты и закладки на любом устройстве.</p>' +
+        '<div class="s-auth-btns"><button type="button" disabled>Войти</button><button type="button" disabled>Регистрация</button></div></div>';
+    document.body.appendChild(box);
+    function open() { box.classList.add('open'); }
+    function close() { box.classList.remove('open'); btn.focus(); }
+    btn.addEventListener('click', open);
+    box.addEventListener('click', function (e) { if (e.target === box || e.target.closest('.s-auth-x')) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) { e.stopPropagation(); close(); } }, true);
+})();
