@@ -304,6 +304,7 @@
     #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-dcol > .pp-tiles { grid-column: 2; grid-row: 1; align-self: start; }
     /* на картах паспорта — без кнопок масштаба и стрелки севера */
     #passportPane #ppBody .leaflet-control-zoom, #passportPane #ppBody .leaflet-control:not(.leaflet-control-attribution), #passportPane #ppBody [class*="north"] { display: none !important; }
+    #passportPane #ppBody .pp-mcol.pp-zup { position: relative !important; }   /* открытое меню «Экспорт» — выше соседних блоков */
     #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: flex !important; flex-direction: column; gap: 8px; }
     #passportPane #ppBody .mb-slide .pp-dcol { width: 100% !important; min-width: 0; }
     #passportPane #ppBody .mb-slide .pp-sub-h { flex-wrap: wrap; gap: 6px; }
