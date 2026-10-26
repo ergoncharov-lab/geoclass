@@ -112,9 +112,14 @@
             var r = document.getElementById('routeBtn'); if (r) r.click();
             setTimeout(function () { if (window.gcSheet) window.gcSheet('half'); }, 0);
         });
+        // пока открыт поиск, страница стоит на блоке карты (клавиатура и фокус её не сдвигают), а шторка не раскрывается на весь экран
+        var keepMap = function () { var y = pos('map-section'); if (Math.abs(window.scrollY - y) > 2) window.scrollTo({ top: y, behavior: 'instant' }); };
+        window.addEventListener('scroll', function () { if (root.classList.contains('mb-search-open')) keepMap(); }, { passive: true });
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { if (root.classList.contains('mb-search-open')) keepMap(); });
+        window.addEventListener('focusin', function (e) { if (mob() && sbox.classList.contains('mb-pop') && e.target === sinp) e.stopPropagation(); }, true);
         var openS = function (on) {
             sbox.classList.toggle('mb-pop', on); root.classList.toggle('mb-search-open', on); sbtn.classList.toggle('on', on);
-            if (on && sinp) setTimeout(function () { sinp.focus(); }, 60);
+            if (on && sinp) setTimeout(function () { try { sinp.focus({ preventScroll: true }); } catch (x) { sinp.focus(); } keepMap(); }, 60);
         };
         sbtn.addEventListener('click', function () { openS(!sbox.classList.contains('mb-pop')); });
         document.addEventListener('click', function (e) {
@@ -189,7 +194,11 @@
     var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), tkey = null, lastKey = 'main', inRail = false;
     if (app && rail) {
         var tilesOff = function () { app.classList.remove('mb-tiles'); tkey = null; };
-        rail.addEventListener('click', function () { inRail = true; setTimeout(function () { inRail = false; }, 80); }, true);
+        rail.addEventListener('click', function (e) {
+            inRail = true; setTimeout(function () { inRail = false; }, 80);
+            var hb = mob() && e.target.closest && e.target.closest('.gc-rail-btn'), hk = hb && hb.getAttribute('data-rail');
+            if (hb && hk !== 'help' && hk !== 'bookmarks') { app.classList.add('mb-hold'); setTimeout(function () { app.classList.remove('mb-hold'); }, 160); }   // пока site.js на мгновение раскрывает шторку — её не видно
+        }, true);
         document.addEventListener('click', function (e) {
             if (!mob() || !e.target.closest) return;
             var rb = e.target.closest('#gcRail .gc-rail-btn');

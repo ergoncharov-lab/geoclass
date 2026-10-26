@@ -159,14 +159,15 @@
     .mb-mc-row .mc-row > .map-btn { border-radius: 0; }
     .mb-mc-row .mc-row > .map-btn:first-child { border-radius: 11px 0 0 11px; }
     .mb-mc-row .mc-row > .map-btn:last-child { border-radius: 0 11px 11px 0; }
-    #map-section .map-controls-right:not(.mb-mc-off) .mb-mc-row > .mb-g { animation: mbSlideL .26s cubic-bezier(.2,.8,.2,1); }
-    #map-section .map-controls-right:not(.mb-mc-off) > :not(.mb-mc-row) { animation: mbSlideD .26s cubic-bezier(.2,.8,.2,1); }
-    @keyframes mbSlideL { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-    @keyframes mbSlideD { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+    #map-section .map-controls-right:not(.mb-mc-off) .mb-mc-row > .mb-g { animation: mbSlideL .16s ease-out; }
+    #map-section .map-controls-right:not(.mb-mc-off) > :not(.mb-mc-row) { animation: mbSlideD .16s ease-out; }
+    @keyframes mbSlideL { from { transform: translateX(28px); } to { transform: none; } }
+    @keyframes mbSlideD { from { transform: translateY(-10px); } to { transform: none; } }
+    .mb-mc-toggle, .mc-group button, .gc-rail-btn, .sp-tile { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
     /* кнопки рисования и измерений перенесены в виджет — пустая полоса вверху слева остаётся лишь как точка отсчёта для подписей на карте */
     .map-tl-tools.mb-tl-empty .mc-group { width: 1px; height: 1px; min-width: 0; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: hidden; }
     /* поиск убран из шторки: открывается по кнопке-лупе на карте */
-    .sp-search { display: block; height: 0; margin: 0; padding: 0; overflow: visible; }
+    .sp-search, .sp-search:focus-within { display: block; height: 0; min-height: 0; margin: 0; padding: 0; overflow: visible; background: transparent; border: 0; box-shadow: none; }
     .sp-route { display: none !important; }
     .sp-search .map-search { display: none; }
     .sp-search .map-search.mb-pop { display: block; position: fixed; left: auto; right: 54px; top: calc(var(--hdr) + 10px); width: min(250px, calc(100vw - 70px)); max-width: none; z-index: 2450; }
@@ -181,9 +182,9 @@
     .app-container[data-sheet="full"] #spLoc.mb-loc { opacity: 0; pointer-events: none; }
     html.mb-search-open #mainPanel { z-index: 2400 !important; }
     /* шторка в свёрнутом виде (и пока открыта колонка кнопок) — без «плашки» над нижним меню: невидима, высота 0 */
-    #map-section .app-container:is([data-sheet="peek"], .mb-tiles):not(.passport-open) #mainPanel[data-view="home"] { height: 0 !important; overflow: visible !important; visibility: hidden; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
-    #map-section .app-container:is([data-sheet="peek"], .mb-tiles):not(.passport-open) #mainPanel[data-view="home"] .sp-head { height: 0; min-height: 0; padding: 0; overflow: visible; }
-    #map-section .app-container.mb-tiles:not(.passport-open):has(#mainPanel[data-view="home"]) { --sh: 2px !important; }
+    #map-section .app-container:is([data-sheet="peek"], .mb-tiles, .mb-hold):not(.passport-open) #mainPanel[data-view="home"] { height: 0 !important; overflow: visible !important; visibility: hidden; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
+    #map-section .app-container:is([data-sheet="peek"], .mb-tiles, .mb-hold):not(.passport-open) #mainPanel[data-view="home"] .sp-head { height: 0; min-height: 0; padding: 0; overflow: visible; }
+    #map-section .app-container:is(.mb-tiles, .mb-hold):not(.passport-open):has(#mainPanel[data-view="home"]) { --sh: 2px !important; }
     #map-section .sp-search .map-search.mb-pop { visibility: visible; }
     /* нажатие на закладку: цветные кнопки раздела выезжают вертикальной колонкой слева; нажатие на кнопку — содержимое раздела открывается в шторке, как «Анализ участка» */
     .app-container.mb-tiles #mainPanel[data-view="home"] .sp-group.on { display: contents; }
