@@ -716,7 +716,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 /* ===== ЗАСТАВКА АНАЛИЗА: крупная анимация поверх инструментов боковой панели, пока идёт расчёт ===== */
 .an-loader { position: sticky; top: 0; height: 0; flex: none; z-index: 60; overflow: visible; }
 .an-loader[hidden] { display: none; }
-.an-loader-box { position: absolute; left: 0; top: 0; width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; padding: 14px; box-sizing: border-box; background: radial-gradient(circle at 50% 38%, rgba(6,78,59,.62), rgba(12,17,16,.9)); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); opacity: 0; transition: opacity .22s ease; }
+.an-loader-box { position: absolute; left: 0; top: 0; width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; padding: 14px 14px 20vh; box-sizing: border-box; background: radial-gradient(circle at 50% 38%, rgba(6,78,59,.62), rgba(12,17,16,.9)); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); opacity: 0; transition: opacity .22s ease; }
 .an-loader.on .an-loader-box { opacity: 1; }
 .an-card { width: min(100%, 340px); box-sizing: border-box; padding: 18px 20px 16px; border-radius: 22px; text-align: center; color: var(--sc-white); background: linear-gradient(160deg, rgba(12,17,16,.94), rgba(4,47,36,.9)); border: 1px solid rgba(52,211,153,.38); box-shadow: 0 22px 60px rgba(0,0,0,.5), 0 0 40px rgba(52,211,153,.14), inset 0 0 0 1px rgba(255,255,255,.04); transform: translateY(8px) scale(.97); transition: transform .3s ease; }
 .an-loader.on .an-card { transform: none; }
@@ -1479,7 +1479,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 @keyframes gtShine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
 /* 3D-фигура разделов вместо слайдов подсказок на главной панели */
 .tab-art.gc-tips:has(.gt3) { background: transparent; }
-.gt3 { min-height: 430px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; touch-action: pan-y; cursor: grab; }
+.gt3 { min-height: 390px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; touch-action: pan-y; cursor: grab; }
 .gt3 .gt-blob { display: none; }
 .gt3.gt3-grab, .gt3.gt3-grab * { cursor: grabbing !important; }
 .gt3-st { position: absolute; inset: 0; }
@@ -2083,7 +2083,6 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 /* «Анализ участка» на вкладке «Главное» — крупная акцентная плитка */
 .sp-grid .sp-tile.sp-hero { position: relative; }
 .sp-grid .sp-tile.sp-hero i { width: 58px; height: 58px; font-size: 24px; margin: -4px 0 -1px; box-shadow: 0 0 0 3px rgba(5,150,105,.18), 0 6px 14px rgba(5,150,105,.35); }
-.sp-grid .sp-tile.sp-hero span { font-size: 12px; font-weight: 800; color: var(--green-d, #047857); }
 .sp-grid .sp-tile.sp-hero:hover i { transform: scale(1.06); }
 
 /* ===== «Каталог данных»: без фоновой картинки, стиль как у «Как это работает» (страницы чередуются: с картинкой / без) ===== */

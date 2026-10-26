@@ -1125,7 +1125,7 @@
             spd += (((RM || hov || drag) ? 0 : 1) - spd) * 0.06;
             if (!drag) { yaw += 0.004 * spd + vy; vy *= 0.95; }
             var ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pitch), sb = Math.sin(pitch);
-            var avail = Math.max(120, h - pnH - 14), cx = w / 2, cy = avail / 2 + 22, R = Math.min(w, avail) * 0.31;
+            var avail = Math.max(120, h - pnH - 14), cx = w / 2, cy = avail / 2 - 20, R = Math.min(w, avail) * 0.31;
             function pr(q) { var f = 3 / (3 - q.z); return { x: cx + q.x * R * f, y: cy + q.y * R * f, d: (q.z + 1) / 2 }; }
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h); ctx.lineCap = 'round';
             ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
