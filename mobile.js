@@ -67,7 +67,7 @@
     });
 
     /* ---------- 3. виджеты карты — один раскрывающийся виджет ----------
-       Кнопка справа вверху раскрывает колонки: [поиск, маршрут, моё местоположение, север] [рисование, длина, площадь] и прежние виджеты справа.
+       Кнопка справа вверху раскрывает: горизонтальный ряд влево [рисование, длина, площадь] [поиск, маршрут, моё местоположение, север] и прежние виджеты справа — колонкой вниз.
        Кнопки местоположения, севера, рисования и измерений — те же элементы, что и на десктопе: на телефоне они переносятся в виджет, на десктопе возвращаются на место. */
     var mcr = $('#map-section .map-controls-right'), tg = null, gNav = null, gTools = null;
     function mcOff(off) {
@@ -76,12 +76,13 @@
         tg.innerHTML = '<i class="fas fa-' + (off ? 'sliders' : 'xmark') + '"></i>';
     }
     if (mcr && !mcr.querySelector('.mb-mc-toggle')) {
+        var mrow = document.createElement('div'); mrow.className = 'mb-mc-row';   // кнопка-тоггл и две группы: раскрываются влево от кнопки
         tg = document.createElement('button'); tg.type = 'button'; tg.className = 'mb-mc-toggle'; tg.title = 'Виджеты карты';
-        mcr.insertBefore(tg, mcr.firstChild); mcOff(true);
+        mcr.insertBefore(mrow, mcr.firstChild); mrow.appendChild(tg); mcOff(true);
         tg.addEventListener('click', function () { mcOff(!mcr.classList.contains('mb-mc-off')); });
-        gNav = document.createElement('div'); gNav.className = 'mc-group mb-g mb-g-nav';
-        gTools = document.createElement('div'); gTools.className = 'mc-group mb-g mb-g-tools';
-        mcr.insertBefore(gNav, tg.nextSibling); mcr.insertBefore(gTools, gNav.nextSibling);
+        gNav = document.createElement('div'); gNav.className = 'mc-group mc-row mb-g mb-g-nav';
+        gTools = document.createElement('div'); gTools.className = 'mc-group mc-row mb-g mb-g-tools';
+        mrow.appendChild(gNav); mrow.appendChild(gTools);
     }
 
     // поиск: в шторке скрыт, открывается по кнопке-лупе в виджете
@@ -156,7 +157,7 @@
         if (was && sh && sh !== 'peek') setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 40);
     }, true);
 
-    // местоположение и погода: на карте — сверху; на десктопе блок возвращается на место в шторке
+    // местоположение и погода: на карте — внизу по центру; на десктопе блок возвращается на место в шторке
     var loc = document.getElementById('spLoc'), stage = mcr && mcr.parentNode;
     if (loc && stage) {
         var ph = document.createComment('spLoc'); loc.parentNode.insertBefore(ph, loc);
@@ -167,35 +168,41 @@
         onMq(placeLoc); placeLoc();
     }
 
-    // закладки внизу как были; нажатие на закладку — кнопки раздела выезжают колонкой слева, шторка остаётся свёрнутой
-    var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), tkey = null;
+    // закладки внизу; нажатие на закладку — кнопки раздела выезжают колонкой слева, шторка скрыта;
+    // нажатие на кнопку раздела — его содержимое открывается в шторке (как «Анализ участка»), колонка убирается; «назад» возвращает колонку
+    var app = $('#map-section .app-container');
+    var rail = document.getElementById('gcRail'), panelEl = document.getElementById('mainPanel'), tkey = null, lastKey = 'main', inRail = false;
     if (app && rail) {
         var tilesOff = function () { app.classList.remove('mb-tiles'); tkey = null; };
+        rail.addEventListener('click', function () { inRail = true; setTimeout(function () { inRail = false; }, 80); }, true);
         document.addEventListener('click', function (e) {
             if (!mob() || !e.target.closest) return;
             var rb = e.target.closest('#gcRail .gc-rail-btn');
             if (rb) {
                 var k = rb.getAttribute('data-rail');
                 if (k === 'help' || k === 'bookmarks') { tilesOff(); return; }
-                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); if (window.gcSheet) window.gcSheet('half'); return; }
+                lastKey = k;
+                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); return; }
                 app.classList.add('mb-tiles'); tkey = k;
                 setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);
                 return;
             }
             if (!app.classList.contains('mb-tiles') || e.target.closest('#mainPanel')) return;
-            if (panelEl && panelEl.getAttribute('data-view') === 'home') tilesOff();   // клик по карте убирает колонку (пока не открыт инструмент)
+            if (panelEl && panelEl.getAttribute('data-view') === 'home') tilesOff();   // клик по карте убирает колонку
         });
-        // инструмент («bp») открывается справа, колонка остаётся; другие разделы (отчёты, источники, маршрут…) — в шторке
         if (panelEl && window.MutationObserver) new MutationObserver(function () {
-            if (!mob() || !app.classList.contains('mb-tiles')) return;
+            if (!mob()) return;
             var v = panelEl.getAttribute('data-view');
-            if (v !== 'home' && v !== 'bp') { tilesOff(); if (window.gcSheet) window.gcSheet('half'); }
+            if (v !== 'home') { if (app.classList.contains('mb-tiles')) { tilesOff(); if (window.gcSheet) window.gcSheet('half'); } return; }   // раздел открыт — в шторке
+            if (inRail || app.classList.contains('mb-tiles') || app.classList.contains('passport-open')) return;
+            var sh = app.getAttribute('data-sheet');
+            if (sh && sh !== 'peek') { app.classList.add('mb-tiles'); tkey = lastKey; if (window.gcSheet) window.gcSheet('peek'); }   // «назад» из раздела — колонка кнопок снова слева
         }).observe(panelEl, { attributes: true, attributeFilter: ['data-view'] });
         onMq(function () { if (!mob()) tilesOff(); });
     }
 
     // паспорт или справка открыты — страница под ними не прокручивается
-    var app = $('#map-section .app-container'), help = document.getElementById('gcHelpWin');
+    var help = document.getElementById('gcHelpWin');
     function lockSync() { root.classList.toggle('mb-lock', mob() && !!((app && app.classList.contains('passport-open')) || (help && !help.hidden))); }
     if (window.MutationObserver) {
         var lo = new MutationObserver(lockSync);
