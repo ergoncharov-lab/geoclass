@@ -693,6 +693,41 @@
     });
     // ---- кнопка «Очистить» вверху слева на карте: убирает всё нарисованное и загруженное, замеры, маршрут, точку «Что здесь?» и результаты анализов ----
     var clearBtn = document.getElementById('mapClearBtn');
+    // ---- кнопка «Очистить кэш» рядом с «Очистить»: стирает сохранённые на компьютере кэши снимков и данных слоёв (настройки и закладки не трогает)
+    if (clearBtn && !document.getElementById('mapCacheBtn')) {
+        var cacheBtn = clearBtn.cloneNode(true);
+        cacheBtn.id = 'mapCacheBtn'; cacheBtn.title = 'Очистить кэш'; cacheBtn.setAttribute('aria-label', 'Очистить кэш');
+        var ci = cacheBtn.querySelector('i'); if (ci) ci.className = 'fas fa-database';
+        (function walk(n) { n.childNodes.forEach(function (c) { if (c.nodeType === 3) { if (/Очистить/.test(c.nodeValue)) c.nodeValue = c.nodeValue.replace('Очистить', 'Очистить кэш'); } else walk(c); }); })(cacheBtn);
+        clearBtn.parentNode.insertBefore(cacheBtn, clearBtn.nextSibling);
+        // кнопка лежит отдельно справа от «Очистить» и не занимает место в потоке — исходная кнопка остаётся на месте и видна
+        function placeCache() {
+            if (!clearBtn.offsetWidth) return;
+            cacheBtn.style.cssText = 'position:absolute;margin:0;left:' + (clearBtn.offsetLeft + clearBtn.offsetWidth + 8) + 'px;top:' + clearBtn.offsetTop + 'px;z-index:' + (getComputedStyle(clearBtn).zIndex === 'auto' ? 1 : getComputedStyle(clearBtn).zIndex);
+        }
+        placeCache(); setTimeout(placeCache, 600); window.addEventListener('resize', placeCache); window.addEventListener('load', placeCache);
+        cacheBtn.addEventListener('click', function () {
+            if (!window.confirm('Очистить кэш снимков и данных слоёв? Они будут загружены заново, страница перезагрузится.')) return;
+            var jobs = [];
+            if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return /^geoclass-/.test(k); }).map(function (k) { return caches.delete(k); })); }));
+            ['geoclass-sentinel', 'gc_ul_cache'].forEach(function (name) {
+                jobs.push(new Promise(function (res) {
+                    try {
+                        var r = indexedDB.open(name);
+                        r.onerror = function () { res(); };
+                        r.onsuccess = function () {
+                            var db = r.result, names = [].slice.call(db.objectStoreNames);
+                            if (!names.length) { db.close(); res(); return; }
+                            var tx = db.transaction(names, 'readwrite');
+                            names.forEach(function (n) { tx.objectStore(n).clear(); });
+                            tx.oncomplete = tx.onerror = tx.onabort = function () { db.close(); res(); };
+                        };
+                    } catch (err) { res(); }
+                }));
+            });
+            Promise.all(jobs).then(function () { location.reload(); }, function () { location.reload(); });
+        });
+    }
     if (clearBtn) clearBtn.addEventListener('click', function () {
         function safe(fn) { try { fn(); } catch (err) { /* один из модулей мог не загрузиться — остальное чистим дальше */ } }
         function press(id) { var b = document.getElementById(id); if (b) safe(function () { b.click(); }); }
