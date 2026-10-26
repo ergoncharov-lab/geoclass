@@ -48,6 +48,17 @@
             '<button type="button" class="pp-btn pp-pdf" data-pdf="' + key + '"><i class="fas fa-file-pdf"></i> PDF</button>' + tifs.join('') +
             '<button type="button" class="pp-btn" data-kml="' + key + '"><i class="fas fa-file-export"></i> KML</button></div></details>';
     }
+    // страховка: любая кнопка GeoTIFF (или PDF карты), оказавшаяся в .pp-dl вне меню «Экспорт», переезжает в меню
+    var expT = 0;
+    function expMerge() {
+        Array.prototype.forEach.call(body.querySelectorAll('.pp-dl'), function (dl) {
+            var menu = dl.querySelector('.pp-expm .pp-cadmenu-l'); if (!menu) return;
+            Array.prototype.forEach.call(dl.querySelectorAll('[data-tif], [data-sat-tif], [data-pdf]'), function (b) {
+                if (!menu.contains(b)) menu.insertBefore(b, menu.querySelector('[data-kml]'));
+            });
+        });
+    }
+    if (window.MutationObserver) new MutationObserver(function () { clearTimeout(expT); expT = setTimeout(expMerge, 120); }).observe(body, { childList: true, subtree: true });
     // квадратная карта + легенда + кнопки скачивания (extra — дополнительные кнопки)
     function mapBox(key, extra, title) {
         return '<div class="pp-mapw">' + (title ? '<div class="pp-mt">' + title + '</div>' : '') + '<div class="pp-map" data-map="' + key + '"></div><div class="pp-leg2" id="ppLeg_' + key + '"></div>' +
@@ -445,6 +456,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '@keyframes ppStrip{to{background-position:20px 0}}',
         '@media(max-width:900px){#ppSt .pp-stx{display:none}}',
         '#ppBody .pp-sub:not(.nomap) .pp-mcol{position:sticky;top:10px;align-self:flex-start}',
+        '#ppBody .pp-mapw:has(.pp-expm[open]),#ppBody .pp-mcol:has(.pp-expm[open]),#ppBody .pp-dcol:has(.pp-expm[open]),#ppBody .pp-mc:has(.pp-expm[open]),#ppBody .pp-sub:has(.pp-expm[open]),#ppBody .pp-colw:has(.pp-expm[open]),#ppBody .pp-sec:has(.pp-expm[open]){position:relative;z-index:80}#ppBody .pp-expm[open] .pp-cadmenu-l{z-index:90}',
         '#ppBody .pp-expm{margin-left:0}#ppBody .pp-expm .pp-cadmenu-l{white-space:nowrap}',
         '@media print{#ppBody .pp-mcol{position:static}}',
         '#ppBody .pp-cadsub > .pp-mc{align-items:stretch}#ppBody .pp-cadsub .pp-dcol{display:flex;flex-direction:column}#ppBody .pp-cadsub .pp-tiles{flex:0 0 auto}',
