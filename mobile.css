@@ -9,9 +9,15 @@
     :root { --gc-nav: 52px; }
     html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
     /* прокрутка страницы пальцем/колесом запрещена — переходы только кнопками (программная прокрутка работает) */
-    html, body { overflow: hidden; overscroll-behavior: none; }
+    body { overflow-y: hidden; }   /* overflow body (html остаётся visible) уходит на окно просмотра; если задать его на html — body станет своим контейнером и sticky-шапка пропадёт */
+    html, body { overscroll-behavior: none; }
     #top, #data-catalog, .s-after > section.site-sec { overscroll-behavior-y: contain !important; }
-    html.mb-lock, html.mb-lock body { overflow: hidden; }
+    html.mb-lock body { overflow: hidden; }
+
+    /* справка: без заголовка и кнопки «К карте» — окно занимает всё место над нижним меню закладок карты (переключение — нажатием на закладку) */
+    .gc-help-win { inset: var(--hdr) 0 var(--gc-nav) 0 !important; padding: 0 !important; }
+    .gc-help-win .pp-top { display: none !important; }
+    .gc-help-body { border-radius: 0; box-shadow: none; }
 
     /* ---------- 1. БЛОКИ: каждый — ровно на экран под шапкой, внутри при необходимости прокручивается ---------- */
     #top, #map-section, #data-catalog, .s-after > section.site-sec {
