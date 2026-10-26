@@ -296,6 +296,13 @@
     /* блок с картой: карты слева (вдвое меньше), карточки значений справа */
     #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; gap: 8px !important; align-items: start; }   /* !important — иначе перебивается правилом pp-wide из passport.js */
     #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-mcol { display: flex !important; flex-direction: column; gap: 8px; }
+    /* справа от карты — только карточки показателей, всё остальное — под картой на всю ширину */
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-dcol { display: contents !important; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-mcol { grid-column: 1; grid-row: 1; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-dcol > * { grid-column: 1 / -1; min-width: 0; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-dcol > .pp-tiles { grid-column: 2; grid-row: 1; align-self: start; }
+    /* на картах паспорта — без кнопок масштаба и стрелки севера */
+    #passportPane #ppBody .leaflet-control-zoom, #passportPane #ppBody .leaflet-control:not(.leaflet-control-attribution), #passportPane #ppBody [class*="north"] { display: none !important; }
     #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: flex !important; flex-direction: column; gap: 8px; }
     #passportPane #ppBody .mb-slide .pp-dcol { width: 100% !important; min-width: 0; }
     #passportPane #ppBody .mb-slide .pp-sub-h { flex-wrap: wrap; gap: 6px; }
