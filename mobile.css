@@ -3,7 +3,7 @@
    2) паспорт участка листается вбок: каждый раздел и каждый блок внутри — отдельная страница
    3) кнопки миниатюрные, длинные тексты свёрнуты (раскрываются по нажатию)
    Элементы, которые создаёт mobile.js, вне мобильного режима скрыты. */
-.mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, .mb-mc-row, .mb-search-btn, .mb-route-btn, .mb-g, #mbPpBar { display: none; }
+.mb-help-btn, .mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, .mb-mc-row, .mb-search-btn, .mb-route-btn, .mb-g, #mbPpBar { display: none; }
 
 @media (max-width: 960px) {
     :root { --gc-nav: 52px; }
@@ -13,6 +13,14 @@
     html, body { overscroll-behavior: none; }
     #top, #data-catalog, .s-after > section.site-sec { overscroll-behavior-y: contain !important; }
     html.mb-lock body { overflow: hidden; }
+
+    /* шапка: кнопки не сжимаются; «?» справа перед входом */
+    .s-header .s-wrap { gap: 8px; }
+    .s-brand { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+    .s-user, .s-burger, .mb-help-btn { flex: none; width: 38px; height: 38px; min-width: 38px; padding: 0; box-sizing: border-box; }
+    .mb-help-btn { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.06); color: #fff; font-size: 15px; cursor: pointer; }
+    .mb-help-btn.on, .mb-help-btn:hover { background: rgba(52,211,153,.16); border-color: var(--mint); color: var(--mint); }
+    .s-user { margin-left: 0; }
 
     /* справка: без заголовка и кнопки «К карте» — окно занимает всё место над нижним меню закладок карты (переключение — нажатием на закладку) */
     .gc-help-win { inset: var(--hdr) 0 var(--gc-nav) 0 !important; padding: 0 !important; }
@@ -185,6 +193,8 @@
     #spLoc.mb-loc b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
     #spLoc.mb-loc span { font-size: 10px; flex: none; }
     #spLoc.mb-loc[hidden] { display: none; }
+    #spLoc.mb-loc { display: none !important; }   /* местоположение и погода на карте на телефоне не показываем */
+    .gc-rail-btn[data-rail="catalog"], .gc-rail-btn[data-rail="bookmarks"], .gc-rail-btn[data-rail="help"], .gc-rail-sp { display: none !important; }   /* «Справка» — значком «?» в шапке */
     .app-container[data-sheet="full"] #spLoc.mb-loc { opacity: 0; pointer-events: none; }
     html.mb-search-open #mainPanel { z-index: 2400 !important; }
     /* шторка в свёрнутом виде (и пока открыта колонка кнопок) — без «плашки» над нижним меню: невидима, высота 0 */
@@ -281,14 +291,23 @@
     #passportPane #ppBody .pp-sub.mb-slide .pp-mc { display: flex !important; flex-direction: column; gap: 10px !important; grid-template-columns: none !important; }
     #passportPane #ppBody .pp-sub.mb-slide .pp-mcol, #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: block !important; position: static !important; width: 100% !important; max-width: none !important; margin: 0 !important; }
     #passportPane #ppBody .mb-slide .pp-mapw { max-width: none !important; width: 100%; }
-    #passportPane #ppBody .mb-slide .pp-map { width: 100%; height: auto !important; min-height: 0 !important; max-height: 58vh; aspect-ratio: 1 / 1 !important; }
+    #passportPane #ppBody .mb-slide .pp-map { width: 100%; height: auto !important; min-height: 0 !important; max-height: 30vh; aspect-ratio: 1 / 1 !important; }
+    /* блок с картой: карты слева (вдвое меньше), карточки значений справа */
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px !important; align-items: start; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-mcol { display: flex !important; flex-direction: column; gap: 8px; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: flex !important; flex-direction: column; gap: 8px; }
     #passportPane #ppBody .mb-slide .pp-dcol { width: 100% !important; min-width: 0; }
     #passportPane #ppBody .mb-slide .pp-sub-h { flex-wrap: wrap; gap: 6px; }
     #passportPane #ppBody .mb-slide .pp-sub-h h4 { font-size: 14px; }
     #passportPane #ppBody .mb-slide .pp-i-btn { padding: 3px 8px; font-size: 11px; }
     #passportPane #ppBody .mb-slide .pp-vt, #passportPane #ppBody .mb-slide .pp-ch { max-width: 100%; overflow-x: auto; }
     #passportPane #ppBody .mb-slide table { max-width: 100%; }
-    #passportPane #ppBody .mb-slide .pp-tiles { grid-template-columns: 1fr 1fr; }
+    #passportPane #ppBody .mb-slide .pp-tiles { grid-template-columns: 1fr 1fr; gap: 4px; }
+    #passportPane #ppBody .pp-mc:has(> .pp-mcol) .pp-tiles { grid-template-columns: 1fr; }
+    #passportPane #ppBody .mb-slide .pp-tile { padding: 3px 7px; border-radius: 8px; }
+    #passportPane #ppBody .mb-slide .pp-tile span { font-size: 9.5px; line-height: 1.2; }
+    #passportPane #ppBody .mb-slide .pp-tile b { font-size: 13px; line-height: 1.2; }
+    #passportPane #ppBody .mb-slide .pp-tile em { font-size: 9.5px; line-height: 1.2; }
     #passportPane #ppBody .mb-slide .pp-solar, #passportPane #ppBody .mb-slide .pp-cols { grid-template-columns: minmax(0, 1fr) !important; }
     /* мини-карты: касание не перехватывается картой, чтобы страницу можно было смахнуть */
     #passportPane #ppBody .leaflet-container { touch-action: pan-x pan-y !important; }

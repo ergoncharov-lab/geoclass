@@ -235,6 +235,16 @@
     }
     onMq(lockSync); lockSync();
 
+    // «Справка» — значок «?» в шапке сайта (нажимает штатную кнопку закладки, скрытую на телефоне)
+    var hdrUser = document.getElementById('siteUser');
+    if (hdrUser && !$('.mb-help-btn')) {
+        var hb2 = document.createElement('button'); hb2.type = 'button'; hb2.className = 'mb-help-btn'; hb2.title = 'Справка'; hb2.setAttribute('aria-label', 'Справка');
+        hb2.innerHTML = '<i class="fas fa-circle-question"></i>';
+        hdrUser.parentNode.insertBefore(hb2, hdrUser);
+        hb2.addEventListener('click', function () { var r = $('.gc-rail-btn[data-rail="help"]'); if (r) r.click(); });
+        if (help && window.MutationObserver) new MutationObserver(function () { hb2.classList.toggle('on', !help.hidden); }).observe(help, { attributes: true, attributeFilter: ['hidden'] });
+    }
+
     /* ---------- 4. паспорт участка: страницы вбок ---------- */
     var pane = document.getElementById('passportPane'), body = document.getElementById('ppBody');
     if (!pane || !body) return;
