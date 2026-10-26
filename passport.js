@@ -468,6 +468,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '@media(max-width:900px){#ppSt .pp-stx{display:none}}',
         '#ppBody .pp-sub:not(.nomap) .pp-mcol{position:sticky;top:10px;align-self:flex-start}',
         '#ppBody .pp-zup{z-index:1100!important}#ppBody .pp-zup:not(.pp-mcol){position:relative}#ppBody .pp-zup:not(.mb-slide){overflow:visible!important}#ppBody .pp-expm[open] .pp-cadmenu-l{z-index:1110}',
+        '#ppBody .pp-map .leaflet-control-zoom,#ppBody .pp-map .leaflet-control:not(.leaflet-control-attribution),#ppBody .pp-map [class*="north"],#ppBody .pp-map [class*="compass"]{display:none!important}',
         '#ppBody .pp-expm{margin-left:0}#ppBody .pp-expm .pp-cadmenu-l{white-space:nowrap}',
         '@media print{#ppBody .pp-mcol{position:static}}',
         '#ppBody .pp-cadsub > .pp-mc{align-items:stretch}#ppBody .pp-cadsub .pp-dcol{display:flex;flex-direction:column}#ppBody .pp-cadsub .pp-tiles{flex:0 0 auto}',
@@ -2020,7 +2021,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 var xml = new XMLSerializer().serializeToString(cp), SC = 2, im = new Image();
                 im.onload = function () {
                     var c = document.createElement('canvas'); c.width = Math.round(w * SC); c.height = Math.round(h * SC);
-                    var g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+                    var g = c.getContext('2d'); g.fillStyle = svg.classList && svg.classList.contains('pp-radar') ? '#eef2f7' : '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);   // график пригодности — на заметном фоне
                     try { res({ url: c.toDataURL('image/png'), w: w, h: h }); } catch (e) { res(null); }
                 };
                 im.onerror = function () { res(null); };
@@ -2292,7 +2293,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             }
             var ec = kidsOf(n), direct = Array.prototype.some.call(n.childNodes, function (x) { return x.nodeType === 3 && norm(x.nodeValue); });
             if (!ec.length) { var t0 = tx(n); if (t0) out.push({ c: [t0] }); return; }
-            var cellLike = ec.every(function (c) { return !c.querySelector(BLOCKQ); });
+            var cellLike = ec.every(function (c) { return !c.querySelector(BLOCKQ) && !/^(table|ul|ol|svg)$/i.test(c.nodeName); });   // таблица/список внутри — не «ячейка»: строки идут по одной
             var asRows = ec.length > 1 && ec.every(function (c) { return kidsOf(c).filter(function (x) { return tx(x); }).length >= 2; });   // список строк: каждая — своя строка таблицы
             if (cellLike && !asRows) {
                 var ne = ec.filter(function (c) { return tx(c); });
