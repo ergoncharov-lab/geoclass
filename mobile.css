@@ -225,6 +225,7 @@
     #mainPanel .sp-grab::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -10px; }
     #mainPanel .sp-back { display: none !important; }
     /* нижняя панель закладок — как была (горизонтально), только компактнее */
+    #gcRail.gc-rail { justify-content: center !important; justify-content: safe center !important; }   /* оставшиеся закладки — по центру */
     .gc-rail-btn { flex: 0 0 56px; width: 56px; padding: 3px 1px; }
     .gc-rail-btn i { font-size: 15px; }
     .gc-rail-btn span { font-size: 9px; }
@@ -293,7 +294,7 @@
     #passportPane #ppBody .mb-slide .pp-mapw { max-width: none !important; width: 100%; }
     #passportPane #ppBody .mb-slide .pp-map { width: 100%; height: auto !important; min-height: 0 !important; max-height: 30vh; aspect-ratio: 1 / 1 !important; }
     /* блок с картой: карты слева (вдвое меньше), карточки значений справа */
-    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px !important; align-items: start; }
+    #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; gap: 8px !important; align-items: start; }   /* !important — иначе перебивается правилом pp-wide из passport.js */
     #passportPane #ppBody .pp-sub.mb-slide .pp-mc:has(> .pp-mcol) > .pp-mcol { display: flex !important; flex-direction: column; gap: 8px; }
     #passportPane #ppBody .pp-sub.mb-slide .pp-mpair { display: flex !important; flex-direction: column; gap: 8px; }
     #passportPane #ppBody .mb-slide .pp-dcol { width: 100% !important; min-width: 0; }
