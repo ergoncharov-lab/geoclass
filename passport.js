@@ -40,10 +40,18 @@
             '<div class="pp-info"><div><b>Что это</b>' + f[0] + '</div><div><b>Зачем нужно</b>' + f[1] + '</div><div><b>Как рассчитывается</b>' + f[2] + '</div></div>' +
             '<div class="pp-mc">' + (o.map ? '<div class="pp-mcol">' + o.map + '</div>' : '') + '<div class="pp-dcol"' + (o.id ? ' id="' + o.id + '"' : '') + '>' + (o.body || '') + '</div></div></div>';
     }
+    // экспорт карты одним меню: PDF, GeoTIFF (если есть), KML; выбор даты снимка остаётся рядом
+    function dlMenu(key, extra) {
+        var ex = extra || '', tifs = ex.match(/<button[^>]*data-(?:sat-)?tif=[\s\S]*?<\/button>/g) || [];
+        tifs.forEach(function (t) { ex = ex.replace(t, ''); });
+        return ex + '<details class="pp-cadmenu pp-expm"><summary class="pp-btn pp-vcopy" title="Экспорт карты"><i class="fas fa-download"></i> Экспорт <i class="fas fa-chevron-down"></i></summary><div class="pp-cadmenu-l">' +
+            '<button type="button" class="pp-btn pp-pdf" data-pdf="' + key + '"><i class="fas fa-file-pdf"></i> PDF</button>' + tifs.join('') +
+            '<button type="button" class="pp-btn" data-kml="' + key + '"><i class="fas fa-file-export"></i> KML</button></div></details>';
+    }
     // квадратная карта + легенда + кнопки скачивания (extra — дополнительные кнопки)
     function mapBox(key, extra, title) {
         return '<div class="pp-mapw">' + (title ? '<div class="pp-mt">' + title + '</div>' : '') + '<div class="pp-map" data-map="' + key + '"></div><div class="pp-leg2" id="ppLeg_' + key + '"></div>' +
-            '<div class="pp-dl"><button type="button" class="pp-btn pp-pdf" data-pdf="' + key + '"><i class="fas fa-file-pdf"></i> Карта в PDF</button>' + (extra || '') + '</div></div>';
+            '<div class="pp-dl">' + dlMenu(key, extra) + '</div></div>';
     }
     function mapBox3(key, title) {
         return '<div class="pp-mapw"><div class="pp-mt">' + title + '</div><div class="pp-map" data-map3="' + key + '"></div>' +
@@ -255,6 +263,18 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         save(new Blob([buf], { type: 'image/tiff' }), name);
     }
     body.addEventListener('click', function (e) {
+        var km = e.target.closest('[data-kml]'); if (km) {   // контур участка в KML
+            var ko = minis[km.dataset.kml], kp = ko && ko.gj ? polysOf(ko.gj) : [];
+            var kx = kp.map(function (pl, i) {
+                return '<Placemark><name>' + esc('Участок ' + (i + 1)) + '</name><Polygon>' + pl.map(function (r, j) {
+                    return '<' + (j ? 'inner' : 'outer') + 'BoundaryIs><LinearRing><coordinates>' + r.map(function (c) { return c[0] + ',' + c[1] + ',0'; }).join(' ') + '</coordinates></LinearRing></' + (j ? 'inner' : 'outer') + 'BoundaryIs>';
+                }).join('') + '</Polygon></Placemark>';
+            }).join('');
+            if (!kx) { updateStatus('⚠️ Нет контура для KML', true); return; }
+            save(new Blob(['<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Участок</name>' + kx + '</Document></kml>'], { type: 'application/vnd.google-earth.kml+xml' }), 'karta_' + km.dataset.kml + '.kml');
+            updateStatus('✅ Контур сохранён в KML');
+        }
+        var xm = e.target.closest('.pp-expm .pp-cadmenu-l button'); if (xm) { var xd = xm.closest('details'); if (xd) setTimeout(function () { xd.removeAttribute('open'); }, 0); }
         var b = e.target.closest('[data-pdf]'); if (b) {
             var o = minis[b.dataset.pdf]; if (!o) return;
             var s = snap(o);
@@ -425,6 +445,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         '@keyframes ppStrip{to{background-position:20px 0}}',
         '@media(max-width:900px){#ppSt .pp-stx{display:none}}',
         '#ppBody .pp-sub:not(.nomap) .pp-mcol{position:sticky;top:10px;align-self:flex-start}',
+        '#ppBody .pp-expm{margin-left:0}#ppBody .pp-expm .pp-cadmenu-l{white-space:nowrap}',
         '@media print{#ppBody .pp-mcol{position:static}}',
         '#ppBody .pp-cadsub > .pp-mc{align-items:stretch}#ppBody .pp-cadsub .pp-dcol{display:flex;flex-direction:column}#ppBody .pp-cadsub .pp-tiles{flex:0 0 auto}',
         '#ppBody .pp-cadtbl,#ppBody .pp-cadtbl>.pp-ch{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}#ppBody .pp-cadtbl .pp-vt{flex:1 1 0;min-height:190px;max-height:none}',
