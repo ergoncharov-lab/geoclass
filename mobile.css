@@ -249,9 +249,10 @@
     #passportPane .pp-top { position: static !important; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 !important; padding: 6px 8px !important; box-shadow: none; border-bottom: 1px solid var(--sc-line); }
     #passportPane .pp-top h2 { flex: 1 1 0; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #passportPane .pp-top .sp { display: none; }
-    #passportPane .pp-top .pp-tb { font-size: 0 !important; width: 30px; height: 30px !important; padding: 0 !important; gap: 0; }
+    #passportPane .pp-top .pp-tb { flex: none !important; display: inline-flex !important; align-items: center; justify-content: center; font-size: 0 !important; width: 32px !important; min-width: 32px !important; height: 32px !important; padding: 0 !important; gap: 0; box-sizing: border-box; }
+    #passportPane .pp-top .pp-tb > :not(i) { display: none !important; }
     #passportPane .pp-top .pp-tb i { font-size: 13px !important; margin: 0; }
-    #passportPane .pp-top .pp-tbs { order: 3; flex-wrap: nowrap; gap: 4px; margin-left: 0; }
+    #passportPane .pp-top .pp-tbs { order: 3; flex: none; flex-wrap: wrap; gap: 4px; margin-left: 0; }
     #passportPane #ppCollapseAll, #passportPane #ppNav { display: none !important; }
     #passportPane #ppSt.pp-stbar { order: 10; padding: 3px 8px 6px; margin: 0; border-radius: 8px; }
     #passportPane #ppSt .pp-stp { font-size: 12px; min-width: 30px; }
@@ -319,4 +320,6 @@
     #passportPane #ppBody .mb-slide .pp-solar, #passportPane #ppBody .mb-slide .pp-cols { grid-template-columns: minmax(0, 1fr) !important; }
     /* мини-карты: касание не перехватывается картой, чтобы страницу можно было смахнуть */
     #passportPane #ppBody .leaflet-container { touch-action: pan-x pan-y !important; }
+    /* карта не перехватывает палец — страницы паспорта листаются вбок по любому месту, в том числе по карте */
+    #passportPane #ppBody .pp-map { pointer-events: none !important; }
 }
