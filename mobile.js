@@ -36,6 +36,21 @@
     window.addEventListener('resize', dotsUpdate);
     onMq(dotsUpdate); dotsUpdate();
 
+    /* прокрутка страницы на телефоне запрещена (html { overflow: hidden } в mobile.css): переходы — кнопками меню и точками;
+       единственное исключение — с главной страницы на карту можно смахнуть вверх (или крутануть колесо) */
+    var heroEl = document.getElementById('top'), tY = null;
+    function heroAtEnd() { return !heroEl || heroEl.scrollTop + heroEl.clientHeight >= heroEl.scrollHeight - 2; }
+    function toMap() { window.scrollTo({ top: pos('map-section'), behavior: 'smooth' }); }
+    if (heroEl) {
+        heroEl.addEventListener('touchstart', function (e) { tY = e.touches.length === 1 ? e.touches[0].clientY : null; }, { passive: true });
+        heroEl.addEventListener('touchend', function (e) {
+            if (tY === null || !mob()) return;
+            var dy = e.changedTouches[0].clientY - tY; tY = null;
+            if (dy < -50 && window.scrollY < 4 && heroAtEnd()) toMap();
+        }, { passive: true });
+        heroEl.addEventListener('wheel', function (e) { if (mob() && e.deltaY > 20 && window.scrollY < 4 && heroAtEnd()) toMap(); }, { passive: true });
+    }
+
     /* ---------- 2. сворачиваемые блоки ---------- */
     function fold(target, label, icon) {
         if (!target || target.getAttribute('data-mb-fold')) return;
@@ -182,7 +197,7 @@
                 var k = rb.getAttribute('data-rail');
                 if (k === 'help' || k === 'bookmarks') { tilesOff(); return; }
                 lastKey = k;
-                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); return; }
+                if (app.classList.contains('mb-tiles') && tkey === k) { tilesOff(); setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0); return; }
                 app.classList.add('mb-tiles'); tkey = k;
                 setTimeout(function () { if (window.gcSheet) window.gcSheet('peek'); }, 0);
                 return;

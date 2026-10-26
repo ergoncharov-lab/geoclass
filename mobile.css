@@ -8,6 +8,9 @@
 @media (max-width: 960px) {
     :root { --gc-nav: 52px; }
     html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    /* прокрутка страницы пальцем/колесом запрещена — переходы только кнопками (программная прокрутка работает) */
+    html, body { overflow: hidden; overscroll-behavior: none; }
+    #top, #data-catalog, .s-after > section.site-sec { overscroll-behavior-y: contain !important; }
     html.mb-lock, html.mb-lock body { overflow: hidden; }
 
     /* ---------- 1. БЛОКИ: каждый — ровно на экран под шапкой, внутри при необходимости прокручивается ---------- */
@@ -143,7 +146,9 @@
     #map-section .map-controls-right { gap: 6px; }
     .mb-mc-toggle { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 11px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.18); cursor: pointer; }
     /* раскрывающийся виджет: свёрнут — видна одна кнопка; раскрыт — ряд [рисование, длина, площадь] [поиск, маршрут, местоположение, север] выезжает влево от кнопки, прежние виджеты — вниз (mobile.js) */
-    .mb-mc-row { display: flex; flex-direction: row-reverse; align-items: center; gap: 6px; }
+    #map-section .map-controls-right { flex-wrap: nowrap !important; flex-direction: column !important; align-items: flex-end !important; align-content: flex-end; max-height: none !important; }
+    .mb-mc-row { display: flex; flex-direction: row-reverse; align-items: center; align-self: flex-end; gap: 6px; }
+    #map-section .map-controls-right > .mc-group { align-self: flex-end; }
     .mb-g { display: flex; }
     #map-section .map-controls-right .mb-g .map-btn:not(.widget-btn) { display: flex !important; }   /* общее правило style.css прячет такие кнопки в этой панели */
     .mb-g > .mb-search-btn.on { background: var(--sc-green); color: #fff; }
@@ -197,12 +202,16 @@
     /* «Моё местоположение» и стрелка севера теперь в раскрывающемся виджете справа вверху — нижняя группа кнопок не нужна */
     #map-section .map-controls-br { display: none !important; }
     /* у шторки нет «ручки» — область, которую выдвигали пальцем, убрана */
-    .sp-grab { display: none !important; }
+    /* вместо плашки вверху шторки — тонкая линия: потяните вверх — панель раскроется на весь экран */
+    #mainPanel .sp-grab { display: flex !important; height: 16px; z-index: 40; }
+    #mainPanel .sp-grab i { width: 44px; height: 4px; }
+    #mainPanel .sp-grab::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -10px; }
+    #mainPanel .sp-back { display: none !important; }
     /* нижняя панель закладок — как была (горизонтально), только компактнее */
     .gc-rail-btn { flex: 0 0 56px; width: 56px; padding: 3px 1px; }
     .gc-rail-btn i { font-size: 15px; }
     .gc-rail-btn span { font-size: 9px; }
-    #mainPanel .sp-head { padding: 8px 10px 6px; min-height: 44px; }
+    #mainPanel .sp-head { padding: 16px 10px 0; min-height: 0; border-bottom: 0; }
     .sp-route { width: 38px; height: 38px; font-size: 16px; }
     .sp-back-btn, .rt-ib { width: 32px; height: 32px; }
     .sp-tile i { width: 40px; height: 40px; font-size: 15px; }
