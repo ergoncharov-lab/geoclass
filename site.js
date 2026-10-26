@@ -1068,45 +1068,116 @@
         { ic: 'fa-tractor', c: '#f59e0b', t: 'Агрокалькулятор', d: 'Семена, удобрения, средства защиты, топливо и машинное время по площади участка.', h: 'Нарисуйте участок или введите площадь вручную, затем задайте нормы.', bp: 'agro', m: 'Площадь берётся с нарисованной фигуры или вводится вручную; итоги можно сверить по каждой статье затрат.', f: ['Площадь с карты или вручную', 'Нормы по культурам и препаратам', 'Топливо и машинное время'] },
         { ic: 'fa-circle-question', c: '#0ea5e9', t: 'О карте', d: 'Описание возможностей карты и инструкции по работе с её блоками.', h: 'Откройте справку, если не знаете, с чего начать.', tab: 'help', m: 'Справка по возможностям карты и инструкции по работе с каждым блоком — подойдёт, если вы только начинаете.', f: ['Описание возможностей карты', 'Инструкции по работе с блоками'] }
     ];
-    var DUR = 14, DUR_HOT = 22;   // секунд на карточку (на «Анализе участка» дольше)
+    /* вместо слайдов: медленно вращающаяся 3D-фигура из линий; узлы — разделы, при наведении раскрывается карточка */
     function build(el, start) {
-        var i = start, dir = 1, busy = false;
+        var i = -1, hov = false, drag = null, yaw = 0, pitch = -0.32, vy = 0, spd = 1, hT = 0, N = TIPS.length, k;
+        var RM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
         el.className = 'tab-art gc-tips'; el.removeAttribute('data-art');
-        el.innerHTML = '<div class="gt-card"><span class="gt-blob"></span><i class="fas gt-wm"></i>' +
-            '<div class="gt-bar"><i></i></div><div class="gt-slide"></div>' +
-            '<div class="gt-nav"><button type="button" class="gt-ar" data-gt="-1" aria-label="Назад"><i class="fas fa-chevron-left"></i></button>' +
-            '<span class="gt-cnt"></span><button type="button" class="gt-ar" data-gt="1" aria-label="Дальше"><i class="fas fa-chevron-right"></i></button></div></div>';
-        var card = el.querySelector('.gt-card'), slide = el.querySelector('.gt-slide'), bar = el.querySelector('.gt-bar i'), cnt = el.querySelector('.gt-cnt'), wm = el.querySelector('.gt-wm');
-        function show() {
-            var t = TIPS[i];
-            card.style.setProperty('--c', t.c);
-            wm.className = 'fas gt-wm ' + t.ic;
-            slide.className = 'gt-slide ' + (dir > 0 ? 'gt-r' : 'gt-l');
-            card.classList.toggle('gt-hot', !!t.hot);
-            slide.innerHTML = '<div class="gt-hd"><div class="gt-ic"><i class="fas ' + t.ic + '"></i></div><div class="gt-t">' + t.t + '</div></div><div class="gt-d">' + t.d + '</div>' +
-                '<div class="gt-m">' + t.m + '</div><ul class="gt-f">' + t.f.map(function (x) { return '<li><i class="fas fa-check"></i>' + x + '</li>'; }).join('') + '</ul>' +
-                '<div class="gt-h"><i class="fas fa-lightbulb"></i><span>' + t.h + '</span></div>' +
-                ((t.bp || t.tab) ? '<button type="button" class="gt-go"' + (t.bp ? ' data-bp="' + t.bp + '"' : ' data-gt-tab="' + t.tab + '"') + '><i class="fas fa-play"></i><span>Открыть: ' + t.t + '</span></button>' : '');
-            cnt.textContent = (i + 1) + ' / ' + TIPS.length;
-            bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = 'gtbar ' + (t.hot ? DUR_HOT : DUR) + 's linear forwards';
-            busy = false;
-        }
-        function go(d) {
-            if (busy) return; busy = true; dir = d;
-            slide.className = 'gt-slide ' + (d > 0 ? 'gt-outl' : 'gt-outr');
-            setTimeout(function () { i = (i + d + TIPS.length) % TIPS.length; show(); }, 220);
-        }
-        bar.addEventListener('animationend', function () { go(1); });
-        el.addEventListener('click', function (e) {
-            var a = e.target.closest('[data-gt]'), g = e.target.closest('[data-gt-tab]');
-            if (a) go(+a.getAttribute('data-gt'));
-            else if (g) { var tb = document.querySelector('.panel-tab[data-tab="' + g.getAttribute('data-gt-tab') + '"]'); if (tb) tb.click(); }
+        el.innerHTML = '<div class="gt-card gt3"><span class="gt-blob"></span>' +
+            '<div class="gt3-st"><canvas class="gt3-cv"></canvas></div><div class="gt3-pn"><div class="gt-slide"></div></div></div>';
+        var card = el.querySelector('.gt-card'), st = el.querySelector('.gt3-st'), cv = el.querySelector('.gt3-cv'), ctx = cv.getContext('2d'),
+            pn = el.querySelector('.gt3-pn'), slide = el.querySelector('.gt-slide');
+        var P = [], nodes = [], E = [], seen = {};
+        for (k = 0; k < N; k++) { var y = 1 - 2 * (k + 0.5) / N, r = Math.sqrt(1 - y * y), a = k * 2.399963; P.push({ x: Math.cos(a) * r, y: y, z: Math.sin(a) * r }); }
+        P.forEach(function (p, a) {   // каждый узел соединяем с двумя ближайшими соседями
+            P.map(function (q, b) { return { b: b, d: b === a ? -9 : p.x * q.x + p.y * q.y + p.z * q.z }; }).sort(function (u, v) { return v.d - u.d; }).slice(0, 2).forEach(function (n) {
+                var key = Math.min(a, n.b) + '-' + Math.max(a, n.b); if (!seen[key]) { seen[key] = 1; E.push([a, n.b]); }
+            });
         });
-        card.addEventListener('pointerenter', function () { card.classList.add('paused'); });
-        card.addEventListener('pointerleave', function () { card.classList.remove('paused'); });
-        card.addEventListener('focusin', function () { card.classList.add('paused'); });
-        card.addEventListener('focusout', function () { card.classList.remove('paused'); });
-        show();
+        TIPS.forEach(function (t, n) {
+            var b = document.createElement('button'); b.type = 'button'; b.className = 'gt3-n'; b.style.setProperty('--nc', t.c);
+            b.setAttribute('aria-label', t.t); b.innerHTML = '<i class="fas ' + t.ic + '"></i>';
+            b.addEventListener('pointerenter', function () { clearTimeout(hT); if (drag && drag.moved) return; hT = setTimeout(function () { select(n); }, 110); });   // небольшая задержка, чтобы не мигало при проходе курсора
+            b.addEventListener('pointerleave', function () { clearTimeout(hT); });
+            b.addEventListener('click', function () { select(n); });
+            b.addEventListener('focus', function () { select(n); });
+            st.appendChild(b); nodes.push(b);
+        });
+        function select(n) {
+            if (n === i) return;
+            if (i >= 0) nodes[i].classList.remove('on');
+            i = n; aT = Date.now(); var t = TIPS[n]; nodes[n].classList.add('on');
+            card.style.setProperty('--c', t.c);
+            slide.innerHTML = tipHtml(t);
+            pn.classList.remove('gt3-in'); void pn.offsetWidth; pn.classList.add('gt3-in');
+        }
+        function tipHtml(t) {
+            return '<div class="gt-hd"><div class="gt-ic"><i class="fas ' + t.ic + '"></i></div><div class="gt-t">' + t.t + '</div></div><div class="gt-d">' + t.d + '</div>' +
+                ((t.bp || t.tab) ? '<button type="button" class="gt-go" title="' + String(t.h).replace(/"/g, '&quot;') + '"' + (t.bp ? ' data-bp="' + t.bp + '"' : ' data-gt-tab="' + t.tab + '"') + '><i class="fas fa-play"></i><span>Открыть: ' + t.t + '</span></button>' : '<div class="gt-h"><i class="fas fa-lightbulb"></i><span>' + t.h + '</span></div>');
+        }
+        var fitW = 0, aT = Date.now();   // aT — время последней смены раздела: каждые 10 с карточка переключается сама
+        function fit(w) {   // одинаковая высота карточки: берём самую высокую из всех, чтобы ничего не прыгало
+            fitW = w; var cur = slide.innerHTML, mx = 0;
+            pn.style.height = '';
+            TIPS.forEach(function (t) { slide.innerHTML = tipHtml(t); mx = Math.max(mx, pn.offsetHeight); });
+            slide.innerHTML = cur; pn.style.height = mx + 'px';
+        }
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitW = 0; });
+        function rot(p, ca, sa, cb, sb) { var x = p.x * ca + p.z * sa, z1 = -p.x * sa + p.z * ca; return { x: x, y: p.y * cb - z1 * sb, z: p.y * sb + z1 * cb }; }
+        function frame() {
+            requestAnimationFrame(frame);
+            if (!st.offsetParent) { aT = Date.now(); return; }
+            if (hov || drag) aT = Date.now(); else if (Date.now() - aT >= 10000) select((i + 1) % N);   // пауза, пока курсор над фигурой или её вращают
+            var w = st.clientWidth, h = st.clientHeight; if (!w || !h) return;
+            if (w !== fitW) fit(w);
+            var dpr = Math.min(2, window.devicePixelRatio || 1), pw = Math.round(w * dpr), ph = Math.round(h * dpr), pnH = pn.offsetHeight;
+            if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+            spd += (((RM || hov || drag) ? 0 : 1) - spd) * 0.06;
+            if (!drag) { yaw += 0.004 * spd + vy; vy *= 0.95; }
+            var ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pitch), sb = Math.sin(pitch);
+            var avail = Math.max(120, h - pnH - 14), cx = w / 2, cy = avail / 2 + 22, R = Math.min(w, avail) * 0.31;
+            function pr(q) { var f = 3 / (3 - q.z); return { x: cx + q.x * R * f, y: cy + q.y * R * f, d: (q.z + 1) / 2 }; }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h); ctx.lineCap = 'round';
+            ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
+            for (var rg = 0; rg < 3; rg++) {   // три кольца — каркас фигуры
+                var tl = rg * Math.PI / 3, ct = Math.cos(tl), stt = Math.sin(tl), prev = null;
+                for (var u = 0; u <= 72; u++) {
+                    var ang = u / 72 * Math.PI * 2, bx = Math.cos(ang), bz = Math.sin(ang);
+                    var s = pr(rot({ x: bx * ct, y: bx * stt, z: bz }, ca, sa, cb, sb));
+                    if (prev) { ctx.globalAlpha = 0.04 + 0.2 * (s.d + prev.d) / 2; ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(s.x, s.y); ctx.stroke(); }
+                    prev = s;
+                }
+            }
+            var S = P.map(function (p) { return pr(rot(p, ca, sa, cb, sb)); });
+            E.forEach(function (e) {
+                var s1 = S[e[0]], s2 = S[e[1]], act = e[0] === i || e[1] === i;
+                ctx.strokeStyle = act ? TIPS[i].c : '#475569'; ctx.lineWidth = act ? 1.8 : 1;
+                ctx.globalAlpha = act ? 0.35 + 0.55 * (s1.d + s2.d) / 2 : 0.06 + 0.3 * (s1.d + s2.d) / 2;
+                ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+            });
+            ctx.globalAlpha = 1;
+            S.forEach(function (s, n) {
+                var b = nodes[n], on = n === i, sc = (0.6 + 0.5 * s.d) * (on ? 1.25 : 1);
+                b.style.transform = 'translate3d(' + (s.x - 17).toFixed(1) + 'px,' + (s.y - 17).toFixed(1) + 'px,0) scale(' + sc.toFixed(3) + ')';
+                b.style.opacity = on ? 1 : (0.3 + 0.7 * s.d).toFixed(2);
+                b.style.zIndex = Math.round(s.d * 100) + (on ? 200 : 0);
+            });
+        }
+        var wasDrag = false;   // перетаскивание работает по всей области фигуры, в том числе с узлов; кнопка «Открыть» остаётся кнопкой
+        card.addEventListener('pointerdown', function (e) {
+            if (e.button || e.target.closest('.gt-go')) return;
+            drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false, id: e.pointerId };
+        });
+        card.addEventListener('pointermove', function (e) {
+            if (!drag) return;
+            if (!drag.moved) {
+                if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 5) return;
+                drag.moved = true; clearTimeout(hT); vy = 0; card.classList.add('gt3-grab');
+                try { card.setPointerCapture(drag.id); } catch (x) { /* не критично */ }
+            }
+            var dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+            yaw += dx * 0.012; vy = dx * 0.0015; pitch = Math.max(-1.2, Math.min(1.2, pitch + dy * 0.01));
+        });
+        function up() { if (drag && drag.moved) { wasDrag = true; setTimeout(function () { wasDrag = false; }, 0); } drag = null; card.classList.remove('gt3-grab'); }
+        card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
+        card.addEventListener('click', function (e) { if (wasDrag) { e.stopPropagation(); e.preventDefault(); } }, true);   // после вращения клик по узлу не срабатывает
+        el.addEventListener('click', function (e) {
+            var g = e.target.closest('[data-gt-tab]');
+            if (g) { var tb = document.querySelector('.panel-tab[data-tab="' + g.getAttribute('data-gt-tab') + '"]'); if (tb) tb.click(); }
+        });
+        card.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') hov = true; });
+        card.addEventListener('pointerleave', function () { hov = false; });
+        select(start); frame();
     }
     var arts = document.querySelectorAll('.tab-art');
     Array.prototype.forEach.call(arts, function (el, k) { build(el, k === 0 ? 0 : (k * 5 + Math.floor(Math.random() * TIPS.length)) % TIPS.length); });   // на главной начинаем с анализа участка

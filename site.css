@@ -1477,6 +1477,27 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 @keyframes gtAura { 0% { background-position: 0% 0%, 100% 100%, 100% 0%, 0 0; } 100% { background-position: 60% 40%, 40% 60%, 30% 70%, 0 0; } }
 @keyframes gtPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); } 70%, 100% { box-shadow: 0 0 0 14px rgba(16,185,129,0); } }
 @keyframes gtShine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+/* 3D-фигура разделов вместо слайдов подсказок на главной панели */
+.tab-art.gc-tips:has(.gt3) { background: transparent; }
+.gt3 { min-height: 430px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; touch-action: pan-y; cursor: grab; }
+.gt3 .gt-blob { display: none; }
+.gt3.gt3-grab, .gt3.gt3-grab * { cursor: grabbing !important; }
+.gt3-st { position: absolute; inset: 0; }
+.gt3-cv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.gt3-hint { position: absolute; left: 14px; top: 10px; z-index: 5; display: flex; gap: 6px; align-items: center; font-size: 10.5px; font-weight: 600; color: var(--sc-subtle); pointer-events: none; }
+.gt3-n { position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: 0; padding: 0; border-radius: 50%; border: 2px solid var(--nc); background: var(--sc-white); color: var(--nc); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; will-change: transform, opacity; box-shadow: 0 3px 10px -3px var(--nc); transition: background-color .25s, color .25s, box-shadow .25s; }
+.gt3-n:hover, .gt3-n:focus-visible { background: var(--nc); color: #fff; outline: none; }
+.gt3-n.on { background: var(--nc); color: #fff; box-shadow: 0 0 0 5px color-mix(in srgb, var(--nc) 22%, transparent), 0 6px 16px -4px var(--nc); }
+.gt3-n.on::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--nc); opacity: 0; animation: gt3Ring 1.8s ease-out infinite; }
+@keyframes gt3Ring { 0% { transform: scale(.8); opacity: .7; } 100% { transform: scale(1.7); opacity: 0; } }
+.gt3-pn { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 400; box-sizing: border-box; display: flex; flex-direction: column; padding: 6px 6px 4px; background: none; border: 0; box-shadow: none; }
+.gt3-pn .gt-slide { flex: 1 1 auto; }
+.gt3-pn.gt3-in { animation: gt3In .45s cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes gt3In { from { opacity: 0; transform: translateY(16px) scale(.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+.gt3 .gt-ic { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px; font-size: 17px; }
+.gt3 .gt-d { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.gt3 .gt-go { margin-top: 2px; padding: 8px 12px; font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { .gt3-n.on::after, .gt3-pn.gt3-in { animation: none; } }
 
 /* паспорт: календарь выбора даты — под картой рядом с кнопкой GeoTIFF; список раскрывается вверх */
 .pp-dl .pp-cal-p { right: auto; left: 0; top: calc(100% + 6px); bottom: auto; z-index: 1200; }
@@ -2145,3 +2166,13 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .shp-ld { background: none; border: 0; pointer-events: none; }
 .shp-ld span { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; padding: 5px 11px; border-radius: 99px; background: rgba(12,17,16,.85); color: #fff; font: 600 12px/1.2 'Segoe UI', system-ui, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
 .shp-ld span i { color: var(--mint); margin-right: 4px; }
+
+/* главная: высота ряда плиток постоянна (подписи могут переноситься на 1–3 строки), поэтому блок анимации всегда стоит на одном месте, чуть ниже */
+@media (min-width: 961px) {
+    .sp-home .sp-grid { min-height: 120px; align-content: start; }
+    .tab-art.gc-tips { margin-top: 8px; }
+}
+
+/* без разделительной линии между плитками меню и анимацией (линия — нижняя граница блока .section.sp-home) */
+.tab-art.gc-tips { border-top: 0; }
+.sp-home.section { border-bottom: 0; }
