@@ -1126,7 +1126,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .pp-sub h4 i, .pp-sec h5 i { color: var(--green); }
 .pp-sec h5 { font-size: 12px; color: var(--dark); margin: 10px 0 6px; }
 .pp-mapw { position: relative; min-width: 0; }
-.pp-map { width: 100%; border-radius: 10px; overflow: hidden; background: #e5e7eb; border: 1px solid var(--line); }
+.pp-map { width: 100%; border-radius: 0; overflow: hidden; background: #e5e7eb; border: 1px solid var(--line); }
 .pp-pdf { margin-top: 6px; height: 28px; font-size: 11px; }
 .pp-note { font-size: 12px; color: var(--muted); background: var(--card2); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; }
 .pp-sum { background: transparent; padding: 0; }
@@ -1197,7 +1197,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .pp-mc { display: grid; grid-template-columns: 405px minmax(0, 1fr); gap: 22px; align-items: start; }
 .pp-sub.nomap .pp-mc { grid-template-columns: minmax(0, 1fr); }
 .pp-mapw { width: 100%; max-width: 405px; min-width: 0; }
-.pp-map { width: 100%; height: auto; aspect-ratio: 1 / 1; border: 0; border-radius: 14px; background: #e5e7eb; box-shadow: 0 0 0 1px var(--sc-line), 0 8px 18px rgba(15,23,42,.12); }
+.pp-map { width: 100%; height: auto; aspect-ratio: 1 / 1; border: 0; border-radius: 0; background: #e5e7eb; box-shadow: 0 0 0 1px var(--sc-line), 0 8px 18px rgba(15,23,42,.12); }
 .pp-mt { margin-bottom: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ac); }
 .pp-dl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .pp-dl .pp-btn, .pp-pdf { height: 28px; margin-top: 0; padding: 0 10px; font-size: 11px; border-radius: 8px; }
