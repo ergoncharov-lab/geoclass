@@ -34,13 +34,17 @@
     var ready = false;
     try { ready = frame.contentDocument.readyState === 'complete' && !!frame.getAttribute('src'); } catch (e) { /* ещё не загружено */ }
     frame.addEventListener('load', function () { ready = true; });
-    btn.addEventListener('click', function () {
-        var id = key(); if (!id) return;
+    var app = document.querySelector('#map-section .app-container');
+    new MutationObserver(function () { if (win.hidden) win.style.zIndex = ''; }).observe(win, { attributes: true, attributeFilter: ['hidden'] });
+    function openAt(id) {
         var rail = document.querySelector('.gc-rail-btn[data-rail="help"]');
         if (win.hidden) { if (rail) rail.click(); else win.hidden = false; }
+        if (app && app.classList.contains('passport-open')) win.style.zIndex = '2600';   // поверх открытого паспорта участка
         function send() { try { frame.contentWindow.postMessage({ gcHelpGoto: id }, '*'); } catch (e) { /* окно справки недоступно */ } }
         if (ready) setTimeout(send, 60);
         else { frame.addEventListener('load', function f() { frame.removeEventListener('load', f); setTimeout(send, 60); }); if (!frame.getAttribute('src')) frame.src = 'help.html'; }
-    });
+    }
+    window.gcOpenHelp = openAt;   // используется кнопками «?» в паспорте участка
+    btn.addEventListener('click', function () { var id = key(); if (id) openAt(id); });
     update();
 })();

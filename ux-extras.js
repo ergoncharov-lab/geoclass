@@ -997,7 +997,7 @@
         return el;
     }
     var hdWx = ctxGroup('fa-cloud-sun-rain', 'Погода и климат', [ctxWx, mkItem('fa-chart-line', 'Климат участка', 'climate', 'Климат участка'), mkItem('fa-seedling', 'Тепло и вегетация', 'gdd', 'Тепло и вегетация'), mkItem('fa-snowflake', 'Заморозки', 'frost', 'Заморозки'), mkItem('fa-wind', 'Ветер и окна работ', 'windwork', 'Ветер и окна работ')]);
-    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-wheat-awn', 'NBR', 'nbr', 'NBR'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
+    var hdSn = ctxGroup('fa-satellite', 'Снимки и индексы', [ctxIm, mkItem('fa-leaf', 'NDVI', 'ndvi', 'NDVI'), mkItem('fa-cloud-rain', 'NDMI', 'ndmi', 'NDMI'), mkItem('fa-wheat-awn', 'NBR', 'nbr', 'NBR'), mkItem('fa-spa', 'GNDVI', 'gndvi', 'GNDVI'), mkItem('fa-vial', 'NDRE', 'ndre', 'NDRE'), mkItem('fa-tree', 'SAVI', 'savi', 'SAVI'), mkItem('fa-water', 'NDWI', 'ndwi', 'NDWI'), mkItem('fa-bars-staggered', 'NDTI', 'ndti', 'NDTI'), mkItem('fa-code-compare', 'Сравнение снимков', 'change', 'Сравнение снимков')]);
     var hdTr = ctxGroup('fa-share-from-square', 'Перенести границы в', [ctxPf, ctxLg, mkItem('fa-flask', 'Почвенный анализ', 'chem', 'Почвенный анализ'), mkItem('fa-draw-polygon', 'Границы, форма и кадастр', 'shape', 'Границы, форма и кадастр'), hdWx, hdWx._sub, hdSn, hdSn._sub]);
     var hdDl = ctxGroup('fa-file-arrow-down', 'Скачать границы', [ctxKml, ctxGj, ctxShp, ctxDxf]);
     var ctxAll = [ctxSep, ctxAn, hdTr, hdTr._sub, hdDl, hdDl._sub];
@@ -1031,7 +1031,7 @@
             var mcRow = cn ? [['Многоконтурный участок', isMulti ? 'Да, контуров: ' + cn : 'Нет, один контур']] : [];
             var gj = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cad_number: it.src ? '' : ro.num, name: ro.num, source: it.src || 'НСПД', contours: cn, multi_contour: isMulti, attrs: mcRow.concat(ro.list, ro.more) }, geometry: { type: g.type, coordinates: cv(g.coordinates) } }] };
             if (bp) {   // как загрузка файла в разделе: gcShapeIO[...].put ставит фигуру и запускает расчёт раздела
-                var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', change: 'sn', shape: 'shp' }[bp];
+                var KEY = { profile: 'hy', logistics: 'lg', chem: 'ch', weather: 'wx', climate: 'wx', gdd: 'wx', frost: 'wx', windwork: 'wx', dates: 'sn', ndvi: 'sn', ndmi: 'sn', nbr: 'sn', gndvi: 'sn', ndre: 'sn', savi: 'sn', ndwi: 'sn', ndti: 'sn', change: 'sn', shape: 'shp' }[bp];
                 var io = typeof gcShapeIO !== 'undefined' ? gcShapeIO[KEY] : null;
                 if (!io || !io.put) { say('Раздел «' + title + '» недоступен для переноса.'); return; }
                 var tb0 = document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]'); if (tb0) tb0.click();
@@ -1078,7 +1078,7 @@
                 { icon: 'fa-wind', label: 'Ветер и окна работ', bp: 'windwork' }] },
             { icon: 'fa-satellite', label: 'Снимки и индексы', sub: [
                 { icon: 'fa-satellite', label: 'Снимки', bp: 'dates' }, { icon: 'fa-leaf', label: 'NDVI', bp: 'ndvi' }, { icon: 'fa-cloud-rain', label: 'NDMI', bp: 'ndmi' },
-                { icon: 'fa-wheat-awn', label: 'NBR', bp: 'nbr' }, { icon: 'fa-code-compare', label: 'Сравнение снимков', bp: 'change' }] }
+                { icon: 'fa-wheat-awn', label: 'NBR', bp: 'nbr' }, { icon: 'fa-spa', label: 'GNDVI', bp: 'gndvi' }, { icon: 'fa-vial', label: 'NDRE', bp: 'ndre' }, { icon: 'fa-tree', label: 'SAVI', bp: 'savi' }, { icon: 'fa-water', label: 'NDWI', bp: 'ndwi' }, { icon: 'fa-bars-staggered', label: 'NDTI', bp: 'ndti' }, { icon: 'fa-code-compare', label: 'Сравнение снимков', bp: 'change' }] }
         ],
         exportAs: exportAs,
         toAnalysis: toAnalysis

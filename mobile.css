@@ -310,6 +310,7 @@
     #passportPane #ppBody .mb-slide .pp-sub-h { flex-wrap: wrap; gap: 6px; }
     #passportPane #ppBody .mb-slide .pp-sub-h h4 { font-size: 14px; }
     #passportPane #ppBody .mb-slide .pp-i-btn { padding: 3px 8px; font-size: 11px; }
+    #passportPane #ppBody .mb-slide .pp-h-btn { width: 22px; height: 22px; margin-left: 4px; font-size: 11px; }
     #passportPane #ppBody .mb-slide .pp-vt, #passportPane #ppBody .mb-slide .pp-ch { max-width: 100%; overflow-x: auto; }
     #passportPane #ppBody .mb-slide table { max-width: 100%; }
     #passportPane #ppBody .mb-slide .pp-tiles { grid-template-columns: 1fr 1fr; gap: 4px; }

@@ -438,22 +438,31 @@ const SENTINEL = {
 
 // какие каналы нужны подложке
 const SN_ASSETS = { sentinel2: ['visual'], ndvi: ['red', 'nir'], ndmi: ['nir', 'swir16'], nbr: ['nir', 'swir22'],
-    falsecolor: ['nir', 'red', 'green'], ndvi_c: ['red', 'nir'] };
+    falsecolor: ['nir', 'red', 'green'], ndvi_c: ['red', 'nir'],
+    gndvi: ['green', 'nir'], ndre: ['rededge1', 'nir'], savi: ['red', 'nir'], ndwi: ['green', 'nir'], ndti: ['swir16', 'swir22'] };
 const SN_INDEX = {
     ndvi: (a, b) => (b - a) / (b + a),
     ndvi_c: (a, b) => (b - a) / (b + a),   // «Контрастный NDVI»: тот же индекс, шкала растянута на выбранный диапазон
     ndmi: (a, b) => (a - b) / (a + b),   // (NIR − SWIR1) / (NIR + SWIR1)
-    nbr: (a, b) => (a - b) / (a + b)     // (NIR − SWIR2) / (NIR + SWIR2)
+    nbr: (a, b) => (a - b) / (a + b),    // (NIR − SWIR2) / (NIR + SWIR2)
+    gndvi: (a, b) => (b - a) / (b + a),  // (NIR − Green) / (NIR + Green)
+    ndre: (a, b) => (b - a) / (b + a),   // (NIR − RedEdge1) / (NIR + RedEdge1)
+    savi: (a, b) => 1.5 * (b - a) / (b + a + 0.5),   // (NIR − Red) / (NIR + Red + 0,5) · 1,5
+    ndwi: (a, b) => (a - b) / (a + b),   // (Green − NIR) / (Green + NIR)
+    ndti: (a, b) => (a - b) / (a + b)    // (SWIR1 − SWIR2) / (SWIR1 + SWIR2)
 };
 const SN_RAMPS = {
     ndvi:  { min: -0.2, max: 0.9, stops: [[0, 165, 0, 38], [0.25, 244, 109, 67], [0.45, 254, 224, 139], [0.6, 166, 217, 106], [0.8, 26, 152, 80], [1, 0, 104, 55]] },
     ndvic: { min: 0.2, max: 0.9, stops: [[0, 165, 0, 38], [0.2, 215, 48, 39], [0.35, 244, 109, 67], [0.45, 253, 174, 97], [0.55, 254, 224, 139], [0.65, 217, 239, 139], [0.75, 166, 217, 106], [0.88, 26, 152, 80], [1, 0, 104, 55]] },
     water: { min: -0.6, max: 0.6, stops: [[0, 140, 81, 10], [0.4, 246, 232, 195], [0.5, 199, 234, 229], [0.7, 90, 180, 172], [1, 1, 102, 94]] }
 };
+SN_RAMPS.ndre = { min: 0, max: 0.7, stops: SN_RAMPS.ndvi.stops };
+SN_RAMPS.ndti = { min: -0.1, max: 0.3, stops: [[0, 26, 152, 80], [0.35, 217, 239, 139], [0.6, 254, 224, 139], [0.8, 230, 150, 60], [1, 140, 81, 10]] };
+const SN_RAMP_OF = { ndvi_c: 'ndvic', ndvi: 'ndvi', nbr: 'ndvi', gndvi: 'ndvi', savi: 'ndvi', ndre: 'ndre', ndti: 'ndti' };   // остальные — шкала «water»
 const snBaseKey = k => typeof k === 'string' ? k.split('~')[0] : k;   // «ndvi~1» → «ndvi» (копии слоя для сравнения дат)
 function snRamp(key) {
     key = snBaseKey(key);
-    const R = SN_RAMPS[key === 'ndvi_c' ? 'ndvic' : (key === 'ndvi' || key === 'nbr') ? 'ndvi' : 'water'];
+    const R = SN_RAMPS[SN_RAMP_OF[key] || 'water'];
     if (!R.lut) {
         R.lut = new Uint8Array(256 * 3);
         for (let i = 0; i < 256; i++) {
@@ -1276,7 +1285,7 @@ function snPrefetchRun() {
 // ============================================================
 const SN_RES = 10;              // м/пиксель — лучшее разрешение Sentinel-2
 const SN_EXPORT_MAX_PX = 25e6;  // предел размера выгрузки (≈ 50 × 50 км при 10 м)
-const SN_FILE_TAG = { sentinel2: 'S2_TrueColor', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'S2_FalseColor', ndvi_c: 'NDVI_contrast' };
+const SN_FILE_TAG = { sentinel2: 'S2_TrueColor', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'S2_FalseColor', ndvi_c: 'NDVI_contrast', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI' };
 
 function snRingsOf(gj) {
     const g = gj.geometry || gj, out = [];
@@ -1716,6 +1725,11 @@ const layerFactories = {
     ndvi: () => sentinelTiles('ndvi'),
     ndmi: () => sentinelTiles('ndmi'),
     nbr: () => sentinelTiles('nbr'),
+    gndvi: () => sentinelTiles('gndvi'),
+    ndre: () => sentinelTiles('ndre'),
+    savi: () => sentinelTiles('savi'),
+    ndwi: () => sentinelTiles('ndwi'),
+    ndti: () => sentinelTiles('ndti'),
     falsecolor: () => sentinelTiles('falsecolor'),
     ndvi_c: () => sentinelTiles('ndvi_c'),
     esri_landcover: () => new EsriLandCoverLayer('', {
@@ -1786,7 +1800,7 @@ const LAYER_NAMES = {
     osm: 'OSM', google: 'Google', google_sat: 'Спутник', google_hybrid: 'Гибрид',
     '2gis': '2ГИС', opentopo: 'Topo', esri_sat: 'Esri', esri_imagery: 'Esri Imagery',
     sentinel2: 'Sentinel-2', landsat8: 'Landsat', ndvi: 'NDVI',
-    ndmi: 'NDMI', nbr: 'NBR', falsecolor: 'Ложные цвета', ndvi_c: 'Контрастный NDVI', esri_landcover: 'Esri Land Cover',
+    ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', falsecolor: 'Ложные цвета', ndvi_c: 'Контрастный NDVI', esri_landcover: 'Esri Land Cover',
     esri_topo: 'Esri Topo', esri_natgeo: 'Esri NatGeo', esri_hillshade: 'Esri Рельеф',
     esri_terrain: 'Esri Terrain', esri_gray: 'Esri Gray',
     soil_ph: 'pH почв', soil_soc: 'Орг. углерод', soil_nitrogen: 'Азот почв',
@@ -1819,6 +1833,11 @@ const LAYER_THUMBS = {
     ndvi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     ndmi:           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     nbr:            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    gndvi          : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    ndre           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    savi           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    ndwi           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    ndti           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     // тот же участок мира, что и у остальных превью (z=3, x=4, y=2), но в метрах EPSG:3857
     esri_landcover: esriLandCoverUrl([0, 5009377.085, 5009377.085, 10018754.171], 72),
     esri_topo:      esriThumb('World_Topo_Map'),
@@ -1914,7 +1933,14 @@ const LAYER_LEGENDS = {
 };
 // Краткое описание источника — в каждой легенде; дополнительные легенды для снимков
 Object.assign(LAYER_LEGENDS.esri_landcover, { src: 'Источник: Esri · Impact Observatory · Microsoft — классификация снимков Sentinel-2, 10 м.' });
-['ndvi', 'ndmi', 'nbr'].forEach(k => { LAYER_LEGENDS[k].src = 'Источник: Sentinel-2 L2A (ESA Copernicus), расчёт индекса по спектральным каналам, 10 м.'; });
+Object.assign(LAYER_LEGENDS, {
+    gndvi: { title: 'GNDVI — хлорофилл по зелёному каналу', note: 'Менее насыщается на густых посевах, чем NDVI; чувствителен к азотному питанию', items: [['#006837', 'Больше 0,7 — густые здоровые посевы'], ['#1a9850', '0,5 – 0,7 — активная вегетация'], ['#a6d96a', '0,3 – 0,5 — умеренная вегетация'], ['#fee08b', '0,15 – 0,3 — слабая вегетация'], ['#d73027', 'Меньше 0,15 — почва, вода']] },
+    ndre: { title: 'NDRE — азот и хлорофилл (Red Edge)', note: 'Ранний сигнал нехватки азота и хлороза на густых посевах', items: [['#006837', 'Больше 0,5 — высокое содержание хлорофилла'], ['#1a9850', '0,35 – 0,5 — хорошее'], ['#a6d96a', '0,2 – 0,35 — умеренное'], ['#fee08b', '0,1 – 0,2 — слабое'], ['#d73027', 'Меньше 0,1 — почва, вода, нет вегетации']] },
+    savi: { title: 'SAVI — вегетация с поправкой на почву', note: 'Меньше искажается фоном почвы на всходах и редком покрове (L = 0,5)', items: [['#006837', 'Больше 0,65 — плотная растительность'], ['#1a9850', '0,45 – 0,65 — густая'], ['#a6d96a', '0,25 – 0,45 — умеренная'], ['#fee08b', '0,1 – 0,25 — редкая'], ['#d73027', 'Меньше 0,1 — голая почва, вода']] },
+    ndwi: { title: 'NDWI — вода и переувлажнение', note: 'Чем синее — тем больше воды на поверхности; коричневый — сухая почва и растительность', items: [['#01665e', 'Больше 0,3 — открытая вода'], ['#5ab4ac', '0 – 0,3 — переувлажнение, мокрая почва'], ['#f6e8c3', '−0,3 – 0 — умеренная сухость'], ['#8c510a', 'Меньше −0,3 — сухая почва, растительность']] },
+    ndti: { title: 'NDTI — растительные остатки', note: 'Пожнивные остатки и стерня (no-till): чем темнее коричневый, тем больше остатков', items: [['#8c510a', 'Больше 0,1 — много остатков'], ['#e6963c', '0,05 – 0,1 — умеренно'], ['#d9ef8b', '0 – 0,05 — мало остатков'], ['#1a9850', 'Меньше 0 — вегетация, чистая почва']] }
+});
+['ndvi', 'ndmi', 'nbr', 'gndvi', 'ndre', 'savi', 'ndwi', 'ndti'].forEach(k => { LAYER_LEGENDS[k].src = 'Источник: Sentinel-2 L2A (ESA Copernicus), расчёт индекса по спектральным каналам, 10 м.'; });
 LAYER_LEGENDS.ndvi_c = Object.assign({}, LAYER_LEGENDS.ndvi, { title: 'Контрастный NDVI', note: 'Цвета растянуты на выбранный диапазон — виден разброс внутри поля' });
 LAYER_LEGENDS.sentinel2 = { title: 'Sentinel-2 — естественные цвета', note: 'Снимок, как его видит глаз (красный · зелёный · синий), 10 м', items: [], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), канал TCI.' };
 LAYER_LEGENDS.falsecolor = { title: 'Sentinel-2 — ложные цвета (CIR)', note: 'Ближний ИК · красный · зелёный → R · G · B', items: [['#e11d48', 'Красный — растительность'], ['#1e3a8a', 'Тёмно-синий — вода'], ['#94a3b8', 'Серый — застройка, голая почва']], src: 'Источник: Sentinel-2 L2A (ESA Copernicus), каналы B08 · B04 · B03, 10 м.' };
@@ -2846,27 +2872,44 @@ function snShpZip(feats, base) {
                  vars: [{ l: 'ndvi', t: 'NDVI', h: 'Стандартная шкала NDVI' }, { l: 'ndvi_c', t: 'Контрастный NDVI', h: 'Шкала растянута на выбранный диапазон — виден разброс внутри поля' }] },
         ndmi:  { name: 'NDMI', sub: 'Влажность растительности: засуха и водный стресс', icon: 'fa-cloud-rain', kind: 'idx', vars: [{ l: 'ndmi', t: 'NDMI', h: '' }] },
         nbr:   { name: 'NBR', sub: 'Состояние покрова: сухая биомасса и угнетение растений', icon: 'fa-wheat-awn', kind: 'idx', vars: [{ l: 'nbr', t: 'NBR', h: '' }] },
+        gndvi: { name: 'GNDVI', sub: 'Хлорофилл и азотное питание по зелёному каналу', icon: 'fa-spa', kind: 'idx', vars: [{ l: 'gndvi', t: 'GNDVI', h: '' }] },
+        ndre: { name: 'NDRE', sub: 'Азот и хлорофилл: ранняя диагностика по Red Edge', icon: 'fa-vial', kind: 'idx', vars: [{ l: 'ndre', t: 'NDRE', h: '' }] },
+        savi: { name: 'SAVI', sub: 'Вегетация с поправкой на почву: всходы и редкий покров', icon: 'fa-tree', kind: 'idx', vars: [{ l: 'savi', t: 'SAVI', h: '' }] },
+        ndwi: { name: 'NDWI', sub: 'Вода и переувлажнение: мокрая почва, подтопления', icon: 'fa-water', kind: 'idx', vars: [{ l: 'ndwi', t: 'NDWI', h: '' }] },
+        ndti: { name: 'NDTI', sub: 'Растительные остатки: стерня и no-till', icon: 'fa-bars-staggered', kind: 'idx', vars: [{ l: 'ndti', t: 'NDTI', h: '' }] },
         // «Сравнение снимков»: два снимка выбранного слоя на разные даты рядом (шторка на карте + панель снизу); календаря и списка дат в самом разделе нет
         change: { name: 'Сравнение снимков', sub: 'Два снимка Sentinel-2 на разные даты рядом', icon: 'fa-code-compare', kind: 'cmp',
                   vars: [{ l: 'sentinel2', t: 'Естественные', h: 'Естественные цвета (RGB)' }, { l: 'falsecolor', t: 'Ложные цвета', h: 'Ложные цвета CIR: NIR · Red · Green' },
-                         { l: 'ndvi', t: 'NDVI', h: 'Индекс растительности' }, { l: 'ndmi', t: 'NDMI', h: 'Влажность растительности' }, { l: 'nbr', t: 'NBR', h: 'Состояние растительного покрова' }] }
+                         { l: 'ndvi', t: 'NDVI', h: 'Индекс растительности' }, { l: 'ndmi', t: 'NDMI', h: 'Влажность растительности' }, { l: 'nbr', t: 'NBR', h: 'Состояние растительного покрова' },
+                         { l: 'gndvi', t: 'GNDVI', h: 'Хлорофилл по зелёному каналу' }, { l: 'ndre', t: 'NDRE', h: 'Азот и хлорофилл (Red Edge)' }, { l: 'savi', t: 'SAVI', h: 'Вегетация с поправкой на почву' }, { l: 'ndwi', t: 'NDWI', h: 'Вода и переувлажнение' }, { l: 'ndti', t: 'NDTI', h: 'Растительные остатки, стерня' }] }
     };
     const CMPSEC = 'change';   // ключ раздела «Сравнение снимков»
-    const LAYER_SEC = { sentinel2: 'dates', falsecolor: 'dates', ndvi: 'ndvi', ndvi_c: 'ndvi', ndmi: 'ndmi', nbr: 'nbr' };
+    const LAYER_SEC = { sentinel2: 'dates', falsecolor: 'dates', ndvi: 'ndvi', ndvi_c: 'ndvi', ndmi: 'ndmi', nbr: 'nbr', gndvi: 'gndvi', ndre: 'ndre', savi: 'savi', ndwi: 'ndwi', ndti: 'ndti' };
     const LAYER_NOTE = {
         sentinel2: 'Снимок в естественных цветах (канал TCI, 10 м)',
         falsecolor: 'Ложные цвета: NIR · Red · Green → R · G · B, каналы 10 м',
         ndvi: 'NDVI = (NIR − Red) / (NIR + Red), каналы 10 м',
         ndvi_c: 'NDVI = (NIR − Red) / (NIR + Red); цвета — по выбранному диапазону контраста',
         ndmi: 'NDMI = (NIR − SWIR1) / (NIR + SWIR1); SWIR (20 м) приводится к сетке 10 м',
-        nbr: 'NBR = (NIR − SWIR2) / (NIR + SWIR2); SWIR (20 м) приводится к сетке 10 м'
+        nbr: 'NBR = (NIR − SWIR2) / (NIR + SWIR2); SWIR (20 м) приводится к сетке 10 м',
+        gndvi: 'GNDVI = (NIR − Green) / (NIR + Green), каналы 10 м',
+        ndre: 'NDRE = (NIR − RedEdge1) / (NIR + RedEdge1) = (B08 − B05) / (B08 + B05); Red Edge (20 м) приводится к сетке 10 м',
+        savi: 'SAVI = 1,5 · (NIR − Red) / (NIR + Red + 0,5), каналы 10 м',
+        ndwi: 'NDWI = (Green − NIR) / (Green + NIR), каналы 10 м',
+        ndti: 'NDTI = (SWIR1 − SWIR2) / (SWIR1 + SWIR2) = (B11 − B12) / (B11 + B12); каналы 20 м приводятся к сетке 10 м'
     };
-    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndmi: ['сухо', 'влажно'], nbr: ['голая почва, сухой покров', 'густая растительность'] };
+    const LEG_TXT = { ndvi: ['голая почва, вода', 'густая растительность'], ndvi_c: ['слабая', 'густая растительность'], ndmi: ['сухо', 'влажно'], nbr: ['голая почва, сухой покров', 'густая растительность'],
+        gndvi: ['почва, вода', 'густые посевы'], ndre: ['мало хлорофилла', 'много хлорофилла'], savi: ['почва, вода', 'густая растительность'], ndwi: ['сухо', 'вода'], ndti: ['чисто', 'много остатков'] };
     // классы для калькулятора: [от, до, подпись, цвет]
     const CLS = {
         ndvi: [[-9, 0.1, 'Вода, голая почва, застройка', '#c2a878'], [0.1, 0.2, 'Очень редкая растительность', '#e8d98a'], [0.2, 0.4, 'Редкая, всходы, травы', '#b5d66b'], [0.4, 0.6, 'Густая растительность, посевы', '#5cb85c'], [0.6, 9, 'Плотная, пик вегетации', '#1e7d34']],
         ndmi: [[-9, -0.2, 'Сухая растительность, почва', '#8c510a'], [-0.2, 0.1, 'Низкая влажность', '#f6e8c3'], [0.1, 0.4, 'Умеренная влажность', '#5ab4ac'], [0.4, 9, 'Высокая влажность', '#01665e']],
-        nbr: [[-9, 0.1, 'Гари, голая почва', '#f46d43'], [0.1, 0.3, 'Редкая растительность', '#fee08b'], [0.3, 0.5, 'Травы, кустарники, посевы', '#a6d96a'], [0.5, 9, 'Густая растительность', '#1a9850']]
+        nbr: [[-9, 0.1, 'Гари, голая почва', '#f46d43'], [0.1, 0.3, 'Редкая растительность', '#fee08b'], [0.3, 0.5, 'Травы, кустарники, посевы', '#a6d96a'], [0.5, 9, 'Густая растительность', '#1a9850']],
+        gndvi: [[-9, 0.15, 'Почва, вода', '#c2a878'], [0.15, 0.3, 'Слабая вегетация', '#e8d98a'], [0.3, 0.5, 'Умеренная вегетация', '#b5d66b'], [0.5, 0.7, 'Активная вегетация', '#5cb85c'], [0.7, 9, 'Густая, пик вегетации', '#1e7d34']],
+        ndre: [[-9, 0.1, 'Почва, вода, нет вегетации', '#c2a878'], [0.1, 0.2, 'Низкое содержание хлорофилла', '#e8d98a'], [0.2, 0.35, 'Умеренное', '#b5d66b'], [0.35, 0.5, 'Хорошее', '#5cb85c'], [0.5, 9, 'Высокое', '#1e7d34']],
+        savi: [[-9, 0.1, 'Голая почва, вода', '#c2a878'], [0.1, 0.25, 'Редкая растительность', '#e8d98a'], [0.25, 0.45, 'Умеренная', '#b5d66b'], [0.45, 0.65, 'Густая', '#5cb85c'], [0.65, 9, 'Плотная, пик вегетации', '#1e7d34']],
+        ndwi: [[-9, -0.3, 'Сухая почва, растительность', '#8c510a'], [-0.3, 0, 'Умеренная сухость', '#f6e8c3'], [0, 0.3, 'Переувлажнение, мокрая почва', '#5ab4ac'], [0.3, 9, 'Открытая вода', '#01665e']],
+        ndti: [[-9, 0, 'Вегетация, чистая почва', '#1a9850'], [0, 0.05, 'Мало остатков', '#d9ef8b'], [0.05, 0.1, 'Умеренно остатков', '#e6963c'], [0.1, 9, 'Много остатков (no-till, стерня)', '#8c510a']]
     };
     const ui = {};
     let searching = 0, lastCalc = null, ctrT = 0;
@@ -2942,7 +2985,7 @@ function snShpZip(feats, base) {
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const tileOf = id => ((/_(\d{2}[A-Z]{3})_/.exec(id || '')) || [])[1] || '';
-    const variant = { dates: 'sentinel2', ndvi: 'ndvi', ndmi: 'ndmi', nbr: 'nbr', change: 'ndvi' };   // выбранный вариант слоя в каждом разделе
+    const variant = { dates: 'sentinel2', ndvi: 'ndvi', ndmi: 'ndmi', nbr: 'nbr', gndvi: 'gndvi', ndre: 'ndre', savi: 'savi', ndwi: 'ndwi', ndti: 'ndti', change: 'ndvi' };   // выбранный вариант слоя в каждом разделе
     const layerOf = s => variant[s];
     const q = (s, n) => ui[s].pane.querySelector('[data-sn="' + n + '"]');
     const eachPane = fn => Object.keys(ui).forEach(s => fn(s, ui[s].pane));
@@ -2974,7 +3017,7 @@ function snShpZip(feats, base) {
             '<div class="dw-block sn-hd"><div class="sn-hd-row"><i class="fas ' + d.icon + '"></i><div><b>' + d.name + '</b><span>' + d.sub + '</span></div></div></div>' +
             toolsTpl() +
             '<div class="dw-block"><div class="dw-title">Что сравнивать</div>' +
-            '<div class="sn-vt" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '"><i class="fas ' + ({ sentinel2: 'fa-image', falsecolor: 'fa-seedling', ndvi: 'fa-leaf', ndmi: 'fa-droplet', nbr: 'fa-wheat-awn' }[v.l] || 'fa-layer-group') + '"></i><span>' + ({ sentinel2: 'RGB', falsecolor: 'CIR' }[v.l] || v.t) + '</span></button>').join('') + '</div>' +
+            '<div class="sn-vt" role="group">' + d.vars.map(v => '<button type="button" data-sn-var="' + v.l + '" title="' + v.h + '"><i class="fas ' + ({ sentinel2: 'fa-image', falsecolor: 'fa-seedling', ndvi: 'fa-leaf', ndmi: 'fa-droplet', nbr: 'fa-wheat-awn', gndvi: 'fa-spa', ndre: 'fa-vial', savi: 'fa-tree', ndwi: 'fa-water', ndti: 'fa-bars-staggered' }[v.l] || 'fa-layer-group') + '"></i><span>' + ({ sentinel2: 'RGB', falsecolor: 'CIR' }[v.l] || v.t) + '</span></button>').join('') + '</div>' +
             '<div class="dw-title sn-dt-t">Даты снимков</div>' + [1, 2].map(i => '<div class="sn-cdd"><button type="button" class="sn-cdd-t" data-sc-open="' + i + '" title="Выбрать дату снимка"><i class="fas fa-calendar-days"></i><b>Снимок ' + i + '</b><span data-sn="scD' + i + '">выбрать дату</span><i class="fas fa-chevron-down sn-cdd-ch"></i></button>' +
                 '<div class="sn-cdd-p" hidden><div class="sn-c-h"><button type="button" class="sn-c-n" data-sc-nav="-1" data-sc-i="' + i + '"><i class="fas fa-chevron-left"></i></button><b data-sn="scM' + i + '"></b><button type="button" class="sn-c-n" data-sc-nav="1" data-sc-i="' + i + '"><i class="fas fa-chevron-right"></i></button></div>' +
                 '<div class="sn-c-w"><span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span></div><div class="sn-c-g" data-sn="scC' + i + '"></div></div></div>').join('') +

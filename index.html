@@ -309,6 +309,11 @@
                         <button type="button" class="sp-tile" data-bp="change" style="--c:#6366f1" title="Сравнение снимков&#10;Два снимка Sentinel-2 на разные даты рядом: карта делится на две части, внизу под каждым — дата, календарь и статистика индекса. Область — рисование или импорт фигуры (KML, GeoJSON, Excel, XML Росреестра)."><i class="fas fa-code-compare"></i><span>Сравнение снимков</span></button>
                         <button type="button" class="sp-tile" data-bp="ndmi" style="--c:#0284c7" title="NDMI — влажность растительности&#10;Оценивает содержание влаги в растениях: помогает заметить засуху и водный стресс посевов. Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
                         <button type="button" class="sp-tile" data-bp="nbr" style="--c:#f59e0b" title="NBR — индекс состояния покрова&#10;Оценивает покров по ближнему и коротковолновому ИК: сухая биомасса, угнетённые посевы, голая почва; сравнение дат показывает динамику (уборка, засуха, обработка). Выбор даты, превью, область и скачивание GeoTIFF."><i class="fas fa-wheat-awn"></i><span>NBR</span></button>
+                        <button type="button" class="sp-tile" data-bp="gndvi" style="--c:#14b8a6" title="GNDVI — Хлорофилл по зелёному каналу&#10;Хлорофилл по зелёному каналу. Выбор даты, превью, область, калькулятор статистики и скачивание GeoTIFF."><i class="fas fa-spa"></i><span>GNDVI</span></button>
+                        <button type="button" class="sp-tile" data-bp="ndre" style="--c:#a855f7" title="NDRE — Азот и хлорофилл (Red Edge)&#10;Азот и хлорофилл (Red Edge). Выбор даты, превью, область, калькулятор статистики и скачивание GeoTIFF."><i class="fas fa-vial"></i><span>NDRE</span></button>
+                        <button type="button" class="sp-tile" data-bp="savi" style="--c:#eab308" title="SAVI — Вегетация с поправкой на почву&#10;Вегетация с поправкой на почву. Выбор даты, превью, область, калькулятор статистики и скачивание GeoTIFF."><i class="fas fa-tree"></i><span>SAVI</span></button>
+                        <button type="button" class="sp-tile" data-bp="ndwi" style="--c:#06b6d4" title="NDWI — Вода и переувлажнение&#10;Вода и переувлажнение. Выбор даты, превью, область, калькулятор статистики и скачивание GeoTIFF."><i class="fas fa-water"></i><span>NDWI</span></button>
+                        <button type="button" class="sp-tile" data-bp="ndti" style="--c:#92400e" title="NDTI — Растительные остатки, стерня&#10;Растительные остатки, стерня. Выбор даты, превью, область, калькулятор статистики и скачивание GeoTIFF."><i class="fas fa-bars-staggered"></i><span>NDTI</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="tools">
@@ -632,6 +637,11 @@
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndvi" title="NDVI — индекс растительности"><i class="fas fa-leaf"></i><span>NDVI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndmi" title="NDMI — индекс влажности растительности"><i class="fas fa-cloud-rain"></i><span>NDMI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="nbr" title="NBR — состояние растительного покрова"><i class="fas fa-wheat-awn"></i><span>NBR</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="gndvi" title="GNDVI — Хлорофилл по зелёному каналу"><i class="fas fa-spa"></i><span>GNDVI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndre" title="NDRE — Азот и хлорофилл (Red Edge)"><i class="fas fa-vial"></i><span>NDRE</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="savi" title="SAVI — Вегетация с поправкой на почву"><i class="fas fa-tree"></i><span>SAVI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndwi" title="NDWI — Вода и переувлажнение"><i class="fas fa-water"></i><span>NDWI</span></button>
+              <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="ndti" title="NDTI — Растительные остатки, стерня"><i class="fas fa-bars-staggered"></i><span>NDTI</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="change" title="Сравнение снимков — два снимка Sentinel-2 на разные даты"><i class="fas fa-code-compare"></i><span>Сравнение снимков</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="shape" title="Границы, форма и кадастр участка: размеры, компактность, координаты вершин, адрес, пересечения с кадастром"><i class="fas fa-draw-polygon"></i><span>Границы, форма и кадастр</span></button>
               <button class="bp-tab" role="tab" aria-selected="false" data-bp-tab="catalog" title="Каталог данных"><i class="fas fa-folder-open"></i><span>Каталог</span></button>
@@ -1188,6 +1198,21 @@
           </div>
           <div class="bottom-panel-body bp-pane" data-bp-pane="nbr" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-wheat-awn"></i><div><p>NBR</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="gndvi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-spa"></i><div><p>GNDVI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndre" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-vial"></i><div><p>NDRE</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="savi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-tree"></i><div><p>SAVI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndwi" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-water"></i><div><p>NDWI</p><span>Загрузка раздела…</span></div></div>
+          </div>
+          <div class="bottom-panel-body bp-pane" data-bp-pane="ndti" role="tabpanel">
+              <div class="bp-empty"><i class="fas fa-bars-staggered"></i><div><p>NDTI</p><span>Загрузка раздела…</span></div></div>
           </div>
           <div class="bottom-panel-body bp-pane" data-bp-pane="change" role="tabpanel">
               <div class="bp-empty"><i class="fas fa-code-compare"></i><div><p>Сравнение снимков</p><span>Загрузка раздела…</span></div></div>

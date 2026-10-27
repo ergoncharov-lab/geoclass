@@ -1193,6 +1193,9 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 .pp-info { display: grid; gap: 9px; margin: -2px 0 14px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--ac) 7%, var(--sc-white)); border-left: 4px solid var(--ac); font-size: 12.5px; line-height: 1.5; color: var(--sc-slate-dark); }
 .pp-sub.closed .pp-info, .pp-none .pp-info { display: none; }
 .pp-all .pp-i-btn { background: var(--ac); color: var(--sc-white); }
+.pp-h-btn { flex: none; align-self: center; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; aspect-ratio: 1 / 1; padding: 0; margin-left: 6px; line-height: 1; border-radius: 50%; border: 1px solid #cbd5e1; background: #f1f5f9; color: #64748b; font-size: 13px; cursor: pointer; transition: .15s; }
+.pp-h-btn:hover { background: #e2e8f0; color: #334155; border-color: #94a3b8; }
+html.pp-printing .pp-h-btn { display: none !important; }
 .pp-info b { display: block; margin-bottom: 1px; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ac); }
 .pp-mc { display: grid; grid-template-columns: 405px minmax(0, 1fr); gap: 22px; align-items: start; }
 .pp-sub.nomap .pp-mc { grid-template-columns: minmax(0, 1fr); }
@@ -1261,7 +1264,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 @media (max-width: 900px) { .pp-mc, .pp-dn, .pp-dn2 { grid-template-columns: 1fr; } .pp-mapw { max-width: 340px; } .pp-db .r { grid-template-columns: minmax(100px, 150px) minmax(0, 1fr) auto; } }
 @media print {
     .pp-info { display: grid !important; }
-    .pp-i-btn, .pp-bar { display: none !important; }
+    .pp-i-btn, .pp-h-btn, .pp-bar { display: none !important; }
     .pp-sub { break-inside: avoid; }
 }
 
@@ -2175,3 +2178,25 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 /* без разделительной линии между плитками меню и анимацией (линия — нижняя граница блока .section.sp-home) */
 .tab-art.gc-tips { border-top: 0; }
 .sp-home.section { border-bottom: 0; }
+/* раздел паспорта раскрыт «за кадром» на время выгрузки в Excel: есть размеры для снимков, но на экране ничего не меняется */
+#passportPane .pp-sec.pp-xbg { position: absolute !important; left: -20000px; top: 0; visibility: hidden; pointer-events: none; }
+
+/* диаграммы пересечений с кадастром: в паспорте три в строку, в панели анализа в столбик */
+.pp-cadcharts { display: grid; gap: 14px; margin-top: 14px; }
+.pp-cadcharts .pp-ch { margin-top: 0; }
+.pp-cc-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pp-cc-col { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 900px) { .pp-cc-row { grid-template-columns: minmax(0, 1fr); } }
+.pp-cdr { margin: 7px 0; }
+.pp-cdl { display: block; font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-cdv { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+.pp-cdbar { flex: 1; min-width: 0; height: 10px; border-radius: 6px; background: #e2e8f0; overflow: hidden; }
+.pp-cdbar i { display: block; height: 100%; border-radius: 6px; }
+.pp-cdv b { flex: none; font-size: 11.5px; white-space: nowrap; }
+
+/* ход формирования отчёта (Excel / PDF / HTML) — в шапке паспорта */
+.pp-prog { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 5px 12px; border-radius: 99px; border: 1px solid #e2e8f0; background: #f1f5f9; color: #475569; font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.pp-prog[hidden] { display: none; }
+.pp-prog.ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.pp-prog.err { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+html.pp-printing .pp-prog { display: none !important; }
