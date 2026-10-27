@@ -10,7 +10,9 @@
         dates: 'im-dates', ndvi: 'im-ndvi', ndmi: 'im-ndmi', nbr: 'im-nbr', change: 'im-change',
         draw: 'tl-draw', measure: 'tl-measure', '3d': 'tl-3d', 'export': 'tl-export', agro: 'tl-agro',
         cadastre: 'ly-cadastre', userlayers: 'ly-user', catalog: 'ly-catalog',
-        weather: 'wx-forecast', climate: 'wx-climate', gdd: 'wx-gdd', frost: 'wx-frost', windwork: 'wx-wind'
+        weather: 'wx-forecast', climate: 'wx-climate', gdd: 'wx-gdd', frost: 'wx-frost', windwork: 'wx-wind',
+        gndvi: 'im-gndvi', ndre: 'im-ndre', savi: 'im-savi', ndwi: 'im-ndwi', ndti: 'im-ndti',   // индексы: раньше для них кнопка «?» была скрыта
+        soil: 'ly-soil', objects: 'ly-objects', matrix: 'tl-matrix'
     };
     var TAB = { analysis: 'an-site', reports: 'st-reports', catalog: 'ly-catalog', bookmarks: 'st-bm', sources: 'src' };
 

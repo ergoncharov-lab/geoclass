@@ -407,6 +407,48 @@ function overlayLayer(base, ...overlays) {
     return new CompositeTileLayer([base].concat(overlays));
 }
 
+// ---------- ЯНДЕКС: выровненная подложка ----------
+// Тайлы Яндекса лежат в эллипсоидальной меркаторской проекции (EPSG:3395), карта — в сферической (EPSG:3857).
+// По долготе они совпадают, по широте — нет (сдвиг до десятков км). Поэтому каждый тайл 3857 собирается на canvas
+// из строк исходных тайлов Яндекса с пересчётом широты (формула эллипсоида WGS-84). Остальные подложки не затронуты.
+const YANDEX_E = 0.0818191908426;
+const YANDEX_URLS = {
+    map: 'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+    sat: 'https://sat0{s}.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+    skl: 'https://core-renderer-tiles.maps.yandex.net/tiles?l=skl&x={x}&y={y}&z={z}&scale=1&lang=ru_RU'
+};
+const YandexLayer = L.GridLayer.extend({
+    options: { ylayer: 'map', maxNativeZoom: 18, maxZoom: 20, attribution: '&copy; Яндекс' },
+    _src: function (x, y, z) {   // адрес исходного тайла Яндекса (без перепроекции)
+        return YANDEX_URLS[this.options.ylayer].replace('{s}', 1 + (x + y) % 4).replace('{x}', x).replace('{y}', y).replace('{z}', z);
+    },
+    createTile: function (coords, done) {
+        const z = coords.z, n = Math.pow(2, z), W = 256 * n, c = document.createElement('canvas'), self = this;
+        c.width = c.height = 256;
+        const yMerc = function (py) {   // пиксель по вертикали в 3857 → в 3395 того же масштаба
+            const s = Math.sin(Math.atan(Math.sinh(Math.PI * (1 - 2 * py / W))));
+            return W / 2 * (1 - (Math.atanh(s) - YANDEX_E * Math.atanh(YANDEX_E * s)) / Math.PI);
+        };
+        const s0 = yMerc(coords.y * 256), s1 = yMerc(coords.y * 256 + 256), k = 256 / (s1 - s0);
+        const t0 = Math.max(0, Math.floor(s0 / 256)), t1 = Math.min(n - 1, Math.floor((s1 - 1e-6) / 256));
+        const sx = ((coords.x % n) + n) % n, ctx = c.getContext('2d');
+        let left = t1 - t0 + 1;
+        if (left <= 0) { setTimeout(function () { done(null, c); }, 0); return c; }
+        for (let ty = t0; ty <= t1; ty++) {
+            const img = new Image();
+            img.onload = function () { ctx.drawImage(img, 0, (ty * 256 - s0) * k, 256, 256 * k); if (!--left) done(null, c); };
+            img.onerror = function () { if (!--left) done(null, c); };
+            img.src = self._src(sx, ty, z);
+        }
+        return c;
+    }
+});
+function yandexLayer(kind) {
+    if (kind === 'map') return new YandexLayer({ ylayer: 'map' });
+    if (kind === 'sat') return new YandexLayer({ ylayer: 'sat' });
+    return overlayLayer(new YandexLayer({ ylayer: 'sat', zIndex: 1 }), new YandexLayer({ ylayer: 'skl', zIndex: 2, attribution: '' }));
+}
+
 // ============================================================
 //  SENTINEL-2: реальные снимки по датам.
 //  Каталог (даты, облачность): AWS Earth Search. Сами снимки читаются прямо в браузере
@@ -1710,6 +1752,9 @@ const layerFactories = {
     google: () => googleTiles('m'),
     google_sat: () => googleTiles('s'),
     google_hybrid: () => googleTiles('y'),
+    yandex: () => yandexLayer('map'),
+    yandex_sat: () => yandexLayer('sat'),
+    yandex_hybrid: () => yandexLayer('hybrid'),
     '2gis': () => L.tileLayer('https://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', {
         attribution: '&copy; 2ГИС',
         maxZoom: 18
@@ -1798,6 +1843,7 @@ Object.keys(layerFactories).forEach(key => { baseLayers[key] = layerFactories[ke
 
 const LAYER_NAMES = {
     osm: 'OSM', google: 'Google', google_sat: 'Спутник', google_hybrid: 'Гибрид',
+    yandex: 'Яндекс', yandex_sat: 'Яндекс Спутник', yandex_hybrid: 'Яндекс Гибрид',
     '2gis': '2ГИС', opentopo: 'Topo', esri_sat: 'Esri', esri_imagery: 'Esri Imagery',
     sentinel2: 'Sentinel-2', landsat8: 'Landsat', ndvi: 'NDVI',
     ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', falsecolor: 'Ложные цвета', ndvi_c: 'Контрастный NDVI', esri_landcover: 'Esri Land Cover',
@@ -1825,6 +1871,9 @@ const LAYER_THUMBS = {
     google:         'https://mt1.google.com/vt/lyrs=m&x=4&y=2&z=3',
     google_sat:     'https://mt1.google.com/vt/lyrs=s&x=4&y=2&z=3',
     google_hybrid:  'https://mt1.google.com/vt/lyrs=y&x=4&y=2&z=3',
+    yandex:         'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x=4&y=2&z=3&scale=1&lang=ru_RU',
+    yandex_sat:     'https://sat01.maps.yandex.net/tiles?l=sat&x=4&y=2&z=3&scale=1&lang=ru_RU',
+    yandex_hybrid:  ['https://core-renderer-tiles.maps.yandex.net/tiles?l=skl&x=4&y=2&z=3&scale=1&lang=ru_RU', 'https://sat01.maps.yandex.net/tiles?l=sat&x=4&y=2&z=3&scale=1&lang=ru_RU'],
     '2gis':         'https://tile2.maps.2gis.com/tiles?x=4&y=2&z=3&v=1',
     opentopo:       'https://a.tile.opentopomap.org/3/4/2.png',
     esri_sat:       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
@@ -2037,7 +2086,7 @@ function updateLayerLegend() {
 }
 
 // Подложка по умолчанию — Google
-const DEFAULT_LAYER = 'google';
+const DEFAULT_LAYER = 'yandex';
 let currentLayer = DEFAULT_LAYER;
 let currentTileLayer = baseLayers[DEFAULT_LAYER].addTo(map);
 
@@ -9188,6 +9237,8 @@ function m3LayerToRasters(layer, out) {
         spec.tiles = [`${layer._url}${sep}SERVICE=WMS&VERSION=${p.version || '1.3.0'}&REQUEST=GetMap&LAYERS=${encodeURIComponent(p.layers)}` +
                       `&STYLES=&FORMAT=${encodeURIComponent(p.format || 'image/png')}&TRANSPARENT=${p.transparent ? 'true' : 'false'}` +
                       `&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`];
+    } else if (layer instanceof YandexLayer) {
+        spec.tiles = [layer._src('{x}', '{y}', '{z}')];
     } else if (layer._url) {
         const subs = typeof o.subdomains === 'string' ? o.subdomains.split('') : (o.subdomains || ['a', 'b', 'c']);
         spec.tiles = layer._url.indexOf('{s}') >= 0 ? subs.map(s => layer._url.replace('{s}', s)) : [layer._url];
