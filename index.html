@@ -235,7 +235,7 @@
             <div class="sp-search">
             <div class="map-search">
         <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Город, улица или кадастровый номер..." autocomplete="off">
+        <input type="text" id="searchInput" placeholder="Адрес или кадастровый номер" autocomplete="off">
         <button id="searchBtn" title="Найти адрес, город или координаты"><i class="fas fa-search"></i></button>
     </div>
     <div id="searchResults" class="search-results"></div>
@@ -1298,9 +1298,13 @@
                 </button>
                 <div class="widget-panel widget-panel-horizontal" id="baseLayersPanel">
                     <div class="widget-panel-body-horizontal">
-                        <div class="layer-chip active" data-layer="google" title="Google Карты — универсальная дорожная схема с подписями">
+                        <div class="layer-chip" data-layer="google" title="Google Карты — универсальная дорожная схема с подписями">
                             <span>Google</span>
                             <div class="layer-thumb" data-thumb="google"></div>
+                        </div>
+                        <div class="layer-chip active" data-layer="yandex" title="Яндекс Карты — подробная схема России и СНГ, подложка выровнена по проекции карты">
+                            <span>Яндекс</span>
+                            <div class="layer-thumb" data-thumb="yandex"></div>
                         </div>
                         <div class="layer-chip" data-layer="osm" title="OpenStreetMap — открытая карта мира, самые подробные данные по дорогам и объектам">
                             <span>OSM</span>
@@ -1355,6 +1359,14 @@
                         <div class="layer-chip" data-layer="google_sat" title="Google Спутник — спутниковые снимки Google без подписей">
                             <span>Google</span>
                             <div class="layer-thumb" data-thumb="google_sat"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="yandex_sat" title="Яндекс Спутник — спутниковые снимки Яндекса без подписей, выровнены по проекции карты">
+                            <span>Яндекс</span>
+                            <div class="layer-thumb" data-thumb="yandex_sat"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="yandex_hybrid" title="Яндекс Гибрид — снимки Яндекса с подписями, выровнены по проекции карты">
+                            <span>Яндекс Гибрид</span>
+                            <div class="layer-thumb" data-thumb="yandex_hybrid"></div>
                         </div>
                         <div class="layer-chip" data-layer="google_hybrid" title="Google Гибрид — спутниковые снимки Google с дорогами и подписями">
                             <span>Гибрид</span>
