@@ -34,7 +34,7 @@
     function sec(n, icon, title, sub, color, inner) { return '<section class="pp-sec" style="--ac:' + color + '"><div class="pp-sec-h"><span class="pp-ic"><i class="fas fa-' + icon + '"></i></span><div class="pp-ht"><h3>' + title + '</h3><p>' + sub + '</p></div><span class="pp-n">' + n + '</span></div><div class="pp-sec-b">' + inner + '</div></section>'; }
     // блок: o.t — заголовок, o.i — значок, o.c — цвет, o.info — [что это, зачем нужно, как считается], o.map — колонка слева (квадратная карта), o.id/o.body — данные справа
     // ---------- кнопка «?» в шапке блока: открывает справку на нужном разделе ----------
-    var HELP_ID = { ppWx_w: 'wx-wind', ppWx_f: 'wx-forecast', ppWx_b: 'wx-frost', ppWx_c: 'wx-climate', ppSoilSum: 'an-soil', ppCadBody: 'ly-cadastre' };
+    var HELP_ID = { ppWx_w: 'wx-wind', ppWx_f: 'wx-forecast', ppWx_b: 'wx-frost', ppWx_c: 'wx-climate', ppSoilSum: 'an-soil', ppCadBody: 'ly-cadastre', ppOoptBody: 'ly-cadastre' };
     var HELP_T = [[/^Границы/, 'an-shape'], [/кадастр/i, 'ly-cadastre'], [/землепользования/, 'an-site'], [/^Sentinel-2/, 'im-dates'],
         [/^NDVI/, 'im-ndvi'], [/^NDMI/, 'im-ndmi'], [/^NBR/, 'im-nbr'], [/^GNDVI/, 'im-gndvi'], [/^NDRE/, 'im-ndre'], [/^SAVI/, 'im-savi'], [/^NDWI/, 'im-ndwi'], [/^NDTI/, 'im-ndti'],
         [/Сводные расчётные/, 'an-soil'], [/^(Высоты|Уклоны|Экспозиция)/, 'an-profile'], [/^3D/, 'tl-3d'],
@@ -493,11 +493,16 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             info: ['Список земельных участков из кадастра (слой «Земельные участки из ЕГРН» НСПД), границы которых пересекаются с контуром участка, с площадью пересечения, площадью по ЕГРН, видом разрешённого использования, категорией земель и сведениями о правах. На карте слева кадастровые участки показаны с подписями, пересечения — красным.',
                 'Показывает, на каких кадастровых участках фактически расположен контур, какая его часть не имеет кадастровых границ, и помогает найти наложения, чересполосицу и несовпадение вида использования с фактическим.',
                 'Слой кадастра опрашивается по сетке точек внутри контура и вдоль его границы (шаг подбирается по размеру участка); найденные контуры пересекаются с границей участка (Turf), площадь пересечения — геодезическая. Узкие участки уже шага сетки могут быть пропущены.']
+        }) + blk({
+            t: 'Пересечения с ООПТ', i: 'tree', map: mapBox('oopt'), id: 'ppOoptBody', cls: 'pp-cadsub',
+            info: ['Список особо охраняемых природных территорий (слой «ООПТ» НСПД), границы которых пересекаются с контуром участка: площадь и доля пересечения, вид территории и статус. На карте слева ООПТ показаны зелёным, пересечения с контуром — красным.',
+                'Позволяет заранее увидеть ограничения хозяйственной деятельности: на ООПТ действует особый режим землепользования. Приаэродромные территории в расчёт не включаются.',
+                'Слой ООПТ опрашивается по сетке точек внутри контура и вдоль его границы; найденные границы пересекаются с контуром (Turf), площадь пересечения — геодезическая. Охранные зоны и региональные или местные ООПТ, не учтённые в публичной карте, могут отсутствовать — для юридически значимых выводов запрашивайте сведения у уполномоченных органов.']
         }));
     }
     // ---------- статусы загрузки блоков (в шапке паспорта) ----------
     var RETRY_WAIT = [3000, 7000, 15000];   // автоповтор неудавшихся блоков: паузы перед 1-й, 2-й и 3-й попыткой, мс
-    var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', wx: 'Погода', addr: 'Адрес', cad: 'Кадастр' };
+    var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', wx: 'Погода', addr: 'Адрес', cad: 'Кадастр', oopt: 'ООПТ' };
     var ST_CSS = [
         '#passportPane .pp-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}#ppSt.pp-stbar{position:relative;display:flex;align-items:center;gap:10px;flex:1 1 100%;order:10;min-width:0;margin:0;padding:7px 12px 9px;border-radius:12px;background:linear-gradient(180deg,#fff,#f8fafc);border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.08);overflow:hidden}',
         '#ppSt .pp-stp{font:800 15px/1 system-ui,sans-serif;color:#0f172a;min-width:42px;text-align:right}',
@@ -628,7 +633,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         stNav(top, h);
     }
     // ---------- панель быстрых переходов по разделам: одна строка под статусами загрузки, закреплена вместе с шапкой ----------
-    var NAV = ['Общее', 'Классы земли', 'Снимки', 'Почва', 'Рельеф', 'Логистика', 'Климат', 'Итог'], navCtx = null, navSig = '', navT = 0, navG = [], NKEYS = [['addr', 'cad'], ['cls'], ['sat'], ['soil'], ['elev'], ['log'], ['clim', 'wx'], []], navA = 0, navS = -1, navLock = 0, navRaf = 0;
+    var NAV = ['Общее', 'Классы земли', 'Снимки', 'Почва', 'Рельеф', 'Логистика', 'Климат', 'Итог'], navCtx = null, navSig = '', navT = 0, navG = [], NKEYS = [['addr', 'cad', 'oopt'], ['cls'], ['sat'], ['soil'], ['elev'], ['log'], ['clim', 'wx'], []], navA = 0, navS = -1, navLock = 0, navRaf = 0;
     function navGroups() {   // разделы и все блоки внутри них (каждый индекс, почвенный показатель, климатический блок…)
         var g = [];
         Array.prototype.forEach.call(body.querySelectorAll('.pp-sec'), function (sc, i) {
@@ -759,9 +764,16 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 (it.geometry.type === 'Polygon' ? [it.geometry.coordinates] : it.geometry.coordinates).forEach(function (pc) {
                     plots.forEach(function (pl) { try { var x = turf.intersect(pl, turf.polygon(pc)), sq = x ? turf.area(x) : 0; if (sq > 0) { ia += sq; parts.push(x); } } catch (e) { /* вырожденная геометрия */ } });
                 });
-                if (ia >= 1) { it.ia = ia; it.parts = parts; items.push(it); cover += ia; }
+                // соседние участки, лишь «задевающие» контур по границе (узкие щели из-за неточности границ), не считаем:
+                // оставляем, если пересечение заметно относительно контура (≥ 0,5 %) или относительно самого участка (≥ 5 %)
+                var pa = 0; try { pa = turf.area({ type: 'Feature', properties: {}, geometry: it.geometry }); } catch (e) { /* нет площади участка */ }
+                if (ia >= 1 && (ia >= tot * 0.005 || (pa > 0 && ia >= pa * 0.05))) { it.ia = ia; it._pa = pa; it.parts = parts; items.push(it); cover += ia; }
             });
             items.sort(function (a, b) { return b.ia - a.ia; });
+            // контур взят из кадастрового слоя (или повторяет границу участка): пересечение с этим участком совпадает с ним почти целиком —
+            // считаем его равным 100 % контура, соседние участки с узкими щелями по границе не показываем
+            var tp0 = items[0];
+            if (!layer && tp0 && tot > 0 && tp0.ia >= tot * 0.98 && tp0._pa && tp0.ia >= tp0._pa * 0.98) { tp0.ia = tot; tp0.parts = plots; items = [tp0]; cover = tot; }
             return { items: items, cover: cover, tot: tot, req: r.req, bad: r.bad, step: r.step };
         });
     }
@@ -853,9 +865,9 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     // ---- диаграммы по пересечениям с кадастром: суммарная площадь пересечения по виду права, категории земель и виду использования ----
     // mode: 'row' — три в строку (паспорт), 'col' — в столбик (панель анализа)
-    function cadDia(its, tot, mode) {
+    function cadDia(its, tot, mode, defs0) {
         var PAL = ['#f59e0b', '#6366f1', '#16a34a', '#0ea5e9', '#ec4899', '#14b8a6', '#94a3b8'];
-        var defs = [
+        var defs = defs0 || [
             ['Вид права', function (it) { return it.rights && it.rights.length ? it.rights.map(function (r) { return r[1]; }).join(' / ') : (it.own || ''); }],
             ['Категория земель', function (it) { return it.cat || ''; }],
             ['Вид использования', function (it) { return it.use || ''; }]];
@@ -910,6 +922,62 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         };
         var lg = document.getElementById('ppLeg_cadx'), sw = function (c, t) { return '<i style="display:inline-block;width:10px;height:10px;background:' + c + ';opacity:.6;border:1px solid ' + c + ';margin:0 4px 0 8px;vertical-align:-1px"></i>' + t; };
         if (lg) lg.innerHTML = '<div class="pp-legsrc">' + sw('#f59e0b', 'кадастровые участки') + sw('#ef4444', 'пересечение с контуром') + sw('#2563eb', 'выбранный в таблице') + '<br>Источник: НСПД (Росреестр)</div>';
+    }
+    // ---------- пересечения с ООПТ в паспорте (слой «ООПТ» НСПД) ----------
+    function ooptRun(gj, tok) {
+        return cadCalc(gj, function () { return tok === seq; }, function (d, t) { var e = tok === seq && !D.oopt && document.getElementById('ppOoptBody'); if (e) e.innerHTML = cadBar('Опрос слоя ООПТ НСПД', d, t); }, 'p').then(function (x) {
+            if (!x) return;
+            D.oopt = x; ooptShow();
+        });
+    }
+    function ooptSel(i) {
+        var d = D.oopt, el = document.getElementById('ppOoptBody'); if (!d) return;
+        d.sel = d.sel === i ? -1 : i;
+        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-oi]'), function (tr) { tr.classList.toggle('pp-cadsel', +tr.getAttribute('data-oi') === d.sel); });
+        (d.lay || []).forEach(function (l, k) {
+            var on = k === d.sel, c = on ? CAD_ST.s : [{ color: '#16a34a', weight: 1.8, fillColor: '#16a34a', fillOpacity: 0.1 }, { color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.45 }];
+            l.base.setStyle(c[0]); l.parts.forEach(function (x) { x.setStyle(c[1]); });
+            if (on) { l.base.bringToFront(); l.parts.forEach(function (x) { x.bringToFront(); }); }
+        });
+    }
+    function ooptShow() {
+        var d = D.oopt, el = document.getElementById('ppOoptBody'); if (!el || !d) return;
+        var its = d.items, pc = Math.min(100, d.cover / d.tot * 100); d.sel = -1;
+        var rows = its.map(function (it, i) {
+            return '<tr data-oi="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.name || it.num || 'ООПТ без названия') + '</b></td><td>' + esc(it.zone || it.kind || '—') + '</td><td>' + esc(it.stat || '—') + '</td><td>' + nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га)</td><td>' + nf(it.ia / d.tot * 100, 1) + ' %</td></tr>';
+        }).join('');
+        var cap = 'Источник — слой «ООПТ» НСПД (Росреестр). Показаны особо охраняемые природные территории, границы которых пересекают контур; приаэродромные территории не учитываются. Охранные зоны и неучтённые в публичной карте региональные и местные ООПТ могут отсутствовать. Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + (d.bad ? ', без ответа — ' + d.bad : '') + '. Нажмите на строку — территория выделится на карте.';
+        var bt = '<span class="pp-cadbt" style="display:inline-flex;margin-left:8px;vertical-align:middle"><details class="pp-cadmenu pp-expm"><summary class="pp-btn pp-vcopy" title="Экспорт ООПТ"><i class="fas fa-download"></i> Экспорт <i class="fas fa-chevron-down"></i></summary><div class="pp-cadmenu-l">' + [['kml', 'KML'], ['geojson', 'GeoJSON'], ['shp', 'SHP'], ['dxf', 'DXF']].map(function (x) { return '<button type="button" class="pp-btn" data-ooptx="' + x[0] + '" title="Границы ООПТ целиком — ' + x[1] + '"><i class="fas fa-file-export"></i> ' + x[1] + '</button>'; }).join('') + '</div></details></span>';
+        el.innerHTML = tiles([['ООПТ пересекает контур', nf(its.length, 0), '', '#16a34a'], ['Покрыто ООПТ', nf(pc, 1) + ' %', nf(d.cover / 1e4, 2) + ' га', '#dc2626'], ['Вне ООПТ', nf(100 - pc, 1) + ' %', nf(Math.max(0, d.tot - d.cover) / 1e4, 2) + ' га', '#64748b']]) +
+            (its.length ? '<div class="pp-cadtbl">' + chart('Список пересекаемых ООПТ ' + bt, '<div class="pp-vt"><table><thead><tr><th>№</th><th>Название</th><th>Вид территории</th><th>Статус</th><th>Пересечение</th><th>% контура</th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' : '<div class="pp-note"><i class="fas fa-circle-check"></i> Пересечений с ООПТ не найдено. ' + esc(cap) + '</div>');
+        if (its.length) el.insertAdjacentHTML('beforeend', cadDia(its, d.tot, 'row', [['Вид территории', function (it) { return it.zone || it.kind || ''; }]]));
+        Array.prototype.forEach.call(el.querySelectorAll('[data-ooptx]'), function (b) {
+            b.onclick = function (ev) {
+                ev.stopPropagation();
+                var mn = b.closest('details'); if (mn) mn.removeAttribute('open');
+                if (window.gcCadExport) window.gcCadExport(b.getAttribute('data-ooptx'), d.items, 'p');
+                else say('Экспорт недоступен: не загружен модуль кадастра (ux-extras.js)', true);
+            };
+        });
+        Array.prototype.forEach.call(el.querySelectorAll('tr[data-oi]'), function (tr) { tr.onclick = function () { ooptSel(+tr.getAttribute('data-oi')); }; });
+        var o = minis.oopt; if (!o) return;
+        d.lay = [];
+        its.forEach(function (it, i) {
+            var base = L.geoJSON({ type: 'Feature', geometry: it.geometry, properties: {} }, { style: { color: '#16a34a', weight: 1.8, fillColor: '#16a34a', fillOpacity: 0.1 } }).addTo(o.map), parts = it.parts.map(function (x) { return L.geoJSON(x, { style: { color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.45 }, interactive: false }).addTo(o.map); });
+            base.on('click', function () { ooptSel(i); var tr = el.querySelector('tr[data-oi="' + i + '"]'); if (tr && d.sel === i) { try { tr.scrollIntoView({ block: 'nearest' }); } catch (e) { /* без прокрутки */ } } });
+            d.lay.push({ base: base, parts: parts });
+        });
+        o.draw = function (g, m) {
+            var path = function (geom) { (geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates).forEach(function (pl) { pl.forEach(function (r) { r.forEach(function (pt, k) { var q = m.latLngToContainerPoint([pt[1], pt[0]]); if (k) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); }); g.closePath(); }); }); };
+            g.lineJoin = 'round';
+            its.forEach(function (it) { g.beginPath(); path(it.geometry); g.fillStyle = 'rgba(22,163,74,.12)'; g.fill('evenodd'); g.strokeStyle = '#16a34a'; g.lineWidth = 1.8; g.stroke(); });
+            its.forEach(function (it) { it.parts.forEach(function (x) { g.beginPath(); path(x.geometry); g.fillStyle = 'rgba(220,38,38,.45)'; g.fill('evenodd'); g.strokeStyle = '#dc2626'; g.lineWidth = 1; g.stroke(); }); });
+            var y = m.getSize().y - 62;
+            g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(8, y, 196, 42);
+            [['#16a34a', 'ООПТ'], ['#dc2626', 'пересечение с контуром']].forEach(function (x, k) { g.fillStyle = x[0]; g.globalAlpha = 0.6; g.fillRect(16, y + 8 + k * 16, 12, 10); g.globalAlpha = 1; g.strokeStyle = x[0]; g.lineWidth = 1; g.strokeRect(16, y + 8 + k * 16, 12, 10); g.fillStyle = '#0f172a'; g.font = '11px sans-serif'; g.fillText(x[1], 34, y + 17 + k * 16); });
+        };
+        var lg = document.getElementById('ppLeg_oopt'), sw = function (c, t) { return '<i style="display:inline-block;width:10px;height:10px;background:' + c + ';opacity:.6;border:1px solid ' + c + ';margin:0 4px 0 8px;vertical-align:-1px"></i>' + t; };
+        if (lg) lg.innerHTML = '<div class="pp-legsrc">' + sw('#16a34a', 'ООПТ') + sw('#dc2626', 'пересечение с контуром') + sw('#2563eb', 'выбранная в таблице') + '<br>Источник: НСПД (Росреестр)</div>';
     }
     // ---------- 2. классификация ----------
     var CLS = [['Пашня', '#f59e0b', 'обрабатываемые поля, посевы'], ['Луга и пастбища', '#10b981', 'травянистая растительность'], ['Лес', '#166534', 'древесная растительность'], ['Вода', '#0ea5e9', 'реки, озёра, пруды'], ['Застройка', '#64748b', 'здания, дороги, твёрдые покрытия'], ['Прочее', '#a8a29e', 'голая почва, кустарники, болота']];
@@ -1240,7 +1308,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             if (!f) { updateStatus('⚠️ В файле нет полигона', true); return; }
             shpCancel();
             var l = L.geoJSON(f, { style: SHP_ST }).getLayers()[0];
-            shpSet(l); map.fitBounds(l.getBounds());
+            shpSet(l); if (typeof gcFitSoft === 'function') gcFitSoft(l.getBounds()); else map.fitBounds(l.getBounds());
         }
     };
     function shpInit() {
@@ -1897,6 +1965,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         var out = [], s = D.soil && D.soil.S, e = D.elev, g = D.lg;
         out.push('Площадь участка — ' + nf(D.area / 1e4, 2) + ' га' + (D.cad ? ', кадастровый номер ' + esc(D.cad) : '') + '.');
         if (D.cadx && D.cadx.items.length) out.push('Контур пересекает кадастровых участков: ' + D.cadx.items.length + '; покрыто кадастровыми границами ≈ ' + nf(Math.min(100, D.cadx.cover / D.cadx.tot * 100), 1) + ' % площади.');
+        if (D.oopt) out.push(D.oopt.items.length ? 'Контур пересекает ООПТ: ' + D.oopt.items.length + '; покрыто ≈ ' + nf(Math.min(100, D.oopt.cover / D.oopt.tot * 100), 1) + ' % площади.' : 'Пересечений с ООПТ не найдено.');
         if (e) { out.push('Рельеф: перепад высот ' + nf(e.mx - e.mn, 0) + ' м' + (e.ms != null ? ', средний уклон ' + nf(e.ms, 1) + '°' : '') + (e.asp ? ', экспозиция преимущественно ' + e.asp : '') + '.');
             if (e.ms != null && e.ms >= 5) out.push('<b>Рекомендация:</b> уклон заметный — обработку вести поперёк склона, учесть риск водной эрозии.'); else if (e.ms != null) out.push('Рельеф не ограничивает механизированные работы.'); }
         if (s && s.phh2o) { var ph = s.phh2o.mean; out.push('Почва: pH ≈ ' + nf(ph, 1) + (ph < 5.5 ? ' — кислая; <b>рекомендация:</b> рассмотреть известкование.' : ph > 8 ? ' — щелочная; <b>рекомендация:</b> подобрать культуры, устойчивые к щелочности.' : ' — в благоприятном диапазоне.')); }
@@ -1930,7 +1999,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         // имя фигуры (стандартное или своё из «Списка объектов») + площадь — если это не кадастровый участок и не выписка
         D.name = D.cad ? '' : (forced ? (forced.meta.name || '') : (l._gcName || l._gcDef || (function () { var n = ''; if (typeof drawnItems !== 'undefined') drawnItems.eachLayer(function (g) { if (!n && g !== l && g.hasLayer && g.hasLayer(l)) n = g._gcName || g._gcDef || ''; }); return n; })()));
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : D.name ? ' «' + D.name + '» · ' + nf(D.area / 1e4, 2) + ' га' : '');
-        var T = { gen: 'Участок', cadx: 'Кадастр: пересечения', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', s2cir: 'Sentinel-2 · ложные цвета', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
+        var T = { gen: 'Участок', cadx: 'Кадастр: пересечения', oopt: 'ООПТ: пересечения', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', s2cir: 'Sentinel-2 · ложные цвета', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
         SOILS.forEach(function (p) { T['soil_' + p] = 'Почва'; });
         Object.keys(T).forEach(function (k) { mini(k, gj, T[k]); });
         stInit(); address(D.c, tok); if (D.satSel) stSet('sat', 'load');
@@ -1944,6 +2013,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             clim: [climRun, ['ppClBody'], function () { return D.clim ? '' : 'нет данных климата'; }, 'clim'],
             wx: [wxRun, WXG.map(function (g) { return 'ppWx_' + g.id; }), function () { return D.wx ? '' : 'нет данных погоды'; }, 'wx'],
             cad: [cadRun, ['ppCadBody'], function () { return D.cadx ? '' : 'нет данных НСПД'; }, 'cadx'],
+            oopt: [ooptRun, ['ppOoptBody'], function () { return D.oopt ? '' : 'нет данных НСПД'; }, 'oopt'],
             sat: [satRun, SATS.map(function (x) { return 'ppSatB_' + x.k; }), function () { return D.sat && Object.keys(D.sat).length ? '' : 'не удалось получить данные снимка'; }, 'sat']
         };
         var launch = function (k, again) {
@@ -1965,7 +2035,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 launch(k, true).then(function () { if (tok === seq) { summary(); auto(k); } });
             }, RETRY_WAIT[n]);
         };
-        var jobs = ['soil', 'elev', 'log', 'clim', 'wx', 'cad'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k).then(function () { auto(k); }); });
+        var jobs = ['soil', 'elev', 'log', 'clim', 'wx', 'cad', 'oopt'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k).then(function () { auto(k); }); });
         retry = function (k) {   // повтор одного раздела по клику на его плашку статуса
             if (tok !== seq) return;
             if (k === 'addr') { stSet('addr', 'load'); var ad = document.getElementById('ppAddr'); if (ad) ad.textContent = 'определяется…'; address(D.c, tok); return; }

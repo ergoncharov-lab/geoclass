@@ -3,7 +3,7 @@
    2) паспорт участка листается вбок: каждый раздел и каждый блок внутри — отдельная страница
    3) кнопки миниатюрные, длинные тексты свёрнуты (раскрываются по нажатию)
    Элементы, которые создаёт mobile.js, вне мобильного режима скрыты. */
-.mb-help-btn, .mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, .mb-mc-row, .mb-search-btn, .mb-route-btn, .mb-g, #mbPpBar { display: none; }
+.mb-help-btn, .mb-dots, .mb-fold, .mb-swipe, .mb-mc-toggle, .mb-mc-row, .mb-search-btn, .mb-route-btn, .mb-g, #mbPpBar, .mb-sd { display: none; }
 
 @media (max-width: 960px) {
     :root { --gc-nav: 52px; }
@@ -158,7 +158,8 @@
     /* ---------- карта: миниатюрные кнопки, виджеты справа сворачиваются ---------- */
     .mc-group .widget-btn, .mc-group > .map-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; font-size: 13px; }
     #map-section .map-controls-right { gap: 6px; }
-    .mb-mc-toggle { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 11px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.18); cursor: pointer; }
+    .mb-mc-toggle { display: flex; align-items: center; justify-content: center; flex: none; align-self: flex-end; width: 40px; height: 40px; min-width: 40px; padding: 0; box-sizing: border-box; border-radius: 12px; border: 1px solid rgba(15,23,42,.08); background: var(--sc-white); color: var(--sc-ink); font-size: 16px; box-shadow: 0 2px 10px rgba(15,23,42,.18); cursor: pointer; touch-action: manipulation; transition: transform .08s, background .08s; }
+    .mb-mc-toggle:active { transform: scale(.92); background: var(--sc-bg-soft); }
     /* раскрывающийся виджет: свёрнут — видна одна кнопка; раскрыт — ряд [рисование, длина, площадь] [поиск, маршрут, местоположение, север] выезжает влево от кнопки, прежние виджеты — вниз (mobile.js) */
     #map-section .map-controls-right { flex-wrap: nowrap !important; flex-direction: column !important; align-items: flex-end !important; align-content: flex-end; max-height: none !important; }
     .mb-mc-row { display: flex; flex-direction: row-reverse; align-items: center; align-self: flex-end; gap: 6px; }
@@ -173,8 +174,8 @@
     .mb-mc-row .mc-row > .map-btn { border-radius: 0; }
     .mb-mc-row .mc-row > .map-btn:first-child { border-radius: 11px 0 0 11px; }
     .mb-mc-row .mc-row > .map-btn:last-child { border-radius: 0 11px 11px 0; }
-    #map-section .map-controls-right:not(.mb-mc-off) .mb-mc-row > .mb-g { animation: mbSlideL .16s ease-out; }
-    #map-section .map-controls-right:not(.mb-mc-off) > :not(.mb-mc-row) { animation: mbSlideD .16s ease-out; }
+    #map-section .map-controls-right:not(.mb-mc-off) .mb-mc-row > .mb-g { animation: mbSlideL .1s ease-out; }
+    #map-section .map-controls-right:not(.mb-mc-off) > :not(.mb-mc-row) { animation: mbSlideD .1s ease-out; }
     @keyframes mbSlideL { from { transform: translateX(28px); } to { transform: none; } }
     @keyframes mbSlideD { from { transform: translateY(-10px); } to { transform: none; } }
     .mb-mc-toggle, .mc-group button, .gc-rail-btn, .sp-tile { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -194,7 +195,7 @@
     #spLoc.mb-loc span { font-size: 10px; flex: none; }
     #spLoc.mb-loc[hidden] { display: none; }
     #spLoc.mb-loc { display: none !important; }   /* местоположение и погода на карте на телефоне не показываем */
-    .gc-rail-btn[data-rail="catalog"], .gc-rail-btn[data-rail="bookmarks"], .gc-rail-btn[data-rail="help"], .gc-rail-sp { display: none !important; }   /* «Справка» — значком «?» в шапке */
+    .gc-rail-btn[data-rail="catalog"], .gc-rail-btn[data-rail="bookmarks"], .gc-rail-btn[data-rail="help"], .gc-rail-btn.gc-kbd, .gc-rail-sp { display: none !important; }   /* «Справка» — значком «?» в шапке */
     .app-container[data-sheet="full"] #spLoc.mb-loc { opacity: 0; pointer-events: none; }
     html.mb-search-open #mainPanel { z-index: 2400 !important; }
     /* шторка в свёрнутом виде (и пока открыта колонка кнопок) — без «плашки» над нижним меню: невидима, высота 0 */
@@ -216,8 +217,9 @@
     @keyframes mbTilesIn { from { transform: translateX(-130%); opacity: 0; } to { transform: none; opacity: 1; } }
     /* виджет обучения и всплывающие советы на телефоне не показываем */
     #tourWidget, #tourBtn, .gh-tour { display: none !important; }
-    /* «Моё местоположение» и стрелка севера теперь в раскрывающемся виджете справа вверху — нижняя группа кнопок не нужна */
-    #map-section .map-controls-br { display: none !important; }
+    /* «Моё местоположение» — в раскрывающемся виджете справа вверху; стрелка севера остаётся отдельно в правом нижнем углу (стили .map-controls-br из site.css) */
+    #map-section #northBtn { border-radius: 11px; }
+    #mapCacheBtn { display: none !important; }   /* «Очистить кэш» на телефоне не показываем */
     /* у шторки нет «ручки» — область, которую выдвигали пальцем, убрана */
     /* вместо плашки вверху шторки — тонкая линия: потяните вверх — панель раскроется на весь экран */
     #mainPanel .sp-grab { display: flex !important; height: 16px; z-index: 40; }
@@ -258,7 +260,8 @@
     #passportPane #ppSt .pp-stp { font-size: 12px; min-width: 30px; }
 
     /* полоса страниц: разделы-«чипсы», счётчик, стрелки, прогресс */
-    #mbPpBar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px 0; background: var(--sc-white); border-bottom: 1px solid var(--sc-line); }
+    #mbPpBar { display: none !important; }   /* верхнее подменю паспорта не показываем: листание — стрелками по бокам */
+    #mbPpBar.mb-unused { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px 0; background: var(--sc-white); border-bottom: 1px solid var(--sc-line); }
     #mbPpBar .mb-chs { flex: 1 1 0; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
     #mbPpBar .mb-chs::-webkit-scrollbar { display: none; }
     #mbPpBar .mb-ch { flex: none; display: inline-flex; align-items: center; gap: 5px; max-width: 150px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--sc-line); background: var(--sc-white); color: var(--sc-slate-dark); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -271,6 +274,28 @@
     #mbPpBar .mb-ar:disabled { opacity: .35; }
     #mbPpBar .mb-pg { flex: 0 0 100%; height: 3px; margin: 3px -6px 0; background: var(--sc-line-soft); }
     #mbPpBar .mb-pg b { display: block; height: 100%; width: 0; background: var(--sc-green); transition: width .25s; }
+
+    /* стрелки «назад / вперёд» — посередине страницы по бокам */
+    #passportPane { position: relative; }
+    .mb-sd { display: flex; position: absolute; top: 50%; transform: translateY(-50%); z-index: 6; width: 30px; height: 44px; padding: 0; align-items: center; justify-content: center; border: 1px solid var(--sc-line); background: rgba(255,255,255,.88); color: var(--sc-slate-dark); font-size: 13px; box-shadow: 0 2px 8px rgba(15,23,42,.2); cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .mb-sd[data-d="-1"] { left: 0; border-radius: 0 12px 12px 0; border-left: 0; }
+    .mb-sd[data-d="1"] { right: 0; border-radius: 12px 0 0 12px; border-right: 0; }
+    .mb-sd:disabled { opacity: 0; pointer-events: none; }
+    /* страница «Сводка»: индекс и карточки показателей компактнее */
+    #passportPane #ppBody .pp-kpis.mb-slide { padding-top: 0 !important; }
+    #passportPane #ppBody .pp-kpis { gap: 12px; margin-bottom: 0; }
+    #passportPane #ppBody .pp-score { max-width: none; padding: 10px 8px 8px; border-radius: 14px; }
+    #passportPane #ppBody .pp-score small { font-size: 9.5px; }
+    #passportPane #ppBody .pp-score .big { font-size: 26px; }
+    #passportPane #ppBody .pp-score .big span { font-size: 11px; }
+    #passportPane #ppBody .pp-score svg { display: block; margin: 0 auto; width: auto; max-width: 100%; max-height: 190px; }
+    #passportPane #ppBody .pp-cap2 { font-size: 9px; line-height: 1.25; }
+    #passportPane #ppBody .pp-kgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 24px; }   /* страница — block, поэтому gap родителя не работает: отступ от индекса задан здесь */
+    #passportPane #ppBody .pp-kpi { padding: 5px 7px 5px 11px; border-radius: 10px; }
+    #passportPane #ppBody .pp-kpi::before { width: 3px; }
+    #passportPane #ppBody .pp-kpi small { font-size: 9.5px; gap: 4px; margin-bottom: 1px; }
+    #passportPane #ppBody .pp-kpi b { font-size: 14px; }
+    #passportPane #ppBody .pp-kpi .how { font-size: 8.5px; line-height: 1.2; margin-top: 2px; }
 
     /* лента страниц */
     #passportPane #ppBody { flex: 1 1 auto; min-height: 0; display: flex !important; flex-direction: row; align-items: stretch; gap: 0; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }

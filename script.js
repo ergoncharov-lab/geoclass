@@ -585,7 +585,11 @@ function snPoolFail(e) {
 function snSig(key, z, x, y) {
     const st = SENTINEL.state[key];
     const ctr = snBaseKey(key) === 'ndvi_c' ? ':' + SENTINEL.contrast.min + '_' + SENTINEL.contrast.max : '';
-    return snBaseKey(key) + ctr + '|' + st.scenes.map(s => s.id).join(',') + '|' + z + '/' + x + '/' + y;
+    // в ключ попадают только сцены, которые пересекают этот тайл: добавление / исчезновение сцен в другой части карты не сбрасывает кэш готовых тайлов
+    const nn = Math.pow(2, z), tw = x / nn * 360 - 180, te = (x + 1) / nn * 360 - 180;
+    const tLat = yy => Math.atan(Math.sinh(Math.PI * (1 - 2 * yy / nn))) * 180 / Math.PI, tn = tLat(y), ts = tLat(y + 1);
+    const ids = st.scenes.filter(s => !s.bbox || !(s.bbox[0] > te || s.bbox[2] < tw || s.bbox[1] > tn || s.bbox[3] < ts)).map(s => s.id);
+    return snBaseKey(key) + ctr + '|' + ids.join(',') + '|' + z + '/' + x + '/' + y;
 }
 function snMemGet(sig) {
     const m = SENTINEL.tileMem, v = m.get(sig);
@@ -693,11 +697,13 @@ function snLog(src, key, z, x, y, t0) {
     SN_LOG.timer = setTimeout(snStats, 2000);
 }
 // счётчик рядом с надписью «Загрузка снимков…»: сколько тайлов готово и откуда они (кэш на компьютере / сеть)
-SN_LOG.cur = { c: 0, n: 0 };
+SN_LOG.cur = { c: 0, n: 0, t: 0 };   // c — из кэша, n — из сети, t — всего тайлов в текущей загрузке
 function snLabel() {
     const c = SN_LOG.cur, tot = c.c + c.n;
-    const txt = 'Загрузка снимков…' + (tot ? ' ' + tot + ' шт. (кэш ' + c.c + ', сеть ' + c.n + ')' : '');
+    const pct = c.t ? Math.min(100, Math.round(tot / c.t * 100)) : 0;
+    const txt = 'Загрузка снимков…' + (tot ? ' ' + pct + '% · ' + Math.min(tot, c.t || tot) + (c.t ? ' из ' + c.t : '') + ' шт. (кэш ' + c.c + ', сеть ' + c.n + ')' : '');
     document.querySelectorAll('.sn-loading span').forEach(e => { if (e.textContent !== txt) e.textContent = txt; });
+    if (window.gcSnProgress) window.gcSnProgress(tot ? pct + '% · ' + Math.min(tot, c.t || tot) + (c.t ? ' из ' + c.t : '') + ' шт. (кэш ' + c.c + ', сеть ' + c.n + ')' : '');   // общее уведомление о загрузке (ux-actions.js)
 }
 function snStats() {
     const T = SN_LOG.tiles, med = a => a.length ? a.slice().sort((p, q) => p - q)[a.length >> 1] : 0, N = SN_LOG.net;
@@ -724,6 +730,10 @@ function snMarkDirectBad() {
     ['https://sentinel-cogs.s3.us-west-2.amazonaws.com', 'https://earth-search.aws.element84.com'].forEach(h => {
         try { const l = document.createElement('link'); l.rel = 'preconnect'; l.href = h; l.crossOrigin = 'anonymous'; document.head.appendChild(l); } catch (e) { }
     });
+    // preconnect браузер может не использовать (и через прокси компании соединение с S3 устанавливается ~5 с) — открываем соединение настоящим лёгким запросом
+    // заранее и повторяем, пока вкладка открыта, чтобы оно не успевало закрыться по простою
+    const warm = () => { if (document.hidden) return; try { fetch('https://sentinel-cogs.s3.us-west-2.amazonaws.com/', { mode: 'no-cors', cache: 'no-store' }).catch(() => { }); } catch (e) { } };
+    setTimeout(warm, 800); setInterval(warm, 90000);
 })();
 window.snDebug = v => { SN_LOG.on = v !== false; return SN_LOG.on; };
 window.snStats = snStats;
@@ -849,12 +859,26 @@ function snHosts(href) {
 
 // Локальный прокси (serve_site.py): если сайт открыт через него, снимки идут через /s3/... — тот же источник, без CORS
 let snProxyProbe = null;
+// локальный прокси может отвечать с нескольких портов (serve_site.py): у браузера лимит ~6 соединений на адрес, с несколькими адресами снимки грузятся параллельнее
+const snIsProxy = u => u.charAt(0) === '/' || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/s3\//.test(u);
+SENTINEL.shards = [];   // доп. адреса прокси, например http://localhost:8001
 function snProxyAvailable() {
     if (!snProxyProbe) {
         snProxyProbe = /^https?:$/.test(location.protocol)
             ? fetch('/s3/ping', { cache: 'no-store' }).then(r => r.ok && r.headers.get('X-GeoClass-Proxy') === '1').catch(() => false)
             : Promise.resolve(false);
-        snProxyProbe = snProxyProbe.then(ok => { SENTINEL.proxyOk = ok; return ok; });
+        snProxyProbe = snProxyProbe.then(async ok => {
+            SENTINEL.proxyOk = ok;
+            if (ok && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {   // проверяем доп. порты (если их нет — работаем как раньше, через один адрес)
+                const base = Number(location.port) || 80;
+                const pr = await Promise.all([1, 2, 3].map(k => {
+                    const o = location.protocol + '//' + location.hostname + ':' + (base + k);
+                    return fetch(o + '/s3/ping', { cache: 'no-store', mode: 'cors' }).then(r => r.ok ? o : null).catch(() => null);
+                }));
+                SENTINEL.shards = pr.filter(Boolean);
+            }
+            return ok;
+        });
     }
     return snProxyProbe;
 }
@@ -862,11 +886,13 @@ async function snCandidates(href) {
     const list = snHosts(href);
     const m = /^https:\/\/sentinel-cogs\.s3\.[a-z0-9-]+\.amazonaws\.com\/(.+)$/.exec(href);
     if (m && await snProxyAvailable()) {
-        list.push('/s3/' + m[1]);   // напрямую браузер быстрее (HTTP/2 к S3); локальный прокси — запасной путь, если прямой не работает
+        const origins = [''].concat(SENTINEL.shards), hsh = Array.from(m[1]).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+        list.push(origins[hsh % origins.length] + '/s3/' + m[1]);   // файл всегда идёт через один и тот же адрес прокси (разные файлы — через разные порты)
+        // напрямую браузер быстрее (HTTP/2 к S3); локальный прокси — запасной путь, если прямой не работает
     }
     return list;
 }
-const snHostOf = u => { try { return new URL(u, location.href).host + (u.charAt(0) === '/' ? ' (локальный прокси)' : ''); } catch (e) { return u; } };
+const snHostOf = u => { try { return new URL(u, location.href).host + (snIsProxy(u) ? ' (локальный прокси)' : ''); } catch (e) { return u; } };
 
 // открывает COG один раз: заголовки, обзорные уровни (overviews), привязка; с повторами и сменой хоста
 function snOpen(href) {
@@ -900,7 +926,7 @@ function snOpen(href) {
                     if (done || next >= urls.length) return;
                     const u = urls[next++];
                     clearTimeout(tm);
-                    if (next < urls.length && (urls[next].charAt(0) === '/') !== (u.charAt(0) === '/')) tm = setTimeout(launch, 4000);   // по таймеру стартует только другой тип пути (прокси ↔ напрямую); запасные адреса S3 — лишь после ошибки, чтобы не качать файл дважды
+                    if (next < urls.length && (snIsProxy(urls[next])) !== (snIsProxy(u))) tm = setTimeout(launch, 4000);   // по таймеру стартует только другой тип пути (прокси ↔ напрямую); запасные адреса S3 — лишь после ошибки, чтобы не качать файл дважды
                     tryOne(u).then(r => { if (!done) { done = true; clearTimeout(tm); resolve({ r: r, u: u }); } },
                         e => { lastErr = e; if (SN_LOG.on) console.warn('[Sentinel] путь не сработал: ' + snHostOf(u) + ' — ' + (e && e.message || e)); if (++fails >= urls.length) { clearTimeout(tm); if (!done) reject(e); } else launch(); });
                 };
@@ -908,7 +934,7 @@ function snOpen(href) {
             });
             for (let attempt = 0; attempt < 2; attempt++) {
                 // если прямой путь признан нерабочим — сначала только прокси; прямые адреса — лишь запасной вариант на второй попытке
-                const lst = (attempt === 0 && (snDirectBad() || Date.now() - ((SENTINEL.badFiles && SENTINEL.badFiles[href]) || 0) < 6e5) && cands.some(u => u.charAt(0) === '/')) ? cands.filter(u => u.charAt(0) === '/') : cands;
+                const lst = (attempt === 0 && (snDirectBad() || Date.now() - ((SENTINEL.badFiles && SENTINEL.badFiles[href]) || 0) < 6e5) && cands.some(u => snIsProxy(u))) ? cands.filter(u => snIsProxy(u)) : cands;
                 const order = lst.map((_, i) => lst[(SENTINEL.hostIdx + i) % lst.length]);
                 try {
                     const w = await race(order);
@@ -954,11 +980,11 @@ async function snRead(f, minE, minN, maxE, maxN, g, rgb, maxDim) {
                 20000, 'чтение снимка: нет ответа от S3 (таймаут 20 с)');
         } catch (e) {
             lastErr = e; snPoolFail(e);
-            if (f.url && f.url.charAt(0) !== '/' && SENTINEL.proxyOk) break;   // прямой путь не работает — не тратим повторы
+            if (f.url && !snIsProxy(f.url) && SENTINEL.proxyOk) break;   // прямой путь не работает — не тратим повторы
             await snDelay(500 * (attempt + 1));
         }
     }
-    if (!bands && f.url && f.url.charAt(0) !== '/' && SENTINEL.proxyOk) {   // переходим на локальный прокси и читаем то же окно заново
+    if (!bands && f.url && !snIsProxy(f.url) && SENTINEL.proxyOk) {   // переходим на локальный прокси и читаем то же окно заново
         snMarkFileBad(f.key);
         delete SENTINEL.files[f.key];
         SENTINEL.hostIdx = 0;
@@ -1237,6 +1263,7 @@ const SentinelLayer = L.GridLayer.extend({
         const key = this._snKey, dead = () => c._snDead, clip = this._clip, map = this._map;
         // слой-вырез (_clip): тайлы вне фигуры не грузятся, внутри — обрезаются по контуру
         if (clip && !this._tileCoordsToBounds(coords).intersects(clip.bounds)) { setTimeout(() => done(null, c), 0); return c; }
+        SN_LOG.cur.t++;   // тайл идёт в общий счётчик загрузки (для процента)
         // готовые тайлы берутся из кэша сразу, минуя очередь загрузки
         snFromCache(key, coords.z, coords.x, coords.y, c)
             .then(hit => hit || snRun(() => snRenderTile(key, coords.z, coords.x, coords.y, c, dead, true, false, !clip), dead))
@@ -1904,6 +1931,8 @@ const LAYER_THUMBS = {
     savi           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     ndwi           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     ndti           : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    falsecolor     : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
+    ndvi_c         : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4',
     // тот же участок мира, что и у остальных превью (z=3, x=4, y=2), но в метрах EPSG:3857
     esri_landcover: esriLandCoverUrl([0, 5009377.085, 5009377.085, 10018754.171], 72),
     esri_topo:      esriThumb('World_Topo_Map'),
@@ -2407,38 +2436,50 @@ function gcImport(cb) {
     inp.click();
 }
 // маленькое меню (правая кнопка по фигуре, выбор формата экспорта)
-function gcMenuHide() { if (gcCtxEl) { gcCtxEl.remove(); gcCtxEl = null; } }
+let gcFlyEls = [], gcFlyT = 0;   // выезжающие вправо подменю (по уровням) и таймер их закрытия
+function gcFlyClose(n) { while (gcFlyEls.length > (n || 0)) { const f = gcFlyEls.pop(); if (f._btn) f._btn.classList.remove('open'); f.remove(); } }
+function gcFlyKeep(el) {   // пока курсор в меню или в подменю — они открыты; ушёл — закрываются с небольшой задержкой
+    el.addEventListener('mouseenter', () => clearTimeout(gcFlyT));
+    el.addEventListener('mouseleave', () => { clearTimeout(gcFlyT); gcFlyT = setTimeout(() => gcFlyClose(0), 350); });
+}
+function gcFlyOpen(b, subs, lvl, done) {
+    if (gcFlyEls[lvl] && gcFlyEls[lvl]._btn === b) return;
+    gcFlyClose(lvl);
+    const f = document.createElement('div');
+    f.className = 'sk-ctx sk-menu'; f.style.cssText = 'position:fixed;display:flex;z-index:6000';
+    subs.forEach(x => gcFlyAdd(f, x, lvl + 1, done));
+    ['mousedown', 'wheel', 'contextmenu'].forEach(t => f.addEventListener(t, ev => { ev.stopPropagation(); if (t === 'contextmenu') ev.preventDefault(); }));
+    gcFlyKeep(f); f._btn = b; b.classList.add('open');
+    document.body.appendChild(f); gcFlyEls.push(f);
+    const r = b.getBoundingClientRect();
+    let x = r.right + 2; if (x + f.offsetWidth > innerWidth - 6) x = Math.max(6, r.left - f.offsetWidth - 2);
+    f.style.left = x + 'px';
+    f.style.top = Math.max(6, Math.min(r.top - 4, innerHeight - f.offsetHeight - 6)) + 'px';
+}
+function gcFlyAdd(parent, a, lvl, done) {   // пункт меню: обычный или группа с подменю справа (по наведению или клику)
+    if (a.sep) { const s = document.createElement('div'); s.className = 'sk-sep'; parent.appendChild(s); return; }
+    const b = document.createElement('button'), ic = /^fa-/.test(a.icon) ? a.icon : 'fa-' + a.icon;
+    b.type = 'button'; b.className = 'sk-act' + (a.danger ? ' danger' : '') + (a.sub ? ' sk-grp' : '');
+    b.innerHTML = '<i class="fas ' + ic + '"></i><span>' + a.label + '</span>' + (a.sub ? '<i class="fas fa-chevron-right sk-chev"></i>' : '');
+    parent.appendChild(b);
+    b.addEventListener('mouseenter', () => { clearTimeout(gcFlyT); if (a.sub) gcFlyOpen(b, a.sub, lvl, done); else gcFlyClose(lvl); });
+    if (a.sub) b.addEventListener('click', ev => { ev.stopPropagation(); gcFlyOpen(b, a.sub, lvl, done); });
+    else b.addEventListener('click', ev => { ev.stopPropagation(); done(); a.fn(); });
+}
+function gcMenuHide() { gcFlyClose(0); if (gcCtxEl) { gcCtxEl.remove(); gcCtxEl = null; } }
 function gcMenu(x, y, items) {
     gcMenuHide();
     const el = gcCtxEl = document.createElement('div');
     el.className = 'sk-ctx sk-menu';
     el.style.cssText = 'position:fixed;display:flex;z-index:5000';
-    const add = (parent, a) => {
-        if (a.sep) { const s = document.createElement('div'); s.className = 'sk-sep'; parent.appendChild(s); return; }
-        const b = document.createElement('button'), ic = /^fa-/.test(a.icon) ? a.icon : 'fa-' + a.icon;
-        b.type = 'button'; b.className = 'sk-act' + (a.danger ? ' danger' : '');
-        b.innerHTML = '<i class="fas ' + ic + '"></i><span>' + a.label + '</span>' + (a.sub ? '<i class="fas fa-chevron-right sk-chev"></i>' : '');
-        parent.appendChild(b);
-        if (a.sub) {   // группа: раскрывается внутри меню
-            const sub = document.createElement('div');
-            b.classList.add('sk-grp'); sub.className = 'sk-sub'; sub.hidden = true; parent.appendChild(sub);
-            a.sub.forEach(s => add(sub, s));
-            b.addEventListener('click', ev => {
-                ev.stopPropagation();
-                const open = sub.hidden;
-                Array.from(parent.children).forEach(h => { if (h !== b && h.classList.contains('sk-grp')) { h.classList.remove('open'); h.nextElementSibling.hidden = true; } });
-                b.classList.toggle('open', open); sub.hidden = !open;
-                el.style.top = Math.max(6, Math.min(parseFloat(el.style.top) || 0, innerHeight - el.offsetHeight - 6)) + 'px';
-            });
-        } else b.addEventListener('click', ev => { ev.stopPropagation(); gcMenuHide(); a.fn(); });
-    };
-    items.forEach(a => add(el, a));
+    items.forEach(a => gcFlyAdd(el, a, 0, gcMenuHide));
+    gcFlyKeep(el);
     ['mousedown', 'wheel', 'contextmenu'].forEach(t => el.addEventListener(t, ev => { ev.stopPropagation(); if (t === 'contextmenu') ev.preventDefault(); }));
     document.body.appendChild(el);
     el.style.left = Math.max(6, Math.min(x, innerWidth - el.offsetWidth - 6)) + 'px';
     el.style.top = Math.max(6, Math.min(y, innerHeight - el.offsetHeight - 6)) + 'px';
 }
-document.addEventListener('mousedown', e => { if (gcCtxEl && !gcCtxEl.contains(e.target)) gcMenuHide(); }, true);
+document.addEventListener('mousedown', e => { if (gcCtxEl && !gcCtxEl.contains(e.target) && !gcFlyEls.some(f => f.contains(e.target))) gcMenuHide(); else if (gcFlyEls.length && !gcFlyEls.some(f => f.contains(e.target))) gcFlyClose(0); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') gcMenuHide(); });
 map.on('movestart zoomstart', gcMenuHide);
 map.on('draw:drawstart', () => { gcDrawing = true; gcDeselect(); });
@@ -2515,7 +2556,7 @@ function gcPolyItem(l, nm, src, from) {
     return { c: { id: 'sketch', name: src, rgb: rgb }, f: { type: 'Feature', properties: pr, geometry: f.geometry }, src: src, from: from };
 }
 // группы «Перенести границы в» и «Скачать границы» — как у слоя кадастровых участков; item() возвращает объект gcPolyItem
-function gcPolyGroups(item) {
+function gcPolyGroups(item, isArea) {
     const api = window.gcShapeMenuApi;
     if (!api) return [];
     const run = fn => () => {
@@ -2525,22 +2566,40 @@ function gcPolyGroups(item) {
     };
     const leaf = (icon, label, fn) => ({ icon: icon, label: label, fn: run(fn) });
     const conv = t => t.sub ? { icon: t.icon, label: t.label, sub: t.sub.map(conv) } : leaf(t.icon, t.label, it => api.toAnalysis(it, t.bp, t.label));
-    return [
-        { icon: 'fa-share-from-square', label: 'Перенести границы в', sub: api.targets.map(conv) },
-        { icon: 'fa-file-arrow-down', label: 'Скачать границы', sub: api.formats.map(f => leaf('fa-file-arrow-down', f.label, it => api.exportAs(f.id, [it]))) }
+    const out = [];
+    if (isArea !== false) {   // для линий — только скачивание
+        out.push(leaf('fa-magnifying-glass-chart', 'Анализ участка', it => api.toAnalysis(it)));
+        out.push({ icon: 'fa-share-from-square', label: 'Перенести границы в', sub: api.targets.map(conv) });
+    }
+    out.push({ icon: 'fa-file-arrow-down', label: 'Скачать границы', sub: api.formats.map(f => leaf('fa-file-arrow-down', f.label, it => api.exportAs(f.id, [it]))) });
+    return out;
+}
+// стандартные действия любой фигуры: копировать, на передний / задний план, удалить (общие для «Рисования», «Анализа участка» и остальных инструментов)
+function gcStdActs(l, o) {
+    const a = [
+        { id: 'dup', icon: 'clone', label: 'Копировать', fn: o.dup || (() => gcCopyToSketch(l)) },
+        { id: 'front', icon: 'arrow-up', label: 'На передний план', fn: o.front || (() => l.bringToFront()) },
+        { id: 'back', icon: 'arrow-down', label: 'На задний план', fn: o.back || (() => l.bringToBack()) }
     ];
+    if (o.del) a.push({ id: 'del', icon: 'trash', label: 'Удалить', danger: true, fn: o.del });
+    return a;
 }
 function gcShapeMenu(ev, l) {
     const o = l._gc.o, nm = o.name || 'geoclass', gj = () => gcFC([gcLayerGJ(l)].filter(Boolean));
+    if (l instanceof L.Polygon || l instanceof L.Circle) {   // единое меню всех полигональных фигур (как в «Рисовании» и «Анализе участка»)
+        const items = gcStdActs(l, { del: o.onDelete && (() => o.onDelete(l)) });
+        const g = gcPolyGroups(() => gcPolyItem(l, l._gcName || 'Фигура', 'Карта', 'фигуры «' + (l._gcName || 'Фигура') + '»'));
+        if (g.length) items.push({ sep: true }, ...g);
+        const ex = [].concat(o.actions || []);   // специальные действия инструмента (например, выгрузка результатов)
+        if (ex.length) items.push({ sep: true }, ...ex);
+        gcMenu(ev.clientX + 2, ev.clientY + 2, items);
+        return;
+    }
     const items = [
         { icon: 'clone', label: 'Копировать', fn: () => gcCopyToSketch(l) },
         { icon: 'earth-europe', label: 'Экспорт KML', fn: () => gcExport(gj(), nm, 'kml') },
         { icon: 'file-code', label: 'Экспорт GeoJSON', fn: () => gcExport(gj(), nm, 'geojson') }
     ].concat(o.actions || []);
-    if (l instanceof L.Polygon || l instanceof L.Circle) {   // полигон, прямоугольник, круг: те же группы, что у участков кадастра и в «Рисовании»
-        const g = gcPolyGroups(() => gcPolyItem(l, l._gcName || 'Фигура', 'Карта', 'фигуры «' + (l._gcName || 'Фигура') + '»'));
-        if (g.length) items.push({ sep: true }, ...g);
-    }
     if (o.onDelete) items.push({ sep: true }, { icon: 'trash', label: 'Удалить', danger: true, fn: () => o.onDelete(l) });
     gcMenu(ev.clientX + 2, ev.clientY + 2, items);
 }
@@ -3017,6 +3076,7 @@ function snShpZip(feats, base) {
         el.hidden = false;
     }
     function placeLo() {
+        lt.forEach(dropLo); lo.hidden = true; return;   // отдельная надпись «Загрузка снимков» на карте отключена: статус показывает общее уведомление с процентом и счётчиком кэш / сеть
         lt.forEach(l => { if (l._snLo) l._snLo.hidden = !sec; });
         if (!sec) { lo.hidden = true; return; }
         if (lf.search && !lt.size) loPut(lo, map, true); else lo.hidden = true;
@@ -3031,7 +3091,7 @@ function snShpZip(feats, base) {
         if (k === 'tiles') {
             if (!layer) { if (!v) { lt.forEach(dropLo); lt.clear(); } }
             else if (!v) { lt.delete(layer); dropLo(layer); }
-            else { if (!lt.size) { SN_LOG.cur = { c: 0, n: 0 }; snLabel(); } lt.add(layer); }
+            else { if (!lt.size) { SN_LOG.cur = { c: 0, n: 0, t: 0 }; snLabel(); } lt.add(layer); }
         } else lf[k] = v;
         placeLo();
     };
@@ -3264,7 +3324,7 @@ function snShpZip(feats, base) {
             const day = p.datetime.slice(0, 10);
             const cc = p['eo:cloud_cover'] != null ? Math.round(p['eo:cloud_cover']) : null;
             const th = f.assets && f.assets.thumbnail && f.assets.thumbnail.href ? snHref(f.assets.thumbnail.href) : '';
-            (by[day] = by[day] || { day: day, scenes: [] }).scenes.push({ id: f.id, time: p.datetime.slice(11, 16), cc: cc, thumb: th });
+            (by[day] = by[day] || { day: day, scenes: [] }).scenes.push({ id: f.id, time: p.datetime.slice(11, 16), cc: cc, thumb: th, bbox: f.bbox || null });
         });
         return Object.keys(by).map(k => {
             const g = by[k];
@@ -3317,7 +3377,7 @@ function snShpZip(feats, base) {
                     body: JSON.stringify({
                         collections: ['sentinel-2-l2a'], bbox: bbox, limit: 200,
                         datetime: `${y}-${p2(m + 1)}-01T00:00:00Z/${y}-${p2(m + 1)}-${p2(last)}T23:59:59Z`,
-                        fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover', 'assets.thumbnail'] }
+                        fields: { include: ['id', 'bbox', 'properties.datetime', 'properties.eo:cloud_cover', 'assets.thumbnail'] }
                     })
                 });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -4002,7 +4062,7 @@ function snShpZip(feats, base) {
         const r = await fetch(SENTINEL.stacUrl + '/search', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox: bbox, limit: 200, datetime: from + 'T00:00:00Z/' + to + 'T23:59:59Z',
-                fields: { include: ['id', 'properties.datetime', 'properties.eo:cloud_cover', 'assets.thumbnail'] } })
+                fields: { include: ['id', 'bbox', 'properties.datetime', 'properties.eo:cloud_cover', 'assets.thumbnail'] } })
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const g = groupScenes((await r.json()).features || []);
@@ -6709,11 +6769,9 @@ function selectSearchResult(index) {
 
 window.selectSearchResult = selectSearchResult;
 
-function escapeHtml(str) {
+function escapeHtml(str) {   // экранирует и кавычки — безопасно и в тексте, и в значениях атрибутов
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 searchInput.addEventListener('input', function() {
@@ -6782,7 +6840,7 @@ function activateMeasureMode(mode) {
     measureFinished = false;
     syncMeasureBtns();
     setMeasureChipsActive(mode);
-    showMeasureToolbar(mode);
+    // панель смены режима вверху карты не показываем: режим выбирается кнопками «Длина» / «Площадь»
 
     map.on('click', measureMapClick);
     map.on('dblclick', measureMapDblClick);
@@ -6794,7 +6852,7 @@ function activateMeasureMode(mode) {
     updateStatus(`📏 Режим измерения ${modeName} — кликайте на карте. Двойной клик — завершить.`);
 }
 
-function deactivateMeasureMode() {
+function deactivateMeasureMode(keep) {
     measureMode = null;
     measureFinished = false;
     syncMeasureBtns();
@@ -6812,9 +6870,14 @@ function deactivateMeasureMode() {
     }
     measureInfoEl.style.display = 'none';
 
-    // убираем временную «резиновую» линию, зафиксированные точки остаются на карте
-    if (measurePointsArr.length > 0 && !measureFinished) {
-        updateMeasureDisplay(true);
+    if (keep) {
+        // повторное нажатие той же кнопки: временная «резиновая» линия убирается, зафиксированные точки остаются
+        if (measurePointsArr.length > 0 && !measureFinished) updateMeasureDisplay(true);
+    } else {
+        // выбран другой инструмент (или закрыта линейка) — результаты измерений и точки убираем с карты
+        measureLayerGroup.clearLayers();
+        measurePointsArr = [];
+        measurePointsArr._markers = [];
     }
 }
 
@@ -6902,9 +6965,9 @@ function addMeasureMarker(latlng, index) {
     const marker = L.marker(latlng, {
         icon: L.divIcon({
             className: 'measure-marker',
-            html: `<div style="background:${MEASURE_COLOR}; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:700; border:2px solid white; box-shadow:0 1px 4px rgba(0,0,0,0.3);">${index}</div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
+            html: `<div style="background:#fff; width:12px; height:12px; border-radius:50%; box-sizing:border-box; border:3px solid ${MEASURE_COLOR}; box-shadow:0 1px 3px rgba(0,0,0,0.35);"></div>`,
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
         }),
         interactive: false
     }).addTo(measureLayerGroup);
@@ -6937,7 +7000,7 @@ function addMeasureLabel(latlng, text, kind) {
 }
 
 function formatMeasureDistance(km) {
-    return km < 1 ? Math.round(km * 1000) + ' м' : km.toFixed(2) + ' км';
+    return km < 1 ? (km * 1000).toFixed(2) + ' м' : km.toFixed(2) + ' км';
 }
 
 // finalize — зафиксированный результат; cursorLatLng — текущее положение курсора (превью)
@@ -6959,7 +7022,8 @@ function updateMeasureDisplay(finalize = false, cursorLatLng = null) {
 
         // зафиксированная часть
         if (fixed.length >= 2) {
-            L.polyline(fixed, { color: MEASURE_COLOR, weight: 3, opacity: 0.85, interactive: false }).addTo(measureLayerGroup);
+            L.polyline(fixed, { color: '#fff', weight: 7, opacity: 0.9, interactive: false }).addTo(measureLayerGroup);
+            L.polyline(fixed, { color: MEASURE_COLOR, weight: 4, opacity: 1, interactive: false }).addTo(measureLayerGroup);
         }
         // «резиновая» линия до курсора
         if (cursor) {
@@ -6968,27 +7032,9 @@ function updateMeasureDisplay(finalize = false, cursorLatLng = null) {
             }).addTo(measureLayerGroup);
         }
 
-        // подписи длины на каждом отрезке (включая «резиновый» до курсора)
-        for (let i = 1; i < preview.length; i++) {
-            const a = preview[i - 1];
-            const b = preview[i];
-            const segKm = measurePolylineLength([a, b]);
-            addMeasureLabel(
-                L.latLng((a[0] + b[0]) / 2, (a[1] + b[1]) / 2),
-                formatMeasureDistance(segKm),
-                'seg'
-            );
-        }
-
-        // общая длина — у последней точки (при рисовании — у курсора); при одном отрезке она равна ему
-        if (preview.length >= 3) {
-            const last = preview[preview.length - 1];
-            addMeasureLabel(
-                L.latLng(last[0], last[1]),
-                'Всего: ' + formatMeasureDistance(measurePolylineLength(preview)),
-                'total'
-            );
-        }
+        // как в Яндекс Картах: одна подпись с общей длиной у последней точки (при рисовании — у курсора)
+        const last = preview[preview.length - 1];
+        addMeasureLabel(L.latLng(last[0], last[1]), formatMeasureDistance(measurePolylineLength(preview)), 'total');
     } else if (measureMode === 'area') {
         if (preview.length >= 3) {
             const polygon = L.polygon(preview, {
@@ -7008,7 +7054,7 @@ function updateMeasureDisplay(finalize = false, cursorLatLng = null) {
             if (!turf.booleanPointInPolygon(c, polyGeo)) {
                 c = turf.pointOnFeature(polyGeo).geometry.coordinates;
             }
-            addMeasureLabel(L.latLng(c[1], c[0]), area.toFixed(4) + ' га', 'area');
+            addMeasureLabel(L.latLng(c[1], c[0]), area.toFixed(2) + ' га', 'area');
         }
 
         if (fixed.length >= 2) {
@@ -7023,13 +7069,6 @@ function updateMeasureDisplay(finalize = false, cursorLatLng = null) {
     }
 }
 
-function showMeasureInfo(value, label) {
-    measureInfoEl.innerHTML = `
-        <span class="measure-label">${label}:</span>
-        <span class="measure-value">${value}</span>
-    `;
-    measureInfoEl.style.display = 'block';
-}
 
 function clearMeasurements() {
     measureLayerGroup.clearLayers();
@@ -8213,6 +8252,7 @@ function sketchIsBusy() {
 // правая кнопка на пустой карте — отмена / повтор / очистка / экспорт (пункты добавлены в общее контекстное меню).
 function skHideCtx() {
     const el = document.getElementById('skCtx');
+    gcFlyClose(0);
     if (el) { el.style.display = 'none'; el._anLayer = null; }
 }
 
@@ -8227,17 +8267,11 @@ function skLayerFromTarget(t) {
 }
 
 function skActions(l) {
-    const k = l._sk.kind, mode = sketchState.mode, acts = [];
-    const isLine = k === 'line', isArea = k === 'polygon' || k === 'rectangle' || k === 'circle';
-    if (!skIsMarker(k) && k !== 'point') acts.push({ id: 'edit', icon: 'pen-to-square', label: 'Править вершины', on: mode === 'edit', keep: true, fn: () => skSetMode(mode === 'edit' ? 'select' : 'edit') });
-    acts.push({ id: 'dup', icon: 'clone', label: 'Копировать', fn: skDuplicate });
-    if (!skIsMarker(k) && k !== 'point') acts.push({ id: 'kml', icon: 'earth-europe', label: 'Экспорт KML', fn: () => gcExport(gcFC([gcLayerGJ(l)].filter(Boolean)), l._sk.name, 'kml') });
-    acts.push({ id: 'front', icon: 'arrow-up', label: 'На передний план', fn: () => skReorder(true) });
-    acts.push({ id: 'back', icon: 'arrow-down', label: 'На задний план', fn: () => skReorder(false) });
+    const k = l._sk.kind, acts = [], isLine = k === 'line';
+    acts.push(...gcStdActs(l, { dup: skDuplicate, front: () => skReorder(true), back: () => skReorder(false) }));
     if (isLine) acts.push({ id: 'prof', icon: 'mountain', label: 'Профиль рельефа', fn: () => { if (window.gcPfFromSelected) window.gcPfFromSelected(); } });
-    if (isArea) acts.push({ id: 'hyp', icon: 'chart-area', label: 'Гипсометрия', fn: () => { if (window.gcHyFromSelected) window.gcHyFromSelected(); } });
     if (skCtxGroups(l).length) acts.push({ id: 'more', icon: 'ellipsis', label: 'Ещё: анализ, перенос границ, скачивание', keep: true, fn: skMoreCtx });
-    acts.push({ id: 'del', icon: 'trash', label: 'Удалить', danger: true, fn: () => skDeleteLayer(sketchState.selected) });
+    acts.push(gcStdActs(l, { del: () => skDeleteLayer(sketchState.selected) }).pop());
     return acts;
 }
 // панель значков → полное меню (с группами переноса и скачивания), не выходя за карту
@@ -8277,39 +8311,17 @@ function skShapeItem(l) {
 
 // группы меню правой кнопки: «Анализ участка», «Перенести границы в», «Скачать границы» — как у слоя кадастровых участков
 function skCtxGroups(l) {
-    const api = window.gcShapeMenuApi, k = l._sk.kind;
-    if (!api || skIsMarker(k) || k === 'point') return [];
-    const run = fn => () => {
-        const it = skShapeItem(l);
-        if (!it) { updateStatus('⚠️ Не удалось собрать геометрию фигуры', true); return; }
-        fn(it);
-    };
-    const leaf = (icon, label, fn) => ({ icon: icon, label: label, fn: run(fn) });
-    const conv = t => t.sub ? { icon: t.icon, label: t.label, sub: t.sub.map(conv) } : leaf(t.icon, t.label, it => api.toAnalysis(it, t.bp, t.label));
-    const out = [];
-    if (k === 'polygon' || k === 'rectangle' || k === 'circle') {
-        out.push(leaf('fa-magnifying-glass-chart', 'Анализ участка', it => api.toAnalysis(it)));
-        out.push({ icon: 'fa-share-from-square', label: 'Перенести границы в', sub: api.targets.map(conv) });
-    }
-    out.push({ icon: 'fa-file-arrow-down', label: 'Скачать границы', sub: api.formats.map(f => leaf('fa-file-arrow-down', f.label, it => api.exportAs(f.id, [it]))) });
-    return out;
+    const k = l._sk.kind;
+    if (!window.gcShapeMenuApi || skIsMarker(k) || k === 'point') return [];
+    return gcPolyGroups(() => skShapeItem(l), k === 'polygon' || k === 'rectangle' || k === 'circle');
 }
 function skCtxNodesHtml(nodes, pre, store) {
     return nodes.map((n, i) => {
         const key = pre + i, ic = n.icon === 'gc-pent' ? '<i class="gc-pent"></i>' : `<i class="fas ${n.icon}"></i>`;
         store[key] = n;
         if (!n.sub) return `<button type="button" class="sk-act" data-node="${key}">${ic}<span>${n.label}</span></button>`;
-        return `<button type="button" class="sk-act sk-grp" data-grp="${key}">${ic}<span>${n.label}</span><i class="fas fa-chevron-right sk-chev"></i></button>`
-            + `<div class="sk-sub" hidden>${skCtxNodesHtml(n.sub, key + '_', store)}</div>`;
+        return `<button type="button" class="sk-act sk-grp" data-grp="${key}">${ic}<span>${n.label}</span><i class="fas fa-chevron-right sk-chev"></i></button>`;   // подменю выезжает справа (gcFlyOpen)
     }).join('');
-}
-function skToggleCtxGroup(el, hd) {
-    const sub = hd.nextElementSibling, open = sub.hidden;
-    Array.from(hd.parentNode.children).forEach(h => { if (h !== hd && h.classList.contains('sk-grp')) { h.classList.remove('open'); h.nextElementSibling.hidden = true; } });
-    hd.classList.toggle('open', open);
-    sub.hidden = !open;
-    const rect = mapStageEl.getBoundingClientRect();   // меню выросло — удерживаем его в пределах карты
-    el.style.top = Math.max(6, Math.min(parseFloat(el.style.top) || 0, rect.height - el.offsetHeight - 6)) + 'px';
 }
 
 function skShowCtx(ev, kind) {
@@ -8368,11 +8380,9 @@ function anItem(en) {
 function anGroups(en) { return gcPolyGroups(() => anItem(en)); }
 function anActs(en) {
     const l = en.l, nm = en.nm || 'uchastok', gj = () => gcFC([gcLayerGJ(l)].filter(Boolean)), acts = [];
-    acts.push({ id: 'dup', icon: 'clone', label: 'Копировать', fn: () => gcCopyToSketch(l) });
-    acts.push({ id: 'kml', icon: 'earth-europe', label: 'Экспорт KML', fn: () => gcExport(gj(), nm, 'kml') });
-    acts.push({ id: 'gj', icon: 'file-code', label: 'Экспорт GeoJSON', fn: () => gcExport(gj(), nm, 'geojson') });
+    acts.push(...gcStdActs(l, {}));
     if (anGroups(en).length) acts.push({ id: 'more', icon: 'ellipsis', label: 'Ещё: перенос границ, скачивание', keep: true, fn: skMoreCtx });
-    acts.push({ id: 'del', icon: 'trash', label: 'Удалить', danger: true, fn: () => anDelete(en) });
+    acts.push(gcStdActs(l, { del: () => anDelete(en) }).pop());
     return acts;
 }
 function anRenderCtx(kind) {
@@ -8667,6 +8677,14 @@ function skClearAll() {
     updateStatus('🧹 Рисунки очищены');
 }
 
+// «Скачать границы» для всех рисунков на карте: те же форматы, что у отдельной фигуры
+function skExportBounds(fmt) {
+    const api = window.gcShapeMenuApi;
+    const its = sketchItems.getLayers().filter(l => !skIsMarker(l._sk.kind) && l._sk.kind !== 'point').map(skShapeItem).filter(Boolean);
+    if (!api || !its.length) { updateStatus('⚠️ Нет границ для скачивания', true); return; }
+    api.exportAs(fmt, its);
+}
+
 function skExport() {
     const features = sketchItems.getLayers().map(l => {
         const f = l.toGeoJSON();
@@ -8800,10 +8818,18 @@ function skInitUI() {
     if (ctxEl) {
         ['mousedown', 'dblclick', 'wheel'].forEach(t => ctxEl.addEventListener(t, ev => ev.stopPropagation()));
         ctxEl.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); });
+        gcFlyKeep(ctxEl);
+        ctxEl.addEventListener('mouseover', ev => {   // группы меню раскрываются вправо при наведении
+            const hb = ev.target.closest && ev.target.closest('.sk-act');
+            if (!hb || !ctxEl.contains(hb) || ctxEl.dataset.kind !== 'menu') return;
+            clearTimeout(gcFlyT);
+            const hn = hb.dataset.grp ? (ctxEl._skNodes || {})[hb.dataset.grp] : null;
+            if (hn && hn.sub) gcFlyOpen(hb, hn.sub, 0, skHideCtx); else gcFlyClose(0);
+        });
         ctxEl.addEventListener('click', ev => {
             ev.stopPropagation();
             const gb = ev.target.closest('[data-grp]'), nb = ev.target.closest('[data-node]');
-            if (gb) { skToggleCtxGroup(ctxEl, gb); return; }
+            if (gb) { const gn = (ctxEl._skNodes || {})[gb.dataset.grp]; if (gn && gn.sub) gcFlyOpen(gb, gn.sub, 0, skHideCtx); return; }
             if (nb) { const n = (ctxEl._skNodes || {})[nb.dataset.node]; skHideCtx(); if (n && n.fn) n.fn(); return; }
             const ab = ev.target.closest('[data-act]'), an = ctxEl._anLayer;
             if (an) {   // меню фигуры «Анализа участка»
@@ -8821,9 +8847,22 @@ function skInitUI() {
             if (a.keep && sketchState.selected) skRenderCtx(); else skHideCtx();
         });
     }
-    [['ctxSkUndo', skUndo], ['ctxSkRedo', skRedo], ['ctxSkClear', skClearAll], ['ctxSkExport', skExport]].forEach(([id, fn]) => {
+    [['ctxSkUndo', skUndo], ['ctxSkRedo', skRedo], ['ctxSkClear', skClearAll]].forEach(([id, fn]) => {
         const el = skEl(id);
         if (el) el.addEventListener('click', ev => { ev.stopPropagation(); hideMapContextMenu(); fn(); });
+    // «Скачать границы» в меню правой кнопки по пустой карте: формат выезжает справа, как у фигур
+    const skExBtn = skEl('ctxSkExport');
+    if (skExBtn) {
+        const exOpen = () => {
+            const api = window.gcShapeMenuApi;
+            if (!api) return;
+            gcFlyOpen(skExBtn, api.formats.map(f => ({ icon: 'fa-file-arrow-down', label: f.label, fn: () => skExportBounds(f.id) })), 0, hideMapContextMenu);
+        };
+        skExBtn.addEventListener('mouseenter', () => { clearTimeout(gcFlyT); exOpen(); });
+        skExBtn.addEventListener('click', ev => { ev.stopPropagation(); exOpen(); });
+        gcFlyKeep(mapContextMenu);
+        mapContextMenu.addEventListener('mouseover', ev => { if (!ev.target.closest('#ctxSkExport')) gcFlyClose(0); });
+    }
     });
 
     // список объектов
@@ -12619,7 +12658,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
                 if (v == null) { miss++; continue; }
                 grid[r * cols + c] = v; vals.push(v); wts.push(wt);
             }
-            if (r % 40 === 39) { $('hyEmpty').textContent = 'Расчёт: ' + Math.round(r / rows * 100) + '%'; if (window.AnLoader) AnLoader.progress(55 + r / rows * 45, 'Расчёт по площади: ' + Math.round(r / rows * 100) + '%'); await yieldUI(); if (my !== hy.seq) return; }
+            if (r % 40 === 39) { $('hyEmpty').textContent = 'Расчёт: ' + Math.round(r / rows * 100) + '%'; if (window.AnLoader) AnLoader.progress(55 + r / rows * 45, 'Расчёт по площади: ' + Math.round(r / rows * 100) + '%'); await yieldUI(); if (my !== hy.seq) return; if (window.AnLoader && AnLoader.cancelledNow()) return hyFail('расчёт отменён'); }
         }
         const nV = vals.length;
         if (nV < 10) return hyFail(miss ? 'не удалось загрузить данные рельефа. Проверьте подключение к интернету' : 'в полигоне слишком мало точек выборки');
@@ -12833,7 +12872,9 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         gcMenu(ev.clientX + 2, ev.clientY + 2, pfExportItems('pf'));
     }, true);
     document.querySelectorAll('.hy-mode [data-pf-mode]').forEach(b => b.addEventListener('click', () => hySetMode(b.dataset.pfMode)));
-    $('profileBtn').addEventListener('click', () => hySetMode('line'));
+    $('profileBtn').addEventListener('click', () => hySetMode('area'));   // по умолчанию — анализ по площади
+    document.querySelectorAll('.bp-tab[data-bp-tab="profile"]').forEach(t => t.addEventListener('click', () => hySetMode('area')));
+    hySetMode('area');
     // инструменты вкладки «Профиль»: рисование включается только после выбора
     document.querySelectorAll('[data-pf-tool]').forEach(b => b.addEventListener('click', () => {
         const k = b.dataset.pfTool, area = (pfPaneEl.dataset.pfMode || 'line') === 'area';
@@ -13512,12 +13553,15 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     async function getFc(pts) {
         const key = 'fc' + keyOf(pts, 0), hit = st.cache[key];
         if (hit && Date.now() - hit.t < 600000) return hit.v;
-        let v;
-        try { v = await getFcOM(pts); }
-        catch (e) {   // api.open-meteo.com может быть недоступен из сети — пробуем резервный источник MET Norway
-            if (st.ctl.signal.aborted) throw e;
+        let v, e;
+        // если Open-Meteo недавно не ответил, 10 минут сразу берём резервный источник MET Norway (не ждём таймаут на каждом запросе)
+        if (Date.now() - (st.omDownAt || 0) > 600000) {
+            try { v = await getFcOM(pts); }
+            catch (err) { if (st.ctl.signal.aborted) throw err; e = err; st.omDownAt = Date.now(); }
+        }
+        if (!v) {   // api.open-meteo.com может быть недоступен из сети — тогда используем резервный источник MET Norway
             try { v = await getFcMet(pts); }
-            catch (e2) { if (st.ctl.signal.aborted) throw e2; throw new Error((e && e.message || e) + '; резервный источник MET Norway тоже не ответил: ' + (e2 && e2.message || e2)); }
+            catch (e2) { if (st.ctl.signal.aborted) throw e2; throw new Error((e && e.message || e || 'Open-Meteo пропущен') + '; резервный источник MET Norway тоже не ответил: ' + (e2 && e2.message || e2)); }
         }
         v.pts = pts.slice(0, v.cur.t.length);
         st.cache[key] = { t: Date.now(), v: v };
@@ -13882,8 +13926,8 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             st.done[k] = true;
             setStat('Обновлено ' + new Date().toLocaleTimeString().slice(0, 5) + ' · ' + 'участок' + ' · Open-Meteo');
         } catch (err) {
-            if (st.ctl.signal.aborted) setStat(st.again ? 'Участок изменён — пересчёт…' : 'Загрузка отменена. Нажмите «Обновить», чтобы повторить.');
-            else setStat('Ошибка загрузки: ' + (err && err.message || err) + '. Нажмите «Обновить».', true);
+            if (st.ctl.signal.aborted) setStat(st.again ? 'Участок изменён — пересчёт…' : 'Загрузка отменена. Измените участок или переключите вкладку, чтобы повторить.');
+            else setStat('Ошибка загрузки: ' + (err && err.message || err) + '. Измените участок или переключите вкладку, чтобы повторить.', true);
         } finally {
             st.busy = false; if (al && window.AnLoader) AnLoader.end(al);
             if (st.again) { st.again = false; run(st.cur); }
@@ -13905,7 +13949,6 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="wx" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
             '<div class="an-hint" data-wx2="info"></div></div>' +
             '<div class="dw-block"><div class="dw-title">' + SECS[k][0] + '</div>' +
-            '<button type="button" class="wx2-go" data-wx-act="run"><i class="fas fa-rotate"></i><span>Обновить</span></button>' +
             '<div class="wx2-note" data-wx2="status"></div><div data-wx2="out"></div></div>';
         p.addEventListener('click', e => {
             const t = e.target.closest('[data-wx-tool]'), a = e.target.closest('[data-wx-act]');

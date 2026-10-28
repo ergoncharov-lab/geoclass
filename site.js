@@ -703,7 +703,7 @@
         // кнопка лежит отдельно справа от «Очистить» и не занимает место в потоке — исходная кнопка остаётся на месте и видна
         function placeCache() {
             if (!clearBtn.offsetWidth) return;
-            cacheBtn.style.cssText = 'position:absolute;margin:0;left:' + (clearBtn.offsetLeft + clearBtn.offsetWidth + 8) + 'px;top:' + clearBtn.offsetTop + 'px;z-index:' + (getComputedStyle(clearBtn).zIndex === 'auto' ? 1 : getComputedStyle(clearBtn).zIndex);
+            cacheBtn.style.cssText = '';   // позиция задаётся CSS (#mapCacheBtn): под кнопкой «Очистить карту»
         }
         placeCache(); setTimeout(placeCache, 600); window.addEventListener('resize', placeCache); window.addEventListener('load', placeCache);
         cacheBtn.addEventListener('click', function () {
@@ -835,7 +835,7 @@
     box.addEventListener('wheel', function (e) { e.preventDefault(); }, { passive: false });   // панель под заставкой не прокручивается
     window.addEventListener('resize', function () { if (shown) fit(); });
     var gone = {};   // расчёты, отменённые пользователем
-    btn.addEventListener('click', function () { if (cur && cur.cancel) { cur.stop = true; gone[cur.id] = 1; btn.disabled = true; cur.cancel(); } });
+    btn.addEventListener('click', function () { if (cur) { cur.stop = true; gone[cur.id] = 1; btn.disabled = true; tText.textContent = 'Останавливаю…'; if (cur.cancel) cur.cancel(); } });
 
     window.AnLoader = {
         start: function (title, text, opt) {
@@ -843,7 +843,7 @@
             cur = { id: id, cancel: opt && opt.onCancel };
             startAt = Date.now(); tTime.textContent = '0 с';
             tTitle.textContent = title || 'Анализ'; tText.textContent = text || 'Обработка данных…'; setPct(null);
-            btn.hidden = !cur.cancel; btn.disabled = false;
+            btn.hidden = false; btn.disabled = false;   // кнопка отмены есть у любой заставки
             clearTimeout(hideT);
             if (!shown) { clearTimeout(showT); showT = setTimeout(reveal, opt && opt.delay != null ? opt.delay : 250); }
             return id;

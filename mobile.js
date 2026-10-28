@@ -88,13 +88,17 @@
     function mcOff(off) {
         if (!mcr || !tg) return;
         mcr.classList.toggle('mb-mc-off', off);
-        tg.innerHTML = '<i class="fas fa-' + (off ? 'sliders' : 'xmark') + '"></i>';
+        var ti = tg.firstChild; if (!ti) { ti = document.createElement('i'); tg.appendChild(ti); }   // иконку не пересоздаём — только меняем класс
+        ti.className = 'fas fa-' + (off ? 'sliders' : 'xmark');
     }
     if (mcr && !mcr.querySelector('.mb-mc-toggle')) {
         var mrow = document.createElement('div'); mrow.className = 'mb-mc-row';   // кнопка-тоггл и две группы: раскрываются влево от кнопки
         tg = document.createElement('button'); tg.type = 'button'; tg.className = 'mb-mc-toggle'; tg.title = 'Виджеты карты';
         mcr.insertBefore(mrow, mcr.firstChild); mrow.appendChild(tg); mcOff(true);
-        tg.addEventListener('click', function () { mcOff(!mcr.classList.contains('mb-mc-off')); });
+        // отклик сразу при касании (pointerup), не дожидаясь click; последующий click в течение 500 мс игнорируется
+        var tgT = 0, tgFlip = function () { mcOff(!mcr.classList.contains('mb-mc-off')); };
+        tg.addEventListener('pointerup', function (e) { if (e.pointerType === 'mouse') return; tgT = Date.now(); tgFlip(); });
+        tg.addEventListener('click', function () { if (Date.now() - tgT < 500) return; tgFlip(); });
         gNav = document.createElement('div'); gNav.className = 'mc-group mc-row mb-g mb-g-nav';
         gTools = document.createElement('div'); gTools.className = 'mc-group mc-row mb-g mb-g-tools';
         mrow.appendChild(gNav); mrow.appendChild(gTools);
@@ -143,7 +147,6 @@
         if (!gNav || !gTools) return;
         if (mob()) {
             relocate(document.getElementById('locateBtn'), gNav);
-            relocate(document.getElementById('northBtn'), gNav);
             ['drawWidget', 'measureWidget', 'measureAreaWidget'].forEach(function (id) { relocate(document.getElementById(id), gTools); });
         } else {
             moved.forEach(function (m) { if (m.ph.parentNode && m.el.parentNode !== m.ph.parentNode) m.ph.parentNode.insertBefore(m.el, m.ph); });
@@ -261,6 +264,7 @@
     function walk(el, info) {
         Array.prototype.forEach.call(el.children, function (c) {
             if (c.classList.contains('pp-sec-h') || c.tagName === 'SCRIPT' || c.tagName === 'STYLE') { c.classList.add('mb-hide'); return; }
+            if (c.classList.contains('pp-note') && c.textContent.indexOf('Снимок Sentinel-2 L2A от') >= 0) { c.classList.add('mb-hide'); return; }   // длинная подсказка про дату снимка — лишняя
             if (c.classList.contains('pp-sub')) { mark(c, info); return; }
             if (c.querySelector('.pp-sub')) { c.classList.add('mb-flat'); walk(c, info); return; }
             if (hasContent(c)) mark(c, info); else c.classList.add('mb-hide');
@@ -291,6 +295,12 @@
         if (cur >= slides.length) cur = Math.max(0, slides.length - 1);
         mark2();
     }
+    var sideA = [-1, 1].map(function (d) {   // стрелки по бокам, посередине страницы
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'mb-sd'; b.setAttribute('data-d', d); b.setAttribute('aria-label', d < 0 ? 'Назад' : 'Вперёд');
+        b.innerHTML = '<i class="fas fa-chevron-' + (d < 0 ? 'left' : 'right') + '"></i>'; pane.appendChild(b);
+        b.addEventListener('click', function () { if (!b.disabled) go(cur + d); });
+        return b;
+    });
     function drawBar() {
         if (!slides.length) { bar.innerHTML = ''; return; }
         bar.innerHTML = '<button type="button" class="mb-ar" data-d="-1" aria-label="Назад"><i class="fas fa-chevron-left"></i></button><div class="mb-chs">' +
@@ -299,6 +309,7 @@
     }
     function mark2() {   // отметить текущую страницу в полосе
         var n = slides.length; if (!n) return;
+        sideA[0].disabled = cur <= 0; sideA[1].disabled = cur >= n - 1;
         var cnt = $('.mb-cnt', bar), pg = $('.mb-pg b', bar); if (cnt) cnt.textContent = (cur + 1) + ' / ' + n; if (pg) pg.style.width = ((cur + 1) / n * 100) + '%';
         var gi = 0; groups.forEach(function (g, k) { if (g.first <= cur) gi = k; });
         $$('.mb-ch', bar).forEach(function (b, k) {

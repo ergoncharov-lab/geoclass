@@ -141,6 +141,25 @@ def upstream_get_direct(path, headers):
                 raise
 
 
+# CORS-заголовки для /s3/: браузер открывает к прокси больше соединений, если снимки идут с нескольких портов (лимит браузера — 6 соединений на один адрес)
+S3_CORS = [('Access-Control-Allow-Origin', '*'), ('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, ETag, Content-Type')]
+S3_EXTRA_PORTS = 3   # дополнительные порты PORT+1 … PORT+3 с тем же сервером (занятые порты пропускаются)
+
+
+# хосты, которые разрешено запрашивать через /ext, и прокси для каждого (определяется один раз; сначала через прокси компании, затем напрямую)
+EXT_HOSTS = ('api.open-meteo.com', 'archive-api.open-meteo.com', 'nominatim.openstreetmap.org')
+_EXT_CACHE = {}
+_EXT_LOCK = threading.Lock()
+
+
+def ext_openers(host):
+    with _EXT_LOCK:
+        if host not in _EXT_CACHE:
+            px = os.environ.get('GEO_PROXY') or win_proxy_for('https://' + host)
+            _EXT_CACHE[host] = [make_opener(px)] if px else []
+    return _EXT_CACHE[host] + [OPENER]
+
+
 # ---------- дисковый кэш ----------
 def cache_path(key, rng):
     h = hashlib.sha1((key + '|' + (rng or '')).encode('utf-8')).hexdigest()
@@ -316,7 +335,7 @@ def soil_query(w, s, e, n, z):
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     # префикс пути -> имя метода-обработчика; всё остальное — статические файлы сайта
-    ROUTES = (('/s3/', 'proxy'), ('/isric?', 'isric'), ('/ucache?', 'ucache'), ('/nspdcheck', 'nspdcheck'), ('/soilgeo', 'soilgeo'))
+    ROUTES = (('/ext?', 'ext'), ('/s3/', 'proxy'), ('/isric?', 'isric'), ('/ucache?', 'ucache'), ('/nspdcheck', 'nspdcheck'), ('/soilgeo', 'soilgeo'))
 
     def do_GET(self):
         for prefix, handler in self.ROUTES:
@@ -493,11 +512,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 cache_put(key, None, status, headers, data)
         self.reply(status, [('Content-Type', headers.get('content-type', 'application/octet-stream')), ('Content-Length', str(len(data)))], data)
 
+    def do_OPTIONS(self):   # предзапрос CORS для /s3/ на дополнительных портах
+        self.send_response(204)
+        for h, v in S3_CORS + [('Access-Control-Allow-Methods', 'GET, OPTIONS'), ('Access-Control-Allow-Headers', 'Range, Content-Type'), ('Access-Control-Max-Age', '86400'), ('Content-Length', '0')]:
+            self.send_header(h, v)
+        self.end_headers()
+
+    # ---------- /ext: погода / высоты (Open-Meteo) и геокодер (Nominatim) через прокси компании ----------
+    def ext(self):
+        u = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('u', [''])[0]
+        pu = urllib.parse.urlparse(u)
+        if pu.scheme != 'https' or pu.hostname not in EXT_HOSTS:
+            self.send_error(403, 'forbidden')
+            return
+        err = None
+        for op in ext_openers(pu.hostname):
+            try:
+                with op.open(urllib.request.Request(u, headers={'User-Agent': 'GeoClass/1.0 (local proxy)', 'Accept': 'application/json,*/*', 'Accept-Encoding': 'identity'}), timeout=12) as r:
+                    data = r.read()
+                    self.reply(r.status, [('Content-Type', r.headers.get('Content-Type', 'application/json')), ('Content-Length', str(len(data))), ('Cache-Control', 'no-store')], data)
+                    return
+            except urllib.error.HTTPError as e:   # ответ сервиса (например 400) отдаём как есть
+                data = e.read()
+                self.reply(e.code, [('Content-Type', e.headers.get('Content-Type', 'application/json')), ('Content-Length', str(len(data))), ('Cache-Control', 'no-store')], data)
+                return
+            except Exception as e:
+                err = e
+        print('EXT error:', u[:120], err)
+        self.send_error(502, 'upstream unreachable', str(err))
+
     # ---------- /s3/: прокси снимков Sentinel-2 ----------
     def proxy(self):
         key = urllib.parse.unquote(self.path[4:].split('?')[0])
         if key == 'ping':
-            self.reply(200, [('X-GeoClass-Proxy', '1'), ('Content-Length', '2')], b'ok', ignore_disconnect=False)
+            self.reply(200, [('X-GeoClass-Proxy', '1'), ('Content-Length', '2')] + S3_CORS, b'ok', ignore_disconnect=False)
             return
         if not key.startswith(ALLOWED_PREFIX) or '..' in key:
             self.send_error(403, 'forbidden')
@@ -519,7 +567,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if status in (200, 206):
                 cache_put(key, rng, status, headers, data)
         out = [(h, headers[h.lower()]) for h in FWD_HEADERS if headers.get(h.lower())]
-        self.reply(status, out + [('Content-Length', str(len(data))), ('Cache-Control', 'public, max-age=86400')], data)
+        self.reply(status, out + [('Content-Length', str(len(data))), ('Cache-Control', 'public, max-age=86400')] + S3_CORS, data)
 
 
 if __name__ == '__main__':
@@ -531,4 +579,10 @@ if __name__ == '__main__':
     print('Кэш снимков: %s' % CACHE_DIR)
     print('Прокси для НСПД: %s' % (NSPD_PROXY or 'нет (напрямую)'))
     print('Прокси для снимков S3: %s' % (S3_PROXY or 'нет (напрямую)'))
+    for k in range(1, S3_EXTRA_PORTS + 1):
+        try:
+            srv = http.server.ThreadingHTTPServer(('127.0.0.1', PORT + k), Handler)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+        except OSError as e:
+            print('Доп. порт %d не открыт: %s' % (PORT + k, e))
     http.server.ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()

@@ -139,11 +139,23 @@
 
     // ---------- 3. индикация сетевых запросов (Overpass, Open-Meteo) ----------
     var ofetch = window.fetch.bind(window), busy = 0;
+    // погода, высоты и геокодер (Open-Meteo, Nominatim): из браузера напрямую они часто недоступны (прокси компании), поэтому сначала идём через локальный сервер
+    // (serve_site.py, маршрут /ext — он ходит через прокси компании); если сервера нет или он не ответил — обычный запрос
+    var extOff = !/^(localhost|127\.0\.0\.1)$/.test(location.hostname) || !/^https?:$/.test(location.protocol);
+    var EXT_RE = /^https:\/\/(api\.open-meteo\.com|archive-api\.open-meteo\.com|nominatim\.openstreetmap\.org)\//;
+    function go(u, args) {
+        if (extOff || typeof args[0] !== 'string' || !EXT_RE.test(u) || (args[1] && args[1].method && String(args[1].method).toUpperCase() !== 'GET')) return ofetch.apply(null, args);
+        return ofetch('/ext?u=' + encodeURIComponent(u), args[1]).then(function (r) {
+            if (r.ok) return r;
+            if (r.status === 404 || r.status === 405) extOff = true;   // сайт открыт не через serve_site.py
+            throw new Error('ext ' + r.status);
+        }).catch(function () { return ofetch.apply(null, args); });
+    }
     window.fetch = function (input) {
         var u = typeof input === 'string' ? input : (input && input.url) || '', on = /overpass|open-meteo\.com/.test(u);
-        if (!on) return ofetch.apply(null, arguments);
+        if (!on) return go(u, arguments);
         busy++; updateStatus('⏳ Загрузка данных (' + (/overpass/.test(u) ? 'OpenStreetMap' : 'Open-Meteo') + ')…');
-        var p = ofetch.apply(null, arguments), fin = function () { if (--busy === 0) updateStatus('✅ Данные получены'); };
+        var p = go(u, arguments), fin = function () { if (--busy === 0) updateStatus('✅ Данные получены'); };
         p.then(fin, function () { if (--busy === 0) updateStatus('⚠️ Не удалось загрузить данные', true); });
         return p;
     };
@@ -152,7 +164,7 @@
     if (vf) vf.addEventListener('change', function () {
         var f = this.files && this.files[0];
         if (!f || f.size < 400 * 1024 || !window.AnLoader) return;
-        var id = AnLoader.start('Импорт файла', 'Чтение и разбор: ' + f.name, { delay: 0 });
+        var id = AnLoader.start('Импорт файла', 'Чтение и разбор: ' + f.name, { delay: 0, onCancel: function () { AnLoader.end(id); } });
         setTimeout(function () { AnLoader.end(id); }, 1500 + Math.min(8000, f.size / 2000));
     });
 
@@ -1051,7 +1063,7 @@
             if (typeof disableEditForAll === 'function') disableEditForAll();
             var grp = L.geoJSON(gj, { style: typeof SHAPE_STYLE !== 'undefined' ? SHAPE_STYLE : undefined });
             grp.eachLayer(function (l) { if (ro.num) l._gcName = ro.num; drawnItems.addLayer(l); });
-            map.fitBounds(grp.getBounds(), { maxZoom: 18, padding: [40, 40] });
+            if (typeof gcFitSoft === 'function') gcFitSoft(grp.getBounds()); else map.fitBounds(grp.getBounds(), { maxZoom: 18, padding: [40, 40] });
             if (typeof updateAllLabels === 'function') updateAllLabels();
             if (typeof updateObjectList === 'function') updateObjectList();
             clearSel();
@@ -1167,6 +1179,8 @@
                 var gm = f && f.geometry; if (!gm || !gm.coordinates || !/Polygon/.test(gm.type)) return;
                 var pr = f.properties || f, ro = rowsOf(pr), m = flat(pr && pr.options ? pr.options : pr, {}), key = ro.num || JSON.stringify(gm.coordinates).slice(0, 60);
                 if (keys[key]) return; keys[key] = 1;
+                // слой ООПТ: приаэродромные территории огромны и к природоохранным не относятся — в пересечения не включаем
+                if ((o.layer || 'z') === 'p' && Object.keys(m).some(function (k) { return /аэродром/i.test(String(m[k])) || /аэродром/i.test(k); })) return;
                 var fld = function (lb) { var fl = FIELDS.filter(function (x) { return x[0] === lb; })[0]; for (var i = 0; fl && i < fl[1].length; i++) { var v = m[fl[1][i]]; if (v != null && v !== '') return String(v); } return ''; };
                 var ar = parseFloat(fld('Площадь').replace(',', '.').replace(/\s/g, '')), rights = [], seenR = {};
                 Object.keys(m).forEach(function (k) { var v = m[k]; if (/ownership|right|owner|собствен/i.test(k) && typeof v !== 'object' && v !== '' && !/^\d+$/.test(String(v))) { v = fmt('s', v); if (!seenR[v]) { seenR[v] = 1; rights.push([labelRu(k), v]); } } });

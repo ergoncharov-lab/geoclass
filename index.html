@@ -1298,53 +1298,37 @@
                 </button>
                 <div class="widget-panel widget-panel-horizontal" id="baseLayersPanel">
                     <div class="widget-panel-body-horizontal">
-                        <div class="layer-chip" data-layer="google" title="Google Карты — универсальная дорожная схема с подписями">
-                            <span>Google</span>
-                            <div class="layer-thumb" data-thumb="google"></div>
-                        </div>
                         <div class="layer-chip active" data-layer="yandex" title="Яндекс Карты — подробная схема России и СНГ, подложка выровнена по проекции карты">
                             <span>Яндекс</span>
                             <div class="layer-thumb" data-thumb="yandex"></div>
                         </div>
-                        <div class="layer-chip" data-layer="osm" title="OpenStreetMap — открытая карта мира, самые подробные данные по дорогам и объектам">
-                            <span>OSM</span>
-                            <div class="layer-thumb" data-thumb="osm"></div>
+                        <div class="layer-chip" data-layer="google" title="Google Карты — универсальная дорожная схема с подписями">
+                            <span>Google</span>
+                            <div class="layer-thumb" data-thumb="google"></div>
                         </div>
                         <div class="layer-chip" data-layer="2gis" title="2ГИС — подробная карта городов России: здания, организации, адреса">
                             <span>2ГИС</span>
                             <div class="layer-thumb" data-thumb="2gis"></div>
                         </div>
-                        <div class="layer-chip" data-layer="opentopo" title="OpenTopoMap — топографическая карта с горизонталями и отметками высот">
-                            <span>Topo</span>
-                            <div class="layer-thumb" data-thumb="opentopo"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="esri_topo" title="Esri World Topographic Map — топографическая карта">
-                            <span>Esri Topo</span>
-                            <div class="layer-thumb" data-thumb="esri_topo"></div>
-                        </div>
                         <div class="layer-chip" data-layer="esri_natgeo" title="Esri National Geographic World Map — карта в стиле National Geographic">
                             <span>NatGeo</span>
                             <div class="layer-thumb" data-thumb="esri_natgeo"></div>
                         </div>
-                        <div class="layer-chip" data-layer="esri_terrain" title="Esri World Terrain Base — высоты и рельеф">
-                            <span>Terrain</span>
-                            <div class="layer-thumb" data-thumb="esri_terrain"></div>
+                        <div class="layer-chip" data-layer="osm" title="OpenStreetMap — открытая карта мира, самые подробные данные по дорогам и объектам">
+                            <span>OSM</span>
+                            <div class="layer-thumb" data-thumb="osm"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="opentopo" title="OpenTopoMap — топографическая карта с горизонталями и отметками высот">
+                            <span>Topo</span>
+                            <div class="layer-thumb" data-thumb="opentopo"></div>
                         </div>
                         <div class="layer-chip" data-layer="esri_gray" title="Esri Light Gray Canvas — нейтральная светло-серая основа для аналитики">
                             <span>Gray</span>
                             <div class="layer-thumb" data-thumb="esri_gray"></div>
                         </div>
-                        <div class="layer-chip" data-layer="esri_street" title="Esri World Street Map — классическая уличная карта с подписями">
-                            <span>Esri Street</span>
-                            <div class="layer-thumb" data-thumb="esri_street"></div>
-                        </div>
                         <div class="layer-chip" data-layer="esri_dark" title="Esri Dark Gray Canvas — тёмно-серая основа с подписями, хороша для ярких данных">
                             <span>Esri Dark</span>
                             <div class="layer-thumb" data-thumb="esri_dark"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="esri_transport" title="Esri Транспорт — светлая основа с дорожной сетью и названиями для логистики">
-                            <span>Транспорт</span>
-                            <div class="layer-thumb" data-thumb="esri_transport"></div>
                         </div>
                     </div>
                 </div>
@@ -1356,10 +1340,6 @@
                 </button>
                 <div class="widget-panel widget-panel-horizontal" id="satellitePanel">
                     <div class="widget-panel-body-horizontal">
-                        <div class="layer-chip" data-layer="google_sat" title="Google Спутник — спутниковые снимки Google без подписей">
-                            <span>Google</span>
-                            <div class="layer-thumb" data-thumb="google_sat"></div>
-                        </div>
                         <div class="layer-chip" data-layer="yandex_sat" title="Яндекс Спутник — спутниковые снимки Яндекса без подписей, выровнены по проекции карты">
                             <span>Яндекс</span>
                             <div class="layer-thumb" data-thumb="yandex_sat"></div>
@@ -1367,6 +1347,10 @@
                         <div class="layer-chip" data-layer="yandex_hybrid" title="Яндекс Гибрид — снимки Яндекса с подписями, выровнены по проекции карты">
                             <span>Яндекс Гибрид</span>
                             <div class="layer-thumb" data-thumb="yandex_hybrid"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="google_sat" title="Google Спутник — спутниковые снимки Google без подписей">
+                            <span>Google</span>
+                            <div class="layer-thumb" data-thumb="google_sat"></div>
                         </div>
                         <div class="layer-chip" data-layer="google_hybrid" title="Google Гибрид — спутниковые снимки Google с дорогами и подписями">
                             <span>Гибрид</span>
@@ -1379,14 +1363,6 @@
                         <div class="layer-chip" data-layer="esri_hybrid" title="Esri Гибрид — снимки Esri World Imagery с дорогами и подписями">
                             <span>Esri Гибрид</span>
                             <div class="layer-thumb" data-thumb="esri_hybrid"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="esri_firefly" title="Esri Imagery Firefly — приглушённая тёмная версия снимков Esri, удобна для наложения данных">
-                            <span>Firefly</span>
-                            <div class="layer-thumb" data-thumb="esri_firefly"></div>
-                        </div>
-                        <div class="layer-chip" data-layer="sentinel2" title="Sentinel-2 — мультиспектральные снимки ESA, 10 м на пиксель">
-                            <span>S2</span>
-                            <div class="layer-thumb" data-thumb="sentinel2"></div>
                         </div>
                         <div class="layer-chip" data-layer="bing_sat" title="Bing Aerial — спутниковые и аэроснимки Microsoft Bing">
                             <span>Bing</span>
@@ -1410,9 +1386,21 @@
                             <span>Land Cover</span>
                             <div class="layer-thumb" data-thumb="esri_landcover"></div>
                         </div>
+                        <div class="layer-chip" data-layer="sentinel2" title="Sentinel-2 — мультиспектральные снимки ESA, 10 м на пиксель">
+                            <span>Естественные</span>
+                            <div class="layer-thumb" data-thumb="sentinel2"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="falsecolor" title="Ложные цвета CIR (Sentinel-2): NIR · Red · Green">
+                            <span>Ложные цвета</span>
+                            <div class="layer-thumb" data-thumb="falsecolor"></div>
+                        </div>
                         <div class="layer-chip" data-layer="ndvi" title="NDVI — индекс растительности: чем выше значение, тем гуще и здоровее растительность">
                             <span>NDVI</span>
                             <div class="layer-thumb" data-thumb="ndvi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndvi_c" title="Контрастный NDVI — шкала растянута на выбранный диапазон">
+                            <span>NDVI контр.</span>
+                            <div class="layer-thumb" data-thumb="ndvi_c"></div>
                         </div>
                         <div class="layer-chip" data-layer="ndmi" title="NDMI — индекс влажности растительности: помогает заметить засуху и водный стресс">
                             <span>NDMI</span>
@@ -1421,6 +1409,26 @@
                         <div class="layer-chip" data-layer="nbr" title="NBR — индекс нарушенности покрова: гари, сухая биомасса, угнетённые посевы">
                             <span>NBR</span>
                             <div class="layer-thumb" data-thumb="nbr"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="gndvi" title="GNDVI — хлорофилл и азотное питание по зелёному каналу">
+                            <span>GNDVI</span>
+                            <div class="layer-thumb" data-thumb="gndvi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndre" title="NDRE — азот и хлорофилл по Red Edge">
+                            <span>NDRE</span>
+                            <div class="layer-thumb" data-thumb="ndre"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="savi" title="SAVI — вегетация с поправкой на почву">
+                            <span>SAVI</span>
+                            <div class="layer-thumb" data-thumb="savi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndwi" title="NDWI — вода и переувлажнение">
+                            <span>NDWI</span>
+                            <div class="layer-thumb" data-thumb="ndwi"></div>
+                        </div>
+                        <div class="layer-chip" data-layer="ndti" title="NDTI — растительные остатки: стерня и no-till">
+                            <span>NDTI</span>
+                            <div class="layer-thumb" data-thumb="ndti"></div>
                         </div>
                         <div class="layer-chip" data-layer="soil_ph" title="Кислотность почвы (pH в воде), слой 0–5 см — ISRIC SoilGrids 250 м">
                             <span>pH почв</span>
@@ -1593,7 +1601,7 @@
             <div class="ctx-item" id="ctxSkUndo" style="display:none"><i class="fas fa-rotate-left"></i> Отменить рисунок</div>
             <div class="ctx-item" id="ctxSkRedo" style="display:none"><i class="fas fa-rotate-right"></i> Повторить</div>
             <div class="ctx-item" id="ctxSkClear" style="display:none"><i class="fas fa-eraser"></i> Очистить рисунки</div>
-            <div class="ctx-item" id="ctxSkExport" style="display:none"><i class="fas fa-download"></i> Скачать рисунки (GeoJSON)</div>
+            <div class="ctx-item" id="ctxSkExport" style="display:none"><i class="fas fa-download"></i> Скачать границы <i class="fas fa-chevron-right" style="margin-left:auto;font-size:10px;color:#94a3b8"></i></div>
         </div>
       </div>
 
@@ -1786,6 +1794,7 @@
 <script src="ux-extras.js"></script>
 <script src="agrocalc.js"></script>
 <script src="help-links.js"></script>
+    <script src="ux-actions.js"></script>
 <script src="mobile.js"></script>
 </body>
 </html>
