@@ -14286,6 +14286,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         cec: { n: 'Ёмкость катионного обмена', u: 'смоль(+)/кг', k: 10, d: 1 },
         bdod: { n: 'Плотность сложения', u: 'г/см³', k: 100, d: 2 }
     };
+    const TYPES = '__types';   // пункт «Типы почв»: векторная почвенная карта (soil.geojson), пересечение с фигурой
     const DEPTHS = [['0-5cm', '0–5 см'], ['5-15cm', '5–15 см'], ['15-30cm', '15–30 см'], ['30-60cm', '30–60 см'], ['60-100cm', '60–100 см'], ['100-200cm', '100–200 см']];
     const st = { shape: null, gj: null, handler: null, tool: null, editing: false, res: null, busy: false, vis: true, cov: null, rast: null, tok: 0, rastVis: true };
     const grp = L.featureGroup().addTo(map), rastGrp = L.layerGroup().addTo(map), zoneGrp = L.featureGroup().addTo(map);
@@ -14407,6 +14408,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
     async function analyze() {
         if (st.busy) return;
         if (!st.gj) { updateStatus('⚠️ Сначала нарисуйте область на карте', true); return; }
+        if (q('prop').value === TYPES) { clearRes(); loadRaster(); return; }
         const out = q('out'), prop = q('prop').value, depth = q('depth').value, k = Math.max(2, Math.min(8, Math.round(+q('zN').value) || 3)), method = q('zM').value;
         q('zN').value = k;
         const bb = turf.bbox(st.gj);
@@ -14555,9 +14557,43 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         st.rastVis = true; applyRastVis(); renderRast();
         updateStatus('✅ Слой почвы в фигуре: ' + PROPS[prop].n + ' · ' + w + '×' + h + ' пикс. SoilGrids');
     }
+    // «Типы почв»: полигоны почвенной карты внутри фигуры — раскраска на карте и список с долями на панели
+    async function loadTypes() {
+        const box = q('rast'), tok = st.tok;
+        box.innerHTML = '<div class="m3-hint"><i class="fas fa-spinner fa-spin"></i> Определяем типы почв…</div>';
+        try {
+            if (!window.gcSoilTypes) throw new Error('модуль почвенной карты не загружен');
+            const r = await window.gcSoilTypes(st.gj, { alive: () => tok === st.tok });
+            if (!r || tok !== st.tok) return;
+            const its = r.items.filter(x => x.ia >= 1), tot = its.reduce((s, x) => s + x.ia, 0);
+            if (!its.length) { box.innerHTML = '<div class="m3-hint">Нет данных почвенной карты в этой области.</div>'; return; }
+            its.forEach(it => it.parts.forEach(x => L.geoJSON(x, { style: { color: '#475569', weight: 1, fillColor: it.color, fillOpacity: 0.6 }, interactive: false }).addTo(rastGrp)));
+            st.rastVis = true; applyRastVis();
+            box.innerHTML = '<div class="sn-res"><div class="sn-res-hd">Типы почв в фигуре</div>' +
+                its.map(it => '<div class="cad-lr"><i style="background:' + it.color + '"></i><span>' + esc(it.name) + ' — <b>' + nf(it.ia / tot * 100, 1) + ' %</b> (' + nf(it.ia / 1e4, 2) + ' га)' + (it.zone ? ' <span style="color:#94a3b8">· ' + esc(it.zone) + '</span>' : '') + '</span></div>').join('') +
+                '<label class="dw-check"><input type="checkbox" data-ch="rvis"' + (st.rastVis ? ' checked' : '') + '> Показывать типы почв на карте</label>' +
+                '<div class="m3-hint">Источник — почвенная карта (soil.geojson, сервер serve_site.py). Масштаб мелкий, границы типов ориентировочные.</div></div>';
+            updateStatus('✅ Типы почв в фигуре: ' + its.length);
+        } catch (e) {
+            console.warn('Почвенный анализ: типы почв', e);
+            if (tok === st.tok) box.innerHTML = '<div class="m3-hint">Типы почв не определены: ' + esc(e.message) + ' (нужен запущенный serve_site.py и файл soil.geojson)</div>';
+        }
+    }
+    // для типов почв глубина, число зон и разбиение не нужны
+    function syncTypesUI() {
+        const on = q('prop').value === TYPES;
+        ['depth', 'zN', 'zM'].forEach(n => { const row = q(n) && q(n).closest('.dw-row'); if (row) row.style.display = on ? 'none' : ''; });
+        const go = pane.querySelector('[data-ch-act="calc"] span'); if (go) go.textContent = on ? 'Определить типы почв' : 'Рассчитать по фигуре';
+    }
     async function loadRaster() {
         clearRast();
         if (!st.gj) return;
+        syncTypesUI();
+        if (q('prop').value === TYPES) {
+            const bt = turf.bbox(st.gj);
+            if ((bt[2] - bt[0]) > 1.5 || (bt[3] - bt[1]) > 1.5) { q('rast').innerHTML = '<div class="m3-hint">Область слишком большая — уменьшите фигуру.</div>'; return; }
+            loadTypes(); return;
+        }
         const bb = turf.bbox(st.gj), box = q('rast'), tok = st.tok;
         if ((bb[2] - bb[0]) > 1.5 || (bb[3] - bb[1]) > 1.5) { box.innerHTML = '<div class="m3-hint">Область слишком большая — уменьшите фигуру.</div>'; return; }
         box.innerHTML = '<div class="m3-hint"><i class="fas fa-spinner fa-spin"></i> Загружаем слой SoilGrids…</div>';
@@ -14693,13 +14729,13 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
         '<div class="an-hint" data-ch="shapeInfo"></div></div>' +
         '<div class="dw-block"><div class="dw-title">Почвенный показатель</div>' +
         '<div class="m3-hint">Числовые значения ISRIC SoilGrids 250 м — те же данные, что в слое Esri World Soils 250m — внутри нарисованной фигуры.</div>' +
-        '<div class="dw-row"><label>Показатель</label>' + sel('prop', Object.keys(PROPS).map(k => '<option value="' + k + '">' + PROPS[k].n + '</option>').join('')) + '</div>' +
+        '<div class="dw-row"><label>Показатель</label>' + sel('prop', Object.keys(PROPS).map(k => '<option value="' + k + '">' + PROPS[k].n + '</option>').join('') + '<option value="' + TYPES + '">Типы почв (почвенная карта)</option>') + '</div>' +
         '<div class="dw-row"><label>Глубина</label>' + sel('depth', DEPTHS.map(d => '<option value="' + d[0] + '">' + d[1] + '</option>').join('')) + '</div>' +
         '<div class="dw-row"><label>Число зон</label><input type="number" data-ch="zN" min="2" max="8" step="1" value="3"></div>' +
         '<div class="dw-row"><label>Разбиение</label>' + sel('zM', '<option value="q" selected>Равные по площади</option><option value="e">Равные интервалы значений</option>') + '</div>' +
         '<button type="button" class="ch-go" data-ch-act="calc"><i class="fas fa-flask"></i><span>Рассчитать по фигуре</span></button>' +
         '<div data-ch="rast"></div><div data-ch="out"></div></div>';
-    info();
+    info(); syncTypesUI();
     pane.addEventListener('click', e => {
         const t = e.target.closest('[data-ch-tool]'), a = e.target.closest('[data-ch-act]');
         if (t) { startTool(t.dataset.chTool); return; }
@@ -14721,7 +14757,7 @@ m3SetTabEnabled(false);   // при запуске вкладка «3D» отк�
             st.vis = e.target.checked;
             if (st.vis) zoneGrp.addTo(map); else map.removeLayer(zoneGrp);
         } else if (k === 'rvis') { st.rastVis = e.target.checked; applyRastVis(); }
-        else if (k === 'prop' || k === 'depth') { clearRes(); loadRaster(); }   // новый показатель / глубина — слой перерисовывается
+        else if (k === 'prop' || k === 'depth') { clearRes(); syncTypesUI(); loadRaster(); }   // новый показатель / глубина — слой перерисовывается
         else if (k === 'zN' || k === 'zM') clearRes();
     });
     document.addEventListener('click', e => {

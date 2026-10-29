@@ -593,7 +593,8 @@
         $('cadInfoT').innerHTML = html;
         info.style.display = '';
         var tb = document.querySelector('.bp-tab[data-bp-tab="cadastre"]');
-        if (tb && !tb.classList.contains('active')) tb.click();            // раздел «Кадастр» открывается в боковой панели
+        var mp = document.getElementById('mainPanel');
+        if (tb && (!tb.classList.contains('active') || (mp && mp.getAttribute('data-view') !== 'bp'))) tb.click();            // раздел «Кадастр» открывается в боковой панели, даже если вкладка уже была активной, а панель закрыта или показывает другой раздел
         try { info.scrollIntoView({ block: 'nearest' }); } catch (x) { /* прокрутка недоступна */ }
     }
     $('cadInfoX').addEventListener('click', clearSel);
@@ -933,6 +934,7 @@
         showInfo(items.map(function (it, i) { return card(it.c, it.f.properties || it.f, i); }).join('')
             + (items.length > 1 ? '<div class="cad-dlt">Скачать все выбранные (' + items.length + ')</div>' + dlBtns('all', true) : ''));
         $('cadInfoN').textContent = items.length > 1 ? '· ' + items.length : '';
+        try { var it0 = items[0], g0 = it0 && it0.f && it0.f.geometry; if (g0 && /Polygon/.test(g0.type)) window.dispatchEvent(new CustomEvent('gc-cad-select', { detail: { item: it0, name: rowsOf(it0.f.properties || it0.f).num || '' } })); } catch (x) { /* панель действий необязательна */ }   // панель «Что сделать с участком» (ux-actions.js)
     }
     var keyOf = function (it) { var ro = rowsOf(it.f.properties || it.f); return it.c.id + '|' + (ro.num || it.f.id || JSON.stringify(it.f.geometry || '').length); };
     // ---- правый клик по выделенному объекту: «Скачать KML» и «Анализ участка» ----
@@ -1267,7 +1269,7 @@
     var lastF = null, MINZ = 6, names = {}, on = false, timer = null, ctl = null, retry = null;
     var tg = document.getElementById('soilToggle'), op = document.getElementById('soilOp'), st = document.getElementById('soilStatus'), fo = 0.5;
     var say = function (t) { if (st) st.textContent = t; if (typeof updateStatus === 'function') updateStatus(t); };
-    fetch('soil_codes.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { names = j || {}; if (cur) cur.setStyle(opts.style); renderLegend(lastF); }).catch(function () { /* файла нет — показываем коды */ });
+    var namesP = fetch('soil_codes.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { names = j || {}; if (cur) cur.setStyle(opts.style); renderLegend(lastF); }).catch(function () { /* файла нет — показываем коды */ });
     var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
     var nm = function (c) { var d = names[c]; return c === undefined ? '' : (d ? esc(d.n) + (d.s ? ' <span style="color:#94a3b8">(' + esc(d.s) + ')</span>' : '') : 'код ' + c); };
     var ZH = [['тундр', 190, 'Тундры'], ['тайги', 140, 'Тайга и хвойно-широколиственные леса'], ['широколиствен', 100, 'Широколиственные леса и лесостепи'], ['сухих степей', 35, 'Сухие степи и полупустыни'], ['степей', 55, 'Степи'], ['субтропик', 15, 'Субтропики'], ['Гидроморф', 220, 'Гидроморфные почвы'], ['Засолен', 300, 'Засоленные и солонцеватые почвы'], ['Пойменн', 170, 'Пойменные и маршевые почвы'], ['горных', 270, 'Горные территории'], ['Комплексы', 335, 'Комплексы почв (мерзлотные, полупустынные)']];
@@ -1295,6 +1297,38 @@
         lg.innerHTML = html;
     }
     var cur = null, loaded = null, reqN = 0;
+    // типы почв внутри контура (для паспорта участка): полигоны почвенной карты из /soilgeo пересекаются с контуром (Turf); без отрисовки на карте
+    window.gcSoilTypes = function (gj, o) {
+        o = o || {};
+        var g = gj && (gj.geometry || gj), polys = g ? (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []) : [];
+        if (!polys.length || typeof turf === 'undefined') return Promise.reject(new Error('нет контура'));
+        var bb = turf.bbox({ type: 'Feature', geometry: g, properties: {} }), pd = 0.0005, tries = 0;
+        var url = '/soilgeo?bbox=' + [bb[0] - pd, bb[1] - pd, bb[2] + pd, bb[3] + pd].map(function (x) { return x.toFixed(5); }).join(',') + '&z=14';
+        var plots = polys.map(function (p) { return turf.polygon(p); });
+        var ask = function () {
+            if (o.alive && !o.alive()) return Promise.resolve(null);
+            return fetch(url).then(function (r) { if (!r.ok) throw new Error('сервер почв: ' + r.status); return r.json(); }).then(function (j) {
+                if (j.error) throw new Error(j.error);
+                if (j.loading !== undefined && !j.features) {   // сервер ещё читает soil.geojson
+                    if (++tries > 60) throw new Error('сервер долго читает soil.geojson');
+                    return new Promise(function (ok) { setTimeout(ok, 2000); }).then(ask);
+                }
+                return namesP.then(function () {
+                    var acc = {}, pts = {}, tot = 0;
+                    (j.features || []).forEach(function (f) {
+                        var c = f.properties && f.properties.SOIL0, mp = f.geometry && f.geometry.coordinates || [];
+                        mp.forEach(function (pc) { plots.forEach(function (pl) { try { var x = turf.intersect(pl, turf.polygon(pc)), sq = x ? turf.area(x) : 0; if (sq > 0) { acc[c] = (acc[c] || 0) + sq; (pts[c] = pts[c] || []).push(x); tot += sq; } } catch (e) { /* вырожденная геометрия */ } }); });
+                    });
+                    var items = Object.keys(acc).map(function (k) {
+                        var c = isNaN(+k) ? k : +k, d = names[c], zi = zoneOf(c);
+                        return { code: c, name: d && d.n ? d.n : 'код ' + c, zone: zi >= 0 && zi < ZH.length ? ZH[zi][2] : '', ia: acc[k], color: col(c), parts: pts[k] || [] };
+                    }).sort(function (a, b) { return b.ia - a.ia; });
+                    return { items: items, cover: tot };
+                });
+            });
+        };
+        return ask();
+    };
     // почвы рисуются в слое плиток (tilePane) со своим z-index 300: выше подложки, ниже плиток кадастра (z-index 450+); так порядок слоёв не ломается
     var rend = L.canvas({ padding: 0.3, pane: 'tilePane' });
     var opts = {

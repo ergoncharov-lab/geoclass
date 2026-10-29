@@ -34,7 +34,7 @@
     function sec(n, icon, title, sub, color, inner) { return '<section class="pp-sec" style="--ac:' + color + '"><div class="pp-sec-h"><span class="pp-ic"><i class="fas fa-' + icon + '"></i></span><div class="pp-ht"><h3>' + title + '</h3><p>' + sub + '</p></div><span class="pp-n">' + n + '</span></div><div class="pp-sec-b">' + inner + '</div></section>'; }
     // блок: o.t — заголовок, o.i — значок, o.c — цвет, o.info — [что это, зачем нужно, как считается], o.map — колонка слева (квадратная карта), o.id/o.body — данные справа
     // ---------- кнопка «?» в шапке блока: открывает справку на нужном разделе ----------
-    var HELP_ID = { ppWx_w: 'wx-wind', ppWx_f: 'wx-forecast', ppWx_b: 'wx-frost', ppWx_c: 'wx-climate', ppSoilSum: 'an-soil', ppCadBody: 'ly-cadastre', ppOoptBody: 'ly-cadastre' };
+    var HELP_ID = { ppWx_w: 'wx-wind', ppWx_f: 'wx-forecast', ppWx_b: 'wx-frost', ppWx_c: 'wx-climate', ppSoilSum: 'an-soil', ppCadBody: 'ly-cadastre', ppOoptBody: 'ly-cadastre', ppSoilTyBody: 'an-soil' };
     var HELP_T = [[/^Границы/, 'an-shape'], [/кадастр/i, 'ly-cadastre'], [/землепользования/, 'an-site'], [/^Sentinel-2/, 'im-dates'],
         [/^NDVI/, 'im-ndvi'], [/^NDMI/, 'im-ndmi'], [/^NBR/, 'im-nbr'], [/^GNDVI/, 'im-gndvi'], [/^NDRE/, 'im-ndre'], [/^SAVI/, 'im-savi'], [/^NDWI/, 'im-ndwi'], [/^NDTI/, 'im-ndti'],
         [/Сводные расчётные/, 'an-soil'], [/^(Высоты|Уклоны|Экспозиция)/, 'an-profile'], [/^3D/, 'tl-3d'],
@@ -465,6 +465,57 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     function compactChart(K, note) { return chart('Форма участка на шкале компактности', meter([[0.3, '#ef4444'], [0.6, '#facc15'], [0.8, '#22c55e']], K, 0, 0.8, 1), 'Красная зона — вытянутые и изрезанные контуры (больше холостых проходов техники), зелёная — компактные участки, удобные для обработки.' + note); }
     function centerKv(c, cad, a, addrId) { return kv([['Центр (широта, долгота)', c[1].toFixed(6) + ', ' + c[0].toFixed(6)], ['Адрес', '<span id="' + addrId + '">определяется…</span>'], ['Кадастровый номер', cad ? esc(cad) : ''], ['Площадь в других единицах', nf(a / 100, 1) + ' сот. · ' + nf(a / 4046.86, 2) + ' акра'], ['Зона UTM', (Math.floor((c[0] + 180) / 6) + 1) + (c[1] >= 0 ? ' N' : ' S')]]); }
+    // ---------- блок «Типы почв»: векторная почвенная карта (soil.geojson через serve_site.py) пересекается с контуром ----------
+    function stypeRun(gj, tok) {
+        if (!window.gcSoilTypes) return Promise.reject(new Error('модуль почвенной карты (ux-extras.js) не загружен'));
+        return window.gcSoilTypes(gj, { alive: function () { return tok === seq; } }).then(function (r) {
+            if (!r || tok !== seq) return;
+            r.tot = turf.area(gj); r.items = r.items.filter(function (x) { return x.ia >= 1; });
+            if (!r.items.length) throw new Error('нет данных почвенной карты в этом месте');
+            D.stype = r; stypeShow();
+        });
+    }
+    function stypeSel(i) {
+        var d = D.stype, el = document.getElementById('ppSoilTyBody'); if (!d) return;
+        d.sel = d.sel === i ? -1 : i;
+        if (el) Array.prototype.forEach.call(el.querySelectorAll('tr[data-si]'), function (tr) { tr.classList.toggle('pp-cadsel', +tr.getAttribute('data-si') === d.sel); });
+        (d.lay || []).forEach(function (ls, k) { ls.forEach(function (l) { l.setStyle({ weight: k === d.sel ? 3 : 1, fillOpacity: d.sel < 0 || k === d.sel ? 0.6 : 0.2 }); if (k === d.sel) l.bringToFront(); }); });
+    }
+    function stypeShow() {
+        var d = D.stype, el = document.getElementById('ppSoilTyBody'); if (!el || !d) return;
+        var its = d.items, tot = its.reduce(function (s, x) { return s + x.ia; }, 0) || 1, top = its[0]; d.sel = -1;
+        var sw = function (c) { return '<i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:' + c + ';border:1px solid rgba(15,23,42,.25);vertical-align:-1px"></i>'; };
+        var rows = its.map(function (it, i) {
+            return '<tr data-si="' + i + '"><td>' + (i + 1) + '</td><td>' + sw(it.color) + ' <b>' + esc(it.name) + '</b></td><td>' + esc(it.zone || '—') + '</td><td>' + nf(it.ia, 0) + ' м² (' + nf(it.ia / 1e4, 3) + ' га)</td><td>' + nf(it.ia / tot * 100, 1) + ' %</td></tr>';
+        }).join('');
+        var mx = its[0].ia || 1;
+        var dia = chart('Доля типов почв в контуре', its.slice(0, 8).map(function (it) {
+            return '<div class="pp-cdr"><span class="pp-cdl" title="' + esc(it.name) + '">' + esc(it.name) + '</span><span class="pp-cdv"><span class="pp-cdbar"><i style="width:' + Math.max(2, it.ia / mx * 100).toFixed(1) + '%;background:' + it.color + '"></i></span><b>' + nf(it.ia / 1e4, 2) + ' га · ' + nf(it.ia / tot * 100, 0) + ' %</b></span></div>';
+        }).join('') + (its.length > 8 ? '<div class="pp-note">Ещё типов: ' + (its.length - 8) + ' (см. таблицу)</div>' : ''), 'Площадь каждого типа почвы внутри контура, га и доля от площади с данными');
+        var cap = 'Источник — векторная почвенная карта (soil.geojson), отдаётся локальным сервером serve_site.py. Типы определены пересечением контура с полигонами карты; масштаб карты мелкий, поэтому границы типов ориентировочные и не заменяют почвенное обследование. Нажмите на строку — тип выделится на карте.';
+        el.innerHTML = tiles([['Типов почв в контуре', nf(its.length, 0), '', '#a16207'], ['Преобладает', nf(top.ia / tot * 100, 0) + ' %', esc(top.name), top.color]]) +
+            '<div class="pp-cadtbl">' + chart('Список типов почв', '<div class="pp-vt"><table><thead><tr><th>№</th><th>Тип почвы</th><th>Почвенная зона</th><th>Площадь</th><th>Доля</th></tr></thead><tbody>' + rows + '</tbody></table></div>', cap) + '</div>' + dia;
+        Array.prototype.forEach.call(el.querySelectorAll('tr[data-si]'), function (tr) { tr.onclick = function () { stypeSel(+tr.getAttribute('data-si')); }; });
+        var o = minis.stype; if (!o) return;
+        d.lay = its.map(function (it, i) {
+            return it.parts.map(function (x) {
+                var l = L.geoJSON(x, { style: { color: '#475569', weight: 1, fillColor: it.color, fillOpacity: 0.6 } }).addTo(o.map);
+                l.on('click', function () { stypeSel(i); var tr = el.querySelector('tr[data-si="' + i + '"]'); if (tr && d.sel === i) { try { tr.scrollIntoView({ block: 'nearest' }); } catch (e) { /* без прокрутки */ } } });
+                return l;
+            });
+        });
+        d.lay = d.lay.map(function (a) { return a.reduce(function (r, g) { g.eachLayer(function (p) { r.push(p); }); return r; }, []); });
+        o.draw = function (g, m) {
+            var path = function (geom) { (geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates).forEach(function (pl) { pl.forEach(function (r) { r.forEach(function (pt, k) { var q = m.latLngToContainerPoint([pt[1], pt[0]]); if (k) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); }); g.closePath(); }); }); };
+            g.lineJoin = 'round';
+            its.forEach(function (it) { it.parts.forEach(function (x) { g.beginPath(); path(x.geometry); g.globalAlpha = 0.6; g.fillStyle = it.color; g.fill('evenodd'); g.globalAlpha = 1; g.strokeStyle = '#475569'; g.lineWidth = 1; g.stroke(); }); });
+            var n = Math.min(its.length, 5), y = m.getSize().y - 10 - n * 16;
+            g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(8, y - 4, 220, n * 16 + 8);
+            its.slice(0, n).forEach(function (it, k) { g.fillStyle = it.color; g.fillRect(14, y + k * 16 + 2, 12, 10); g.fillStyle = '#0f172a'; g.font = '11px sans-serif'; g.fillText(it.name.length > 30 ? it.name.slice(0, 29) + '…' : it.name, 32, y + k * 16 + 11); });
+        };
+        var lg = document.getElementById('ppLeg_stype');
+        if (lg) lg.innerHTML = '<div class="pp-legsrc">' + its.slice(0, 6).map(function (it) { return sw(it.color) + ' ' + esc(it.name); }).join('<br>') + '<br>Источник: почвенная карта (soil.geojson)</div>';
+    }
     function cadChart(cp, cr) { return (cr.length ? chart(cp.source === 'rosreestr' ? 'Кадастровые сведения · выписка ЕГРН' : 'Сведения об объекте', kv(cr), cp.source === 'rosreestr' ? 'Атрибуты объекта из кадастра; площадь по контуру считается по границам на карте и может немного отличаться от кадастровой.' : 'Атрибуты объекта; площадь по контуру считается по границам на карте и может немного отличаться от указанной в источнике.') : ''); }
     function reverseGeocode(c) { return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ru&lat=' + c[1] + '&lon=' + c[0]).then(function (r) { return r.json(); }); }
     // копирование текста в буфер обмена с подменой подписи на кнопке b (запасной путь — через скрытое textarea)
@@ -502,7 +553,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     }
     // ---------- статусы загрузки блоков (в шапке паспорта) ----------
     var RETRY_WAIT = [3000, 7000, 15000];   // автоповтор неудавшихся блоков: паузы перед 1-й, 2-й и 3-й попыткой, мс
-    var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', wx: 'Погода', addr: 'Адрес', cad: 'Кадастр', oopt: 'ООПТ' };
+    var STL = { cls: 'Классификация', sat: 'Снимки', soil: 'Почва', elev: 'Рельеф', log: 'Логистика', clim: 'Климат', wx: 'Погода', addr: 'Адрес', cad: 'Кадастр', oopt: 'ООПТ', stype: 'Типы почв' };
     var ST_CSS = [
         '#passportPane .pp-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}#ppSt.pp-stbar{position:relative;display:flex;align-items:center;gap:10px;flex:1 1 100%;order:10;min-width:0;margin:0;padding:7px 12px 9px;border-radius:12px;background:linear-gradient(180deg,#fff,#f8fafc);border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.08);overflow:hidden}',
         '#ppSt .pp-stp{font:800 15px/1 system-ui,sans-serif;color:#0f172a;min-width:42px;text-align:right}',
@@ -633,7 +684,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         stNav(top, h);
     }
     // ---------- панель быстрых переходов по разделам: одна строка под статусами загрузки, закреплена вместе с шапкой ----------
-    var NAV = ['Общее', 'Классы земли', 'Снимки', 'Почва', 'Рельеф', 'Логистика', 'Климат', 'Итог'], navCtx = null, navSig = '', navT = 0, navG = [], NKEYS = [['addr', 'cad', 'oopt'], ['cls'], ['sat'], ['soil'], ['elev'], ['log'], ['clim', 'wx'], []], navA = 0, navS = -1, navLock = 0, navRaf = 0;
+    var NAV = ['Общее', 'Классы земли', 'Снимки', 'Почва', 'Рельеф', 'Логистика', 'Климат', 'Итог'], navCtx = null, navSig = '', navT = 0, navG = [], NKEYS = [['addr', 'cad', 'oopt'], ['cls'], ['sat'], ['soil', 'stype'], ['elev'], ['log'], ['clim', 'wx'], []], navA = 0, navS = -1, navLock = 0, navRaf = 0;
     function navGroups() {   // разделы и все блоки внутри них (каждый индекс, почвенный показатель, климатический блок…)
         var g = [];
         Array.prototype.forEach.call(body.querySelectorAll('.pp-sec'), function (sc, i) {
@@ -817,7 +868,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         } catch (e) { return null; }
     }
     // лист Excel «Кадастр»: сводка, карта (если есть снимок) и таблица участков; используется и в кнопке «Excel» блока, и в выгрузке всего паспорта
-    function cadSheet(ST, snaps, dd) {
+    function cadSheet(ST, snaps, dd, oo) {
         var d = dd || D.cadx, sh = new Sheet('Кадастр', 'F59E0B'), t = document.getElementById('ppTitle'), sum = 0, pc = Math.min(100, d.cover / d.tot * 100), im = snaps && snaps.map && snaps.map.cadx;
         sh.colw = [5, 24, 16, 13, 11, 16, 13, 38, 30, 34]; sh.imgCol = 0;
         var hd = ST.get({ b: 1, color: 'FFFFFF', fill: '334155', border: 1, wrap: 1, v: 'center', h: 'center' }), tx = ST.get({ border: 1, wrap: 1 }), tb = ST.get({ border: 1, wrap: 1, b: 1 }),
@@ -842,7 +893,30 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         sh.add([{ v: '', s: tl }, { v: 'Итого', s: tl }, { v: Math.round(sum * 10) / 10, s: t0 }, { v: Math.round(sum / 10) / 1000, s: t3 }, { v: Math.round(sum / d.tot * 1000) / 10, s: t0 }, { v: '', s: tl }, { v: '', s: tl }, { v: '', s: tl }, { v: '', s: tl }, { v: '', s: tl }]);
         sh.add([]);
         sh.add([{ v: 'Источник — слой «Земельные участки из ЕГРН» НСПД (Росреестр). «Права» — форма собственности и иные сведения о правах, которые отдаёт публичная карта (правообладатели не раскрываются). Опрошено ' + d.req + ' точек' + (d.step ? ' (шаг ≈ ' + d.step + ' м)' : '') + '; участки уже шага сетки могут быть пропущены.', s: nt, span: 10 }], 30);
+        if (oo) cadOoptRows(sh, ST, snaps, oo, { hd: hd, tx: tx, tb: tb, n0: n0, n1: n1, n3: n3, t0: t0, t3: t3, tl: tl, kl: kl, kv: kv, nt: nt });
         return sh;
+    }
+    // блок «Пересечения с ООПТ» под таблицей кадастра: сводка, карта и таблица особо охраняемых территорий (слой «ООПТ» НСПД)
+    function cadOoptRows(sh, ST, snaps, oo, k) {
+        var osum = 0, pc = oo.tot > 0 ? Math.min(100, oo.cover / oo.tot * 100) : 0, im = snaps && snaps.map && snaps.map.oopt;
+        sh.add([]);
+        sh.add([{ v: 'Пересечения контура с ООПТ (особо охраняемые природные территории)', s: ST.get({ b: 1, color: 'FFFFFF', fill: '16A34A', sz: 12, v: 'center' }), span: 10 }], 24);
+        sh.add([]);
+        [['ООПТ пересекает контур', oo.items.length], ['Покрыто ООПТ', nf(pc, 1) + ' % (' + nf(oo.cover / 1e4, 2) + ' га)']].forEach(function (r) { sh.add([{ v: r[0], s: k.kl, span: 3 }, { v: r[1], s: k.kv, span: 2 }]); });
+        sh.add([]);
+        if (oo.items.length) {
+            if (im) { addImgs(sh, sh.rows.length, [imgOf(im, 520)]); sh.add([]); }
+            sh.add([{ v: '№', s: k.hd }, { v: 'Номер', s: k.hd }, { v: 'Пересечение, м²', s: k.hd }, { v: 'Пересечение, га', s: k.hd }, { v: '% контура', s: k.hd }, { v: 'Название ООПТ', s: k.hd, span: 3 }, { v: 'Вид территории', s: k.hd }, { v: 'Статус', s: k.hd }], 32);
+            oo.items.forEach(function (it, i) {
+                var nm = it.name || it.num || 'ООПТ без названия', zn = it.zone || it.kind || '', ln = Math.max(1, Math.ceil(nm.length / 62), Math.ceil(zn.length / 28), Math.ceil((it.stat || '').length / 32));
+                osum += it.ia;
+                sh.add([{ v: i + 1, s: k.n0 }, { v: it.num || '', s: k.tb }, { v: Math.round(it.ia * 10) / 10, s: k.n1 }, { v: Math.round(it.ia / 10) / 1000, s: k.n3 }, { v: Math.round(it.ia / oo.tot * 1000) / 10, s: k.n1 },
+                    { v: nm, s: k.tb, span: 3 }, { v: zn, s: k.tx }, { v: it.stat || '', s: k.tx }], ln * 14 + 3);
+            });
+            sh.add([{ v: '', s: k.tl }, { v: 'Итого', s: k.tl }, { v: Math.round(osum * 10) / 10, s: k.t0 }, { v: Math.round(osum / 10) / 1000, s: k.t3 }, { v: Math.round(osum / oo.tot * 1000) / 10, s: k.t0 }, { v: '', s: k.tl, span: 3 }, { v: '', s: k.tl }, { v: '', s: k.tl }]);
+            sh.add([]);
+        }
+        sh.add([{ v: 'Источник — слой «ООПТ» НСПД (Росреестр). Охранные зоны и неучтённые в публичной карте региональные и местные ООПТ могут отсутствовать; для юридически значимых выводов запрашивайте сведения у уполномоченных органов. Опрошено ' + oo.req + ' точек' + (oo.step ? ' (шаг ≈ ' + oo.step + ' м)' : '') + (oo.items.length ? '' : '; пересечений с ООПТ не найдено') + '.', s: k.nt, span: 10 }], 30);
     }
     // кнопка «Excel» в шапке таблицы: отдельный файл с одним листом
     function cadXlsx() {
@@ -1362,7 +1436,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     function shpCadXlsx() {
         var d = shp.cadx; if (!d || !d.items.length) return;
         var ST = new Styles(), t = new Date(), p2 = function (n) { return (n < 10 ? '0' : '') + n; };
-        save(buildXlsx([cadSheet(ST, null, d)], ST), 'kadastr_' + t.getFullYear() + p2(t.getMonth() + 1) + p2(t.getDate()) + '.xlsx');
+        save(buildXlsx([cadSheet(ST, null, d, shp.oopt)], ST), 'kadastr_' + t.getFullYear() + p2(t.getMonth() + 1) + p2(t.getDate()) + '.xlsx');
         updateStatus('✅ Таблица пересечений с кадастром сохранена в Excel');
     }
     function shpCadShow() {
@@ -1509,6 +1583,12 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
     var SHOW = 'Источник — ISRIC SoilGrids 250 м (модель машинного обучения по десяткам тысяч почвенных профилей и спутниковым данным), глубина 0–5 см. Берутся ячейки 250 м, центры которых лежат внутри контура; мин/среднее/макс/σ — по этим ячейкам; доля класса (га) = доля ячеек × площадь участка. ';
     function soilSec() {
         return sec(4, 'flask', 'Почвенный анализ', 'ISRIC SoilGrids 250 м · глубина 0–5 см · карта, шкала, гистограмма и классы по каждому показателю', CC.soil,
+            blk({
+                t: 'Типы почв', i: 'layer-group', map: mapBox('stype'), id: 'ppSoilTyBody', cls: 'pp-cadsub', body: SPIN,
+                info: ['Типы почв внутри контура участка по векторной почвенной карте: список типов с площадью и долей, диаграмма и карта с раскраской по типам.',
+                    'Помогает быстро понять, какие почвы преобладают на участке и однородно ли почвенное покрытие, прежде чем переходить к детальным показателям SoilGrids и химанализу.',
+                    'Полигоны почвенной карты (soil.geojson, отдаются локальным сервером serve_site.py) пересекаются с контуром участка (Turf); площадь — геодезическая, доля — от суммарной площади с данными. Карта мелкомасштабная, границы типов ориентировочные.']
+            }) +
             blk({
                 t: 'Сводные расчётные показатели', i: 'wand-magic-sparkles', id: 'ppSoilSum', body: SPIN,
                 info: ['Показатели, которые считаются из нескольких слоёв почвы сразу: гумус, механический состав (тип почвы), запас углерода, отношение C:N.',
@@ -1999,7 +2079,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
         // имя фигуры (стандартное или своё из «Списка объектов») + площадь — если это не кадастровый участок и не выписка
         D.name = D.cad ? '' : (forced ? (forced.meta.name || '') : (l._gcName || l._gcDef || (function () { var n = ''; if (typeof drawnItems !== 'undefined') drawnItems.eachLayer(function (g) { if (!n && g !== l && g.hasLayer && g.hasLayer(l)) n = g._gcName || g._gcDef || ''; }); return n; })()));
         if (t) t.textContent = 'Паспорт участка' + (D.cad ? ' № ' + D.cad : D.name ? ' «' + D.name + '» · ' + nf(D.area / 1e4, 2) + ' га' : '');
-        var T = { gen: 'Участок', cadx: 'Кадастр: пересечения', oopt: 'ООПТ: пересечения', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', s2cir: 'Sentinel-2 · ложные цвета', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
+        var T = { stype: 'Типы почв', gen: 'Участок', cadx: 'Кадастр: пересечения', oopt: 'ООПТ: пересечения', cls: 'Классификация земли', s2rgb: 'Sentinel-2 · RGB', s2cir: 'Sentinel-2 · ложные цвета', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', elh: 'Высоты', els: 'Уклоны', lg: 'Логистика' };
         SOILS.forEach(function (p) { T['soil_' + p] = 'Почва'; });
         Object.keys(T).forEach(function (k) { mini(k, gj, T[k]); });
         stInit(); address(D.c, tok); if (D.satSel) stSet('sat', 'load');
@@ -2013,6 +2093,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             clim: [climRun, ['ppClBody'], function () { return D.clim ? '' : 'нет данных климата'; }, 'clim'],
             wx: [wxRun, WXG.map(function (g) { return 'ppWx_' + g.id; }), function () { return D.wx ? '' : 'нет данных погоды'; }, 'wx'],
             cad: [cadRun, ['ppCadBody'], function () { return D.cadx ? '' : 'нет данных НСПД'; }, 'cadx'],
+            stype: [stypeRun, ['ppSoilTyBody'], function () { return D.stype ? '' : 'нет данных почвенной карты'; }, 'stype'],
             oopt: [ooptRun, ['ppOoptBody'], function () { return D.oopt ? '' : 'нет данных НСПД'; }, 'oopt'],
             sat: [satRun, SATS.map(function (x) { return 'ppSatB_' + x.k; }), function () { return D.sat && Object.keys(D.sat).length ? '' : 'не удалось получить данные снимка'; }, 'sat']
         };
@@ -2035,7 +2116,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 launch(k, true).then(function () { if (tok === seq) { summary(); auto(k); } });
             }, RETRY_WAIT[n]);
         };
-        var jobs = ['soil', 'elev', 'log', 'clim', 'wx', 'cad', 'oopt'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k).then(function () { auto(k); }); });
+        var jobs = ['soil', 'elev', 'log', 'clim', 'wx', 'cad', 'oopt', 'stype'].concat(D.satSel ? ['sat'] : []).map(function (k) { return launch(k).then(function () { auto(k); }); });
         retry = function (k) {   // повтор одного раздела по клику на его плашку статуса
             if (tok !== seq) return;
             if (k === 'addr') { stSet('addr', 'load'); var ad = document.getElementById('ppAddr'); if (ad) ad.textContent = 'определяется…'; address(D.c, tok); return; }
@@ -2218,9 +2299,26 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
                 if (!cp.getAttribute('viewBox')) cp.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
                 var xml = new XMLSerializer().serializeToString(cp), SC = 2, im = new Image();
                 im.onload = function () {
-                    var c = document.createElement('canvas'); c.width = Math.round(w * SC); c.height = Math.round(h * SC);
-                    var g = c.getContext('2d'); g.fillStyle = svg.classList && svg.classList.contains('pp-radar') ? '#eef2f7' : '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);   // график пригодности — на заметном фоне
-                    try { res({ url: c.toDataURL('image/png'), w: w, h: h }); } catch (e) { res(null); }
+                    var rad = svg.classList && svg.classList.contains('pp-radar'), card = rad && svg.closest('.pp-score'), bigEl = card && card.querySelector('.big'), top = bigEl ? 64 : 0, H = h + top;
+                    var c = document.createElement('canvas'); c.width = Math.round(w * SC); c.height = Math.round(H * SC);
+                    var g = c.getContext('2d');
+                    if (rad) {   // график пригодности — на тёмной карточке, как в паспорте: градиент, заголовок, итоговое число, деления и подписи
+                        var cs = getComputedStyle(card || document.documentElement), c1 = cs.getPropertyValue('--sc-navy').trim() || '#0f172a', c2 = cs.getPropertyValue('--sc-ink').trim() || '#1e293b', sub = cs.getPropertyValue('--sc-subtle').trim() || '#94a3b8';
+                        var an = 160 * Math.PI / 180, dx = Math.sin(an), dy = -Math.cos(an), Ln = Math.abs(c.width * dx) + Math.abs(c.height * dy), mx = c.width / 2, my = c.height / 2, rr = 20 * SC, gr;
+                        gr = g.createLinearGradient(mx - dx * Ln / 2, my - dy * Ln / 2, mx + dx * Ln / 2, my + dy * Ln / 2); gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+                        g.fillStyle = gr; g.beginPath(); g.moveTo(rr, 0); g.arcTo(c.width, 0, c.width, c.height, rr); g.arcTo(c.width, c.height, 0, c.height, rr); g.arcTo(0, c.height, 0, 0, rr); g.arcTo(0, 0, c.width, 0, rr); g.closePath(); g.fill();
+                        g.save(); g.scale(SC, SC);
+                        if (bigEl) {
+                            var sm = card.querySelector('small'), bt = bigEl.firstChild ? bigEl.firstChild.textContent : '', FN = 'Segoe UI, system-ui, Arial, sans-serif', w1, w2;
+                            g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+                            if (sm) { g.fillStyle = sub; g.font = 'bold 11px ' + FN; g.fillText(sm.textContent.toUpperCase().split('').join(String.fromCharCode(8202)), w / 2, 20); }
+                            g.font = '800 34px ' + FN; w1 = g.measureText(bt).width; g.font = '600 13px ' + FN; w2 = g.measureText('/100').width + 3;
+                            g.textAlign = 'left'; g.fillStyle = bigEl.style.color || '#ffffff'; g.font = '800 34px ' + FN; g.fillText(bt, w / 2 - (w1 + w2) / 2, 54);
+                            g.fillStyle = sub; g.font = '600 13px ' + FN; g.fillText('/100', w / 2 - (w1 + w2) / 2 + w1 + 3, 54);
+                        }
+                        g.drawImage(im, 0, top, w, h); g.restore();
+                    } else { g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); }
+                    try { res({ url: c.toDataURL('image/png'), w: w, h: H }); } catch (e) { res(null); }
                 };
                 im.onerror = function () { res(null); };
                 im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
@@ -2613,7 +2711,7 @@ function tifF32(a, w, h, x0, y1, dx, dy, name) {
             })(sec.querySelector('.pp-sec-b') || sec);
             sheets.push(sh);
         });
-        if (D.cadx && D.cadx.items.length) sheets.splice(1, 0, cadSheet(ST, snaps));
+        if (D.cadx && D.cadx.items.length) sheets.splice(1, 0, cadSheet(ST, snaps, null, D.oopt));
         return sheets;
     }
     function buildCover(ST, secSheets, snaps) {

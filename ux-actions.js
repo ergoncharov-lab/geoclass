@@ -77,18 +77,18 @@
     var nextEl = null, nextTimer = 0, seen = new WeakSet(), seenSk = {};
     function closeNext() { clearTimeout(nextTimer); if (nextEl) { nextEl.remove(); nextEl = null; } if (typeof gcFlyClose === 'function') gcFlyClose(0); }
     function isPoly(l) { return l instanceof L.Polygon || l instanceof L.Circle; }
-    function itemOf(l) {
+    function itemOf0(l) {
         if (l._sk && typeof skShapeItem === 'function') return skShapeItem(l);
         return gcPolyItem(l, l._gcName || 'Участок', 'Анализ участка', 'фигуры из «Анализа участка»');
     }
-    function areaText(l) {
-        try { var f = gcLayerGJ(l), a = turf.area(f); return a >= 1e4 ? (a / 1e4).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' га' : Math.round(a).toLocaleString('ru-RU') + ' м²'; } catch (e) { return ''; }
+    function areaText(l, ft) {
+        try { var f = ft || gcLayerGJ(l), a = turf.area(f); return a >= 1e4 ? (a / 1e4).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' га' : Math.round(a).toLocaleString('ru-RU') + ' м²'; } catch (e) { return ''; }
     }
-    function showNext(l) {
+    function showNext(l, cit) {   // l — нарисованная фигура; cit — найденный или выделенный объект кадастра { c, f } (тогда l не нужен)
         var api = window.gcShapeMenuApi;
-        if (!api || !l || !isPoly(l) || !map.hasLayer(l)) return;
+        if (!api || (!cit && (!l || !isPoly(l) || !map.hasLayer(l)))) return;
         closeNext();
-        var nm = (l._sk && l._sk.name) || l._gcName || 'Участок', ar = areaText(l);
+        var nm = cit ? (cit.name || 'Участок') : (l._sk && l._sk.name) || l._gcName || 'Участок', ar = cit ? areaText(null, cit.item.f) : areaText(l), itemOf = cit ? function () { return cit.item; } : itemOf0;
         nextEl = document.createElement('div'); nextEl.id = 'gcNext';
         nextEl.innerHTML = '<div class="gn-h"><b></b><button type="button" class="gn-x" title="Закрыть (Esc)">✕</button></div><div class="gn-b"></div>';
         nextEl.querySelector('b').textContent = 'Что сделать с участком «' + nm + '»' + (ar ? ' · ' + ar : '') + '?';
@@ -122,6 +122,7 @@
     try { drawnItems.eachLayer(function (l) { seen.add(l); }); } catch (e) { }
     if (typeof sketchItems !== 'undefined') hook(sketchItems, function (l) { return l._sk ? l._sk.id : null; });   // отмена / повтор вернут тот же id — панель не повторится
     if (typeof drawnItems !== 'undefined') hook(drawnItems);
+    window.addEventListener('gc-cad-select', function (e) { var d = e.detail; if (d && d.item) setTimeout(function () { showNext(null, d); }, 350); });   // поиск по кадастровому номеру и клик по участку в слое кадастра
     map.on('draw:drawstart', closeNext);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && nextEl) closeNext(); });
 
