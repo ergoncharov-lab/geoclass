@@ -2208,7 +2208,7 @@ function switchLayer(layerKey) {
 
 // ============================================================
 //  РЕДАКТОР ВЕРШИН (общий для «Снимков / NDVI…» и виджета «Рисование»)
-//  Работает так же, как правка в «Анализе участка»: зелёные вершины тянутся мышью,
+//  Работает так же, как правка в «Полном анализе»: зелёные вершины тянутся мышью,
 //  серые точки на рёбрах добавляют вершину (клик), клик по вершине → ✕ → второй клик удаляет её.
 //  Круг: центр и радиус; прямоугольник: углы.
 // ============================================================
@@ -2341,7 +2341,7 @@ function gcVx(layer, opts) {
 // ============================================================
 const GC_SHAPES = new Set(), gcShapeIO = {};
 let gcSel = null, gcCtxEl = null, gcDrawing = false;
-let gcKbSel = null;   // какой объект выбран последним: 'sk' — «Рисование», 'an' — «Анализ участка», 'gc' — фигура другого раздела (для клавиш Delete, Ctrl+C)
+let gcKbSel = null;   // какой объект выбран последним: 'sk' — «Рисование», 'an' — «Полный анализ», 'gc' — фигура другого раздела (для клавиш Delete, Ctrl+C)
 const gcFC = fs => ({ type: 'FeatureCollection', features: fs });
 function gcLayerGJ(l) {
     try {
@@ -2568,13 +2568,13 @@ function gcPolyGroups(item, isArea) {
     const conv = t => t.sub ? { icon: t.icon, label: t.label, sub: t.sub.map(conv) } : leaf(t.icon, t.label, it => api.toAnalysis(it, t.bp, t.label));
     const out = [];
     if (isArea !== false) {   // для линий — только скачивание
-        out.push(leaf('fa-magnifying-glass-chart', 'Анализ участка', it => api.toAnalysis(it)));
+        out.push(leaf('fa-magnifying-glass-chart', 'Полный анализ', it => api.toAnalysis(it)));
         out.push({ icon: 'fa-share-from-square', label: 'Перенести границы в', sub: api.targets.map(conv) });
     }
     out.push({ icon: 'fa-file-arrow-down', label: 'Скачать границы', sub: api.formats.map(f => leaf('fa-file-arrow-down', f.label, it => api.exportAs(f.id, [it]))) });
     return out;
 }
-// стандартные действия любой фигуры: копировать, на передний / задний план, удалить (общие для «Рисования», «Анализа участка» и остальных инструментов)
+// стандартные действия любой фигуры: копировать, на передний / задний план, удалить (общие для «Рисования», «Полного анализа» и остальных инструментов)
 function gcStdActs(l, o) {
     const a = [
         { id: 'dup', icon: 'clone', label: 'Копировать', fn: o.dup || (() => gcCopyToSketch(l)) },
@@ -2586,7 +2586,7 @@ function gcStdActs(l, o) {
 }
 function gcShapeMenu(ev, l) {
     const o = l._gc.o, nm = o.name || 'geoclass', gj = () => gcFC([gcLayerGJ(l)].filter(Boolean));
-    if (l instanceof L.Polygon || l instanceof L.Circle) {   // единое меню всех полигональных фигур (как в «Рисовании» и «Анализе участка»)
+    if (l instanceof L.Polygon || l instanceof L.Circle) {   // единое меню всех полигональных фигур (как в «Рисовании» и «Полном анализе»)
         const items = gcStdActs(l, { del: o.onDelete && (() => o.onDelete(l)) });
         const g = gcPolyGroups(() => gcPolyItem(l, l._gcName || 'Фигура', 'Карта', 'фигуры «' + (l._gcName || 'Фигура') + '»'));
         if (g.length) items.push({ sep: true }, ...g);
@@ -2986,7 +2986,7 @@ function snShpZip(feats, base) {
 // ============================================================
 //  РАЗДЕЛЫ БОКОВОЙ ПАНЕЛИ: «Снимки» · NDVI · NDMI · NBR · «Сравнение снимков»  (спутник Sentinel-2)
 //  Каждый раздел — это вкладка бывшей нижней панели, показанная в боковой панели (см. site.js).
-//  В разделе: инструменты рисования области (как в «Анализе участка»), календарь дат, облачность,
+//  В разделе: инструменты рисования области (как в «Полном анализе»), календарь дат, облачность,
 //  «скрины» снимков выбранной даты и список дат с превью, скачивание GeoTIFF по нарисованной фигуре.
 // ============================================================
 (function () {
@@ -3130,7 +3130,7 @@ function snShpZip(feats, base) {
             '<button type="button" class="map-btn" data-sn-tool="rectangle" title="Прямоугольник"><i class="fas fa-vector-square"></i></button>' +
             '<button type="button" class="map-btn" data-sn-tool="circle" title="Круг / Овал"><i class="fas fa-circle"></i></button>' +
             '<button type="button" class="map-btn" data-sn-act="edit" title="Редактировать фигуру"><i class="fas fa-edit"></i></button>' +
-            '<button type="button" class="map-btn" data-sn-act="sel" title="Взять фигуру, выбранную на карте (из «Анализа участка» или «Рисования»)"><i class="fas fa-hand-pointer"></i></button>' +
+            '<button type="button" class="map-btn" data-sn-act="sel" title="Взять фигуру, выбранную на карте (из «Полного анализа» или «Рисования»)"><i class="fas fa-hand-pointer"></i></button>' +
             '<button type="button" class="map-btn" data-sn-act="del" title="Удалить фигуру"><i class="fas fa-trash"></i></button>' +
             '<button type="button" class="map-btn" data-gc-io="import" data-gc-for="sn" title="Импорт полигона (KML, GeoJSON, Excel, XML Росреестра)"><i class="fas fa-file-import"></i></button>' +
             '<button type="button" class="map-btn" data-gc-io="export" data-gc-for="sn" title="Экспорт фигуры (KML, GeoJSON)"><i class="fas fa-file-export"></i></button></div>' +
@@ -6482,7 +6482,7 @@ window.addEventListener('mouseup', function(e) {
         return;
     }
     const anHit = (typeof anLayerAt === 'function' && !(typeof m3d !== 'undefined' && m3d.active) && !activeDrawHandler && !currentTool) ? anLayerAt(map.mouseEventToLatLng(e)) : null;
-    if (anHit) {   // правая кнопка на фигуре «Анализа участка» — то же меню, что в «Рисовании»
+    if (anHit) {   // правая кнопка на фигуре «Полного анализа» — то же меню, что в «Рисовании»
         anShowCtx(e, 'menu', anHit);
         return;
     }
@@ -8195,7 +8195,7 @@ function skStopEdit() {
 function skSelect(l) {
     const prev = sketchState.selected;
     if (prev === l) return;
-    sketchState.mode = (l && l._sk && !skIsMarker(l._sk.kind) && l._sk.kind !== 'point') ? 'edit' : 'select';   // у линий и фигур сразу видны вершины (как в «Анализе участка»)
+    sketchState.mode = (l && l._sk && !skIsMarker(l._sk.kind) && l._sk.kind !== 'point') ? 'edit' : 'select';   // у линий и фигур сразу видны вершины (как в «Полном анализе»)
     skHideCtx();
     if (prev) {
         skStopEdit(prev);
@@ -8309,7 +8309,7 @@ function skShapeItem(l) {
     return { c: { id: 'sketch', name: 'Рисование', rgb: rgb }, f: { type: 'Feature', properties: pr, geometry: f.geometry }, src: 'Рисование', from: 'фигуры «' + nm + '» из «Рисования»' };
 }
 
-// группы меню правой кнопки: «Анализ участка», «Перенести границы в», «Скачать границы» — как у слоя кадастровых участков
+// группы меню правой кнопки: «Полный анализ», «Перенести границы в», «Скачать границы» — как у слоя кадастровых участков
 function skCtxGroups(l) {
     const k = l._sk.kind;
     if (!window.gcShapeMenuApi || skIsMarker(k) || k === 'point') return [];
@@ -8340,7 +8340,7 @@ function skShowCtx(ev, kind) {
     el.style.top = top + 'px';
 }
 
-// ---------- ФИГУРЫ «АНАЛИЗА УЧАСТКА»: то же меню действий, что в «Рисовании» (копировать, экспорт, перенос границ, удаление) ----------
+// ---------- ФИГУРЫ «ПОЛНОГО АНАЛИЗА»: то же меню действий, что в «Рисовании» (копировать, экспорт, перенос границ, удаление) ----------
 // плоский список полигонов / прямоугольников / кругов из drawnItems (группы файлов раскрываются); nm — имя из «Списка объектов»
 function anLeaves() {
     const out = [];
@@ -8375,7 +8375,7 @@ function anDelete(en) {
 }
 function anItem(en) {
     const nm = en.nm || 'Участок';
-    return gcPolyItem(en.l, nm, 'Анализ участка', 'фигуры «' + nm + '» из «Анализа участка»');
+    return gcPolyItem(en.l, nm, 'Полный анализ', 'фигуры «' + nm + '» из «Полного анализа»');
 }
 function anGroups(en) { return gcPolyGroups(() => anItem(en)); }
 function anActs(en) {
@@ -8832,7 +8832,7 @@ function skInitUI() {
             if (gb) { const gn = (ctxEl._skNodes || {})[gb.dataset.grp]; if (gn && gn.sub) gcFlyOpen(gb, gn.sub, 0, skHideCtx); return; }
             if (nb) { const n = (ctxEl._skNodes || {})[nb.dataset.node]; skHideCtx(); if (n && n.fn) n.fn(); return; }
             const ab = ev.target.closest('[data-act]'), an = ctxEl._anLayer;
-            if (an) {   // меню фигуры «Анализа участка»
+            if (an) {   // меню фигуры «Полного анализа»
                 const aa = ab && anActs(an).find(x => x.id === ab.dataset.act);
                 if (!aa) return;
                 aa.fn();
@@ -9015,7 +9015,7 @@ const GC_HOTKEYS = [
     ['Ctrl + E', 'экспорт выбранного объекта в KML'],
     ['F', 'приблизить карту к выбранному объекту'],
     ['Home', 'показать все объекты на карте'],
-    ['F2', 'переименовать выбранный объект («Анализ участка»)'],
+    ['F2', 'переименовать выбранный объект («Полный анализ»)'],
     ['Ctrl + Z · Ctrl + Y', 'отменить · повторить (вкладка «Рисование»)'],
     ['?', 'эта справка']
 ];

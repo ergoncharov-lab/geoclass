@@ -79,7 +79,7 @@
     function isPoly(l) { return l instanceof L.Polygon || l instanceof L.Circle; }
     function itemOf0(l) {
         if (l._sk && typeof skShapeItem === 'function') return skShapeItem(l);
-        return gcPolyItem(l, l._gcName || 'Участок', 'Анализ участка', 'фигуры из «Анализа участка»');
+        return gcPolyItem(l, l._gcName || 'Участок', 'Полный анализ', 'фигуры из «Полного анализа»');
     }
     function areaText(l, ft) {
         try { var f = ft || gcLayerGJ(l), a = turf.area(f); return a >= 1e4 ? (a / 1e4).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' га' : Math.round(a).toLocaleString('ru-RU') + ' м²'; } catch (e) { return ''; }
@@ -95,7 +95,7 @@
         var bx = nextEl.querySelector('.gn-b');
         var go = function (bp, label) { return function () { var it = itemOf(l); closeNext(); if (!it) { updateStatus('⚠️ Не удалось собрать геометрию фигуры', true); return; } api.toAnalysis(it, bp, label); }; };
         var btn = function (icon, label, fn) { var b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<i class="fas ' + icon + '"></i>'; b.appendChild(document.createTextNode(label)); b.addEventListener('click', fn); bx.appendChild(b); return b; };
-        btn('fa-magnifying-glass-chart', 'Анализ участка', go());
+        btn('fa-magnifying-glass-chart', 'Полный анализ', go());
         btn('fa-leaf', 'NDVI', go('ndvi', 'NDVI'));
         btn('fa-cloud-sun-rain', 'Погода', go('weather', 'Погода'));
         btn('fa-mountain', 'Профиль', go('profile', 'Профиль'));

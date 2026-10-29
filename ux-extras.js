@@ -192,7 +192,7 @@
     }
 })();
 
-/* Сохранение нарисованного в localStorage: участки («Анализ участка», импорт) и фигуры/линии/значки/текст из «Рисования».
+/* Сохранение нарисованного в localStorage: участки («Полный анализ», импорт) и фигуры/линии/значки/текст из «Рисования».
    Состояние пишется после каждого изменения, поэтому «Очистить» и удаление объектов тоже сохраняются (пустое состояние). */
 (function () {
     'use strict';
@@ -280,7 +280,7 @@
         setTimeout(function () { var a = document.createElement('a'); a.href = '#map-section'; document.body.appendChild(a); a.click(); a.remove(); }, 400);
     });
 
-    // ---- 2. «Полный анализ» в шапке: блок карты + раздел «Анализ участка» ----
+    // ---- 2. «Полный анализ» в шапке: блок карты + раздел «Полный анализ» ----
     var fa = $('siteFullAnalysis');
     if (fa) fa.addEventListener('click', function () {
         var rb = document.querySelector('#gcRail [data-rail="analysis"]'), tb = document.querySelector('.panel-tab[data-tab="analysis"]');
@@ -937,7 +937,7 @@
         try { var it0 = items[0], g0 = it0 && it0.f && it0.f.geometry; if (g0 && /Polygon/.test(g0.type)) window.dispatchEvent(new CustomEvent('gc-cad-select', { detail: { item: it0, name: rowsOf(it0.f.properties || it0.f).num || '' } })); } catch (x) { /* панель действий необязательна */ }   // панель «Что сделать с участком» (ux-actions.js)
     }
     var keyOf = function (it) { var ro = rowsOf(it.f.properties || it.f); return it.c.id + '|' + (ro.num || it.f.id || JSON.stringify(it.f.geometry || '').length); };
-    // ---- правый клик по выделенному объекту: «Скачать KML» и «Анализ участка» ----
+    // ---- правый клик по выделенному объекту: «Скачать KML» и «Полный анализ» ----
     function inRing(pt, ring) {
         var ins = false;
         for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -976,7 +976,7 @@
     ctxGj.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в GeoJSON';
     ctxShp.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в SHP';
     ctxDxf.innerHTML = '<i class="fas fa-file-arrow-down"></i> Скачать участок в DXF';
-    ctxAn.innerHTML = '<i class="fas fa-magnifying-glass-chart"></i> Анализ участка';
+    ctxAn.innerHTML = '<i class="fas fa-magnifying-glass-chart"></i> Полный анализ';
     ctxPf.innerHTML = '<i class="fas fa-mountain"></i> Участок в «Профиль»';
     ctxLg.innerHTML = '<i class="fas fa-route"></i> Участок в «Логистику»';
     ctxIm.innerHTML = '<i class="fas fa-satellite"></i> Участок в «Снимки»';
@@ -985,7 +985,7 @@
     ctxShp.innerHTML = '<i class="fas fa-file-arrow-down"></i> SHP (с атрибутами)'; ctxDxf.innerHTML = '<i class="fas fa-file-arrow-down"></i> DXF';
     ctxPf.innerHTML = '<i class="fas fa-mountain"></i> Профиль'; ctxLg.innerHTML = '<i class="fas fa-route"></i> Логистика';
     ctxIm.innerHTML = '<i class="fas fa-satellite"></i> Снимки'; ctxWx.innerHTML = '<i class="fas fa-cloud-sun-rain"></i> Погода';
-    // пункты сгруппированы: «Анализ участка» сверху, остальное — в раскрывающихся группах
+    // пункты сгруппированы: «Полный анализ» сверху, остальное — в раскрывающихся группах
     function ctxGroup(icon, label, items) {   // заголовок + вложенный список (группы могут быть вложены друг в друга)
         var hd = document.createElement('div'), sub = document.createElement('div');
         hd.className = 'ctx-item ctx-grp'; hd.innerHTML = '<i class="fas ' + icon + '"></i>&nbsp;' + label + '<i class="fas fa-chevron-right ctx-chev"></i>';
@@ -1037,8 +1037,8 @@
     ctxGj.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) exportAs('geojson', [it]); });
     ctxShp.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) exportAs('shp', [it]); });
     ctxDxf.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) exportAs('dxf', [it]); });
-    // перенос границ в раздел «Анализ участка»: так же, как при загрузке контура из файла
-    function toAnalysis(it, bp, title) {   // bp — вкладка нижней панели (profile / logistics / dates / weather); без неё — «Анализ участка»
+    // перенос границ в раздел «Полный анализ»: так же, как при загрузке контура из файла
+    function toAnalysis(it, bp, title) {   // bp — вкладка нижней панели (profile / logistics / dates / weather); без неё — «Полный анализ»
         try {
             var ro = rowsOf(it.f.properties || it.f), g = it.f.geometry;
             var cn = g.type === 'MultiPolygon' ? g.coordinates.length : (g.type === 'Polygon' ? 1 : 0), isMulti = cn > 1;   // многоконтурность: число отдельных контуров участка
@@ -1070,7 +1070,7 @@
             if (typeof updateObjectList === 'function') updateObjectList();
             clearSel();
             var tb = bp ? document.querySelector('.bp-tab[data-bp-tab="' + bp + '"]') : document.querySelector('.panel-tab[data-tab="analysis"]'); if (tb) tb.click();
-            if (typeof updateStatus === 'function') updateStatus('📥 Границы ' + (it.from || 'участка ' + (ro.num || '') + ' из НСПД') + ' перенесены в «' + (title || 'Анализ участка') + '».' + (bp ? '' : ' Выберите дату снимка и запустите анализ.'));
+            if (typeof updateStatus === 'function') updateStatus('📥 Границы ' + (it.from || 'участка ' + (ro.num || '') + ' из НСПД') + ' перенесены в «' + (title || 'Полный анализ') + '».' + (bp ? '' : ' Выберите дату снимка и запустите анализ.'));
         } catch (x) { say('Не удалось перенести границы в анализ: ' + x.message); }
     }
     ctxAn.addEventListener('click', function () { var it = ctxHit; hideCtx(); if (it) toAnalysis(it); });

@@ -1057,7 +1057,7 @@ body { height: auto; overflow-x: hidden; overflow-y: auto; background: var(--bg)
 
 /* пятиугольник вместо значка «полигон» */
 .gc-pent { display: inline-block; width: 1em !important; height: 1em; flex: 0 0 1em !important; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.6' stroke-linejoin='round' d='M12 2.6 21.4 9.4 17.8 20.4H6.2L2.6 9.4z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.6' stroke-linejoin='round' d='M12 2.6 21.4 9.4 17.8 20.4H6.2L2.6 9.4z'/%3E%3C/svg%3E") center / contain no-repeat; vertical-align: -0.125em; }
-/* кнопки рисования в «Анализе участка» — по центру строки */
+/* кнопки рисования в «Полном анализе» — по центру строки */
 .an-draw { justify-content: center; }
 #bottomPanel .dw-tool.dw-danger { color: var(--sc-red-dark); }
 #bottomPanel .dw-tool.dw-danger:hover { background: #fee2e2; color: var(--sc-red-dark); }
@@ -2082,7 +2082,7 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .s-links a i { font-size: 8px; margin-right: 4px; opacity: .85; }
 .s-links a:hover { color: #fff; border-bottom-color: #fff; }
 
-/* «Анализ участка» на вкладке «Главное» — крупная акцентная плитка */
+/* «Полный анализ» на вкладке «Главное» — крупная акцентная плитка */
 .sp-grid .sp-tile.sp-hero { position: relative; }
 .sp-grid .sp-tile.sp-hero i { width: 58px; height: 58px; font-size: 24px; margin: -4px 0 -1px; box-shadow: 0 0 0 3px rgba(5,150,105,.18), 0 6px 14px rgba(5,150,105,.35); }
 .sp-grid .sp-tile.sp-hero:hover i { transform: scale(1.06); }
@@ -2199,3 +2199,46 @@ html.pp-onepage #passportPane .pp-wxg .wx2-blk { break-inside: avoid !important;
 .pp-prog.ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
 .pp-prog.err { background: #fffbeb; border-color: #fde68a; color: #b45309; }
 html.pp-printing .pp-prog { display: none !important; }
+
+/* «Все разделы»: кнопка справа от города и погоды; при включении показываются плитки всех групп, анимация скрыта */
+.sp-loc .sp-all-btn { margin-left: auto; flex: none; padding: 0; border: 0; background: none; color: var(--muted, #64748b); font: inherit; font-size: 12px; cursor: pointer; transition: color .15s; }
+.sp-loc .sp-all-btn span { font-size: 12px; color: inherit; }
+.sp-loc .sp-all-btn:hover, .sp-loc .sp-all-btn.on { color: var(--green, #059669); }
+#mainPanel.sp-all-on .sp-group, .app-container.mb-tiles #mainPanel.sp-all-on .sp-group { display: block; }
+#mainPanel.sp-all-on .sp-group + .sp-group { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1f5; }
+#mainPanel.sp-all-on .sp-group[data-title]::before { content: attr(data-title); display: block; padding: 0 4px 6px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted, #64748b); }
+#mainPanel.sp-all-on .sp-tile.sp-dup { display: none; }
+#mainPanel.sp-all-on .tab-art, #mainPanel.sp-all-on .gc-leg-slot { display: none !important; }
+
+/* плитка «Полный анализ»: яркий переливающийся градиент со световым бликом */
+.sp-grid .sp-tile[data-goto="analysis"] i { position: relative; overflow: hidden; background: linear-gradient(125deg, #059669, #06b6d4, #6366f1, #a3e635, #10b981, #06b6d4) !important; background-size: 320% 320% !important; color: #fff; animation: spAnGrad 5s ease-in-out infinite, spAnGlow 2.4s ease-in-out infinite; }
+.sp-grid .sp-tile[data-goto="analysis"] i::after { content: ''; position: absolute; top: -20%; bottom: -20%; left: -60%; width: 45%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.65), transparent); transform: skewX(-18deg); animation: spAnShine 2.8s ease-in-out infinite; pointer-events: none; }
+.sp-grid .sp-tile[data-goto="analysis"]:hover i { animation-duration: 2.5s, 1.4s; }
+.sp-grid .sp-tile[data-goto="analysis"] span { font-weight: 700; }
+@keyframes spAnGrad { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes spAnGlow { 0%, 100% { box-shadow: 0 0 0 3px rgba(16,185,129,.18), 0 6px 14px rgba(16,185,129,.35); } 50% { box-shadow: 0 0 0 5px rgba(99,102,241,.2), 0 8px 20px rgba(6,182,212,.5); } }
+@keyframes spAnShine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+@media (prefers-reduced-motion: reduce) { .sp-grid .sp-tile[data-goto="analysis"] i, .sp-grid .sp-tile[data-goto="analysis"] i::after { animation: none; } }
+
+/* плашки с информацией о разделе при наведении на плитку (вместо сферы со слайдами) */
+.tab-art.gc-info { background: transparent; padding: 6px 12px 16px; min-height: 0; }
+.tab-art.gc-info:empty { padding: 0; }
+.tab-art.gc-info[hidden] { display: none !important; }
+.gi-box { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.gi-box.gi-out { animation: giOut .17s ease forwards; }
+/* «парящие» плашки: мягкая многослойная тень; после появления неподвижны */
+.gi-p { grid-column: span 2; min-width: 0; background: var(--sc-white, #fff); border: 1px solid var(--sc-line, #e2e8f0); border-left: 3px solid var(--gc, #10b981); border-radius: 14px; padding: 9px 11px; font-size: 12.5px; line-height: 1.45; color: var(--ink, #334155); box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 8px 18px -4px rgba(15, 23, 42, .16), 0 18px 30px -12px rgba(15, 23, 42, .2); animation: giUp .45s cubic-bezier(.2, .8, .2, 1) both; }
+.gi-p.gi-half { grid-column: span 1; }
+.gi-p small { display: block; margin-bottom: 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--gc, #10b981); }
+.gi-p p { margin: 0; }
+.gi-p ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.gi-p li { position: relative; padding-left: 16px; }
+.gi-p li::before { content: '\2713'; position: absolute; left: 0; font-weight: 700; color: var(--gc, #10b981); }
+.gi-head { display: flex; align-items: center; gap: 10px; }
+.gi-head > i { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #fff; background: var(--gc, #10b981); box-shadow: 0 4px 10px -2px var(--gc, #10b981); }
+.gi-head b { display: block; font-size: 14px; color: var(--dark, #0f172a); }
+.gi-head span { display: block; margin-top: 1px; color: var(--muted, #64748b); }
+.gi-p.gi-soft { background: rgba(255, 255, 255, .7); border-left-color: transparent; color: var(--muted, #64748b); font-size: 12px; backdrop-filter: blur(6px); }
+@keyframes giUp { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes giOut { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gi-p, .gi-box.gi-out { animation: none; } }

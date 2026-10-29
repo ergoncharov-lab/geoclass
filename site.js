@@ -358,7 +358,7 @@
     var esc = gcSite.esc, openDrawer = gcSite.openDrawer;
     var back = document.getElementById('spBack'), backBtn = document.getElementById('spBackBtn'), backTitle = document.getElementById('spBackTitle');
     var TITLES = {
-        tab: { analysis: 'Анализ участка', sources: 'Источники анализа', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
+        tab: { analysis: 'Полный анализ', sources: 'Источники анализа', reports: 'Мои отчёты', catalog: 'Каталог геоданных', help: 'Инструкции', bookmarks: 'Закладки' },
         bp: { userlayers: 'Свои слои', objects: 'Объекты на карте', main: 'Легенда слоёв', draw: 'Рисование', '3d': '3D режим', measure: 'Измерения', chem: 'Почвенный анализ', 'export': 'Экспорт карты', profile: 'Профиль рельефа', logistics: 'Логистика',
               weather: 'Прогноз погоды', climate: 'Климат участка', gdd: 'Тепло и вегетация', frost: 'Заморозки', windwork: 'Ветер и окна работ', dates: 'Снимки', ndvi: 'NDVI', ndmi: 'NDMI', nbr: 'NBR', gndvi: 'GNDVI', ndre: 'NDRE', savi: 'SAVI', ndwi: 'NDWI', ndti: 'NDTI', shape: 'Границы, форма и кадастр', agro: 'Агрокалькулятор', matrix: 'Матрица расстояний', change: 'Сравнение снимков', catalog: 'Каталог данных' }
     };
@@ -1067,7 +1067,7 @@
    Кнопка запуска: data-bp — открывает раздел (общий обработчик плиток выше), data-gt-tab — открывает вкладку панели. */
 (function () {
     var TIPS = [
-        { ic: 'fa-chart-pie', c: '#10b981', t: 'Анализ участка', d: 'Паспорт участка по одному контуру: рельеф, почва, климат, логистика и индекс пригодности.', h: 'Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте участок и запустите анализ.', tab: 'analysis', m: 'Главный инструмент сайта: один контур превращается в подробный отчёт — «паспорт участка» с графиками, расшифровкой каждого блока и итоговыми выводами. Готовые отчёты хранятся во вкладке «Мои отчёты».', f: ['Рельеф: уклоны, перепад высот, гипсометрия', 'Почва (SoilGrids) и климат за 10 лет, ГТК, безморозный период', 'Логистика, форма участка и индекс пригодности 0–100'], hot: true },
+        { ic: 'fa-chart-pie', c: '#10b981', t: 'Полный анализ', d: 'Паспорт участка по одному контуру: рельеф, почва, климат, логистика и индекс пригодности.', h: 'Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте участок и запустите анализ.', tab: 'analysis', m: 'Главный инструмент сайта: один контур превращается в подробный отчёт — «паспорт участка» с графиками, расшифровкой каждого блока и итоговыми выводами. Готовые отчёты хранятся во вкладке «Мои отчёты».', f: ['Рельеф: уклоны, перепад высот, гипсометрия', 'Почва (SoilGrids) и климат за 10 лет, ГТК, безморозный период', 'Логистика, форма участка и индекс пригодности 0–100'], hot: true },
         { ic: 'fa-file-lines', c: '#f97316', t: 'Мои отчёты', d: 'Готовые паспорта участков хранятся в одном месте, к ним можно вернуться в любой момент.', h: 'Нажмите на отчёт — паспорт участка раскроется во всю карту.', tab: 'reports', m: 'Каждый выполненный анализ — отдельный отчёт. Откройте его, и паспорт участка раскроется с графиками и выводами; у каждого блока есть кнопка «Расшифровка», которая объясняет показатели простыми словами.', f: ['Паспорт раскрывается во всю карту', 'У блоков есть «Расшифровка» показателей', 'Все отчёты по вашим участкам в одном списке'] },
         { ic: 'fa-pen-ruler', c: '#3b82f6', t: 'Рисование', d: 'Фигуры, линии, значки и текст прямо на карте. Готовую фигуру можно править и экспортировать.', h: 'Выберите инструмент — рядом появятся его параметры.', bp: 'draw', m: 'Универсальный чертёж поверх карты: отметьте границы полей, подпишите объекты, поставьте значки. Нарисованные фигуры можно выбирать, двигать, править вершины и сохранять в файл.', f: ['Полигоны, прямоугольники, круги, линии, значки, текст', 'Выбор кликом, правка вершин, перемещение', 'Импорт и экспорт контуров (KML, GeoJSON)'] },
         { ic: 'fa-mountain', c: '#14b8a6', t: 'Профиль рельефа', d: 'График высот по линии и гипсометрия по площади: перепад, длина, уклоны (данные Terrarium DEM).', h: 'Проведите линию или обведите полигон. Двойной клик по последней точке — завершить.', bp: 'profile', m: 'Показывает, как меняется высота вдоль линии или по всей площади участка. Помогает оценить эрозионные риски, стока воды и пригодность склонов для техники.', f: ['Профиль по линии: длина, перепад, уклоны', 'Гипсометрия по площади участка', 'Высоты из тайлов Terrarium DEM'] },
@@ -1210,7 +1210,7 @@
                 try { card.setPointerCapture(drag.id); } catch (x) { /* не критично */ }
             }
             var dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
-            yaw += dx * 0.012; vy = dx * 0.0015; pitch = Math.max(-1.2, Math.min(1.2, pitch + dy * 0.01));
+            yaw += dx * 0.012; vy = dx * 0.0015; pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.01));
         });
         function up() { if (drag && drag.moved) { wasDrag = true; setTimeout(function () { wasDrag = false; }, 0); } drag = null; card.classList.remove('gt3-grab'); }
         card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
@@ -1223,8 +1223,50 @@
         card.addEventListener('pointerleave', function () { hov = false; });
         select(start); frame();
     }
+    /* вместо сферы со слайдами: при наведении на плитку раздела снизу поочерёдно появляются плашки с ключевой информацией */
+    var NDV = 'Sentinel-2 (ESA Copernicus), 10 м', SRC = { analysis: 'Sentinel-2 · SoilGrids · ERA5 · OpenStreetMap', profile: 'Terrarium DEM', chem: 'SoilGrids, 250 м', logistics: 'OpenStreetMap (Overpass), маршруты — OSRM', cadastre: 'НСПД (Росреестр)', shape: 'НСПД (Росреестр)', weather: 'Open-Meteo', windwork: 'Open-Meteo', climate: 'ERA5 (Copernicus / ECMWF)', gdd: 'ERA5 (Copernicus / ECMWF)', frost: 'ERA5 (Copernicus / ECMWF)' };
+    ['dates', 'ndvi', 'change', 'ndmi', 'nbr', 'gndvi', 'ndre', 'savi', 'ndwi', 'ndti'].forEach(function (k) { SRC[k] = NDV; });
+    function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); }
+    function infoBuild(el) {
+        el.className = 'tab-art gc-tips gc-info'; el.removeAttribute('data-art'); el.innerHTML = '';
+        var home = el.closest('[data-pane="main"]');
+        if (!home) { el.hidden = true; return; }   // плитки есть только на «Главной»
+        var cur = null, tIn = 0, tOut = 0, tClr = 0;
+        function pl(cls, label, body, i) { return '<div class="gi-p ' + cls + '" style="animation-delay:' + (i * 0.09).toFixed(2) + 's">' + (label ? '<small>' + label + '</small>' : '') + body + '</div>'; }
+        function show(tile) {
+            clearTimeout(tClr);
+            var key = tile.getAttribute('data-bp') || tile.getAttribute('data-goto') || '', tip = null;
+            TIPS.forEach(function (t) { if (!tip && (t.bp === key || t.tab === key)) tip = t; });
+            var sp = tile.querySelector('span'), ic = tile.querySelector('i'), nm = tip ? tip.t : (sp ? sp.textContent.trim() : ''),
+                col = tip ? tip.c : (getComputedStyle(tile).getPropertyValue('--c').trim() || '#10b981'),
+                d = tip ? tip.d : (tile.getAttribute('title') || '').split('\n').slice(1).join(' '), how = tip && tip.h, src = SRC[key], n = 0,
+                h = '<div class="gi-box" style="--gc:' + esc(col) + '">';
+            h += pl('gi-head', '', '<i class="' + esc(ic ? ic.className : 'fas fa-circle-info') + '"></i><div><b>' + esc(nm) + '</b><span>' + esc(d) + '</span></div>', n++);
+            if (tip && tip.f && tip.f.length) h += pl('', 'Что внутри', '<ul>' + tip.f.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>', n++);
+            if (how) h += pl(src ? 'gi-half' : '', 'Как начать', '<p>' + esc(how) + '</p>', n++);
+            if (src) h += pl(how ? 'gi-half' : '', 'Источник данных', '<p>' + esc(src) + '</p>', n++);
+            if (tip && tip.m) h += pl('gi-soft', '', '<p>' + esc(tip.m.length > 230 ? tip.m.slice(0, 227).replace(/\s+\S*$/, '') + '…' : tip.m) + '</p>', n++);
+            el.innerHTML = h + '</div>';
+        }
+        function hide() {
+            cur = null; var b = el.firstChild; if (!b) return;
+            b.classList.add('gi-out'); clearTimeout(tClr); tClr = setTimeout(function () { if (!cur) el.innerHTML = ''; }, 170);
+        }
+        function over(e) {
+            var t = e.target.closest && e.target.closest('.sp-tile'); if (!t || !home.contains(t)) return;
+            clearTimeout(tOut); if (t === cur) return;
+            clearTimeout(tIn); tIn = setTimeout(function () { cur = t; show(t); }, cur ? 60 : 140);
+        }
+        function out(e) {
+            var t = e.target.closest && e.target.closest('.sp-tile'); if (!t) return;
+            var to = e.relatedTarget; if (to && to.closest && to.closest('.sp-tile')) return;
+            clearTimeout(tIn); clearTimeout(tOut); tOut = setTimeout(hide, 250);
+        }
+        home.addEventListener('mouseover', over); home.addEventListener('mouseout', out);
+        home.addEventListener('focusin', over); home.addEventListener('focusout', out);
+    }
     var arts = document.querySelectorAll('.tab-art');
-    Array.prototype.forEach.call(arts, function (el, k) { build(el, k === 0 ? 0 : (k * 5 + Math.floor(Math.random() * TIPS.length)) % TIPS.length); });   // на главной начинаем с анализа участка
+    Array.prototype.forEach.call(arts, function (el) { infoBuild(el); });   // сфера со слайдами (build) больше не используется
     // на месте слайдов подсказок — данные выписки (XML) либо легенда включённого слоя; иначе показываются слайды
     function refreshSlot() {
         var xml = window.gcXmlInfo, keys = window.gcLegKeys || [], html = '';
@@ -1888,4 +1930,35 @@
     btn.addEventListener('click', open);
     box.addEventListener('click', function (e) { if (e.target === box || e.target.closest('.s-auth-x')) close(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) { e.stopPropagation(); close(); } }, true);
+})();
+
+/* Кнопка «Все разделы» справа от города и погоды: в боковой панели показываются плитки всех разделов сразу (без повторов), анимация скрывается */
+(function () {
+    var loc = document.getElementById('spLoc'), panel = document.getElementById('mainPanel'), rail = document.getElementById('gcRail');
+    if (!loc || !panel) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'sp-all-btn'; b.id = 'spAllBtn'; b.setAttribute('aria-pressed', 'false');
+    b.title = 'Показать кнопки всех разделов'; b.innerHTML = '<span>Все разделы</span>';
+    loc.appendChild(b);
+    var prepared = false;
+    function prepare() {   // подписи групп из левого меню и пометка повторяющихся плиток
+        if (prepared) return; prepared = true;
+        var seen = {};
+        panel.querySelectorAll('.sp-group').forEach(function (g) {
+            var k = g.getAttribute('data-group'), rb = rail && rail.querySelector('[data-rail="' + k + '"]'), sp = rb && rb.querySelector('span');
+            if (sp) g.setAttribute('data-title', sp.textContent.trim());
+            g.querySelectorAll('.sp-tile').forEach(function (t) {
+                var id = (t.getAttribute('data-bp') || t.getAttribute('data-goto') || '') + '|' + ((t.querySelector('span') || t).textContent || '').trim();
+                if (id === '|') return;
+                if (seen[id]) t.classList.add('sp-dup'); else seen[id] = 1;
+            });
+        });
+    }
+    function set(on) { if (on) prepare(); panel.classList.toggle('sp-all-on', on); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    b.addEventListener('click', function (e) { e.stopPropagation(); set(!panel.classList.contains('sp-all-on')); });
+    if (rail) rail.addEventListener('click', function () { set(false); });   // выбор раздела в левом меню возвращает обычный вид
+})();
+
+/* Плитка «Полный анализ» (на «Главной» и во вкладке «Анализ»): новый значок; вид и анимация — в site.css */
+(function () {
+    document.querySelectorAll('.sp-tile[data-goto="analysis"] > i').forEach(function (i) { i.className = 'fas fa-wand-magic-sparkles'; });
 })();

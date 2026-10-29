@@ -203,7 +203,7 @@
     #map-section .app-container:is([data-sheet="peek"], .mb-tiles, .mb-hold):not(.passport-open) #mainPanel[data-view="home"] .sp-head { height: 0; min-height: 0; padding: 0; overflow: visible; }
     #map-section .app-container:is(.mb-tiles, .mb-hold):not(.passport-open):has(#mainPanel[data-view="home"]) { --sh: 2px !important; }
     #map-section .sp-search .map-search.mb-pop { visibility: visible; }
-    /* нажатие на закладку: цветные кнопки раздела выезжают вертикальной колонкой слева; нажатие на кнопку — содержимое раздела открывается в шторке, как «Анализ участка» */
+    /* нажатие на закладку: цветные кнопки раздела выезжают вертикальной колонкой слева; нажатие на кнопку — содержимое раздела открывается в шторке, как «Полный анализ» */
     .app-container.mb-tiles #mainPanel[data-view="home"] .sp-group.on { display: contents; }
     .app-container.mb-tiles #mainPanel[data-view="home"] .sp-group.on .sp-group-title { display: none; }
     .app-container.mb-tiles #mainPanel[data-view="home"] .sp-group.on .sp-grid {

@@ -119,7 +119,7 @@
         <li><b>Платно только:</b> полный анализ с паспортом (первые три бесплатно), классификация земли и массовое скачивание данных</li>
         <li><b>Подходит</b> для первичной оценки перед покупкой, арендой и планированием работ</li>
       </ul></div>
-        <div class="ab-slide" role="group" aria-label="2 из 11"><div class="ab-eyebrow"><i class="fas fa-file-lines"></i> Анализ · Анализ участка</div><h2>Паспорт участка за несколько минут</h2><p>Один контур — и вы получаете сводный отчёт без выезда на место и ручных расчётов.</p><ul><li><b>Что внутри:</b> площадь, периметр, рельеф, почвы, погода, динамика вегетации</li><li><b>Польза:</b> быстрая оценка пригодности участка перед покупкой или арендой</li><li><b>Результат:</b> паспорт в PDF с индексом пригодности</li></ul></div>
+        <div class="ab-slide" role="group" aria-label="2 из 11"><div class="ab-eyebrow"><i class="fas fa-file-lines"></i> Анализ · Полный анализ</div><h2>Паспорт участка за несколько минут</h2><p>Один контур — и вы получаете сводный отчёт без выезда на место и ручных расчётов.</p><ul><li><b>Что внутри:</b> площадь, периметр, рельеф, почвы, погода, динамика вегетации</li><li><b>Польза:</b> быстрая оценка пригодности участка перед покупкой или арендой</li><li><b>Результат:</b> паспорт в PDF с индексом пригодности</li></ul></div>
         <div class="ab-slide" role="group" aria-label="3 из 11"><div class="ab-eyebrow"><i class="fas fa-mountain"></i> Анализ · Профиль рельефа</div><h2>Рельеф: высоты, уклоны, стекание</h2><p>Профиль по линии и гипсометрия по площади с тепловой картой высот или уклонов.</p><ul><li><b>Что внутри:</b> график высот, перепад, крутизна склонов, ступени высот</li><li><b>Польза:</b> выбор техники и севооборота, оценка риска эрозии и заболачивания</li><li><b>Результат:</b> CSV, PNG и GeoTIFF высот</li></ul></div>
         <div class="ab-slide" role="group" aria-label="4 из 11"><div class="ab-eyebrow"><i class="fas fa-route"></i> Анализ · Логистика</div><h2>Дороги и водоёмы вокруг участка</h2><p>Расстояния до ближайших дорог и воды по прямой и по маршруту.</p><ul><li><b>Что внутри:</b> буфер вокруг участка, дороги и водоёмы OpenStreetMap, расчёт маршрута</li><li><b>Польза:</b> оценка подъезда, стоимости доставки и доступа к воде</li><li><b>Результат:</b> таблица расстояний и время в пути</li></ul></div>
         <div class="ab-slide" role="group" aria-label="5 из 11"><div class="ab-eyebrow"><i class="fas fa-flask"></i> Анализ · Почвенный анализ</div><h2>Почвы участка по открытым данным</h2><p>pH, органический углерод, азот, глина и песок по контуру поля.</p><ul><li><b>Что внутри:</b> карта показателя, легенда, статистика и зоны деления поля</li><li><b>Польза:</b> ориентир для зонирования и выбора точек отбора проб</li><li><b>Результат:</b> GeoTIFF почвенного слоя</li></ul></div>
@@ -271,7 +271,7 @@
                 <!-- ВКЛАДКИ БОКОВОЙ ПАНЕЛИ -->
         <div class="panel-tabs" role="tablist">
             <button class="panel-tab active" role="tab" aria-selected="true" data-tab="main" title="Главная"><i class="fas fa-house"></i><span>Главная</span></button>
-            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Анализ участка"><i class="fas fa-magnifying-glass-chart"></i><span>Анализ</span></button>
+            <button class="panel-tab" role="tab" aria-selected="false" data-tab="analysis" title="Полный анализ"><i class="fas fa-magnifying-glass-chart"></i><span>Анализ</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="reports" title="Мои отчёты"><i class="fas fa-file-lines"></i><span>Отчёты</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="catalog" title="Каталог геоданных"><i class="fas fa-store"></i><span>Каталог</span></button>
             <button class="panel-tab" role="tab" aria-selected="false" data-tab="help" title="Инструкции"><i class="fas fa-circle-question"></i><span>Инструкции</span></button>
@@ -288,14 +288,14 @@
                     <div class="sp-grid">
                         <button type="button" class="sp-tile" data-goto="reports" style="--c:#f97316" title="Мои отчёты&#10;Список ваших отчётов по участкам. Нажмите на отчёт — «паспорт участка» раскроется на всю область карты."><i class="fas fa-file-lines"></i><span>Мои отчёты</span></button>
                         <button type="button" class="sp-tile" data-goto="sources" style="--c:#10b981" title="Источники анализа&#10;Что откуда берётся: снимки, рельеф, почвы, погода, дороги, адреса и кадастр — сервисы и разрешение данных."><i class="fas fa-database"></i><span>Источники анализа</span></button>
-                        <button type="button" class="sp-tile sp-hero" data-goto="analysis" style="--c:#059669" title="Анализ участка&#10;Загрузите или нарисуйте контур и запустите анализ — получите паспорт участка: рельеф, почва, климат, логистика."><i class="fas fa-magnifying-glass-chart"></i><span>Анализ участка</span></button>
+                        <button type="button" class="sp-tile sp-hero" data-goto="analysis" style="--c:#059669" title="Полный анализ&#10;Загрузите или нарисуйте контур и запустите анализ — получите паспорт участка: рельеф, почва, климат, логистика."><i class="fas fa-magnifying-glass-chart"></i><span>Полный анализ</span></button>
                         <button type="button" class="sp-tile" data-goto="support" style="--c:#64748b" title="Поддержка&#10;Обратная связь, рекомендации и переход в справку."><i class="fas fa-headset"></i><span>Поддержка</span></button>
                         <button type="button" class="sp-tile" data-goto="help" style="--c:#0ea5e9" title="О карте&#10;Описание возможностей карты и инструкции по работе с её блоками."><i class="fas fa-circle-info"></i><span>О карте</span></button>
                     </div>
                 </div>
                 <div class="sp-group" data-group="analysis">
                     <div class="sp-grid">
-                        <button type="button" class="sp-tile" data-goto="analysis" style="--c:#10b981" title="Анализ участка&#10;Загрузите контур участка (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его на карте и запустите анализ. В этом разделе — список объектов участка и запуск расчёта."><i class="fas fa-magnifying-glass-chart"></i><span>Анализ участка</span></button>
+                        <button type="button" class="sp-tile" data-goto="analysis" style="--c:#10b981" title="Полный анализ&#10;Загрузите контур участка (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его на карте и запустите анализ. В этом разделе — список объектов участка и запуск расчёта."><i class="fas fa-magnifying-glass-chart"></i><span>Полный анализ</span></button>
                         <button type="button" class="sp-tile" data-bp="profile" style="--c:#14b8a6" title="Профиль рельефа&#10;График высот по нарисованной линии (данные Terrarium DEM): перепад высот, длина, уклоны — линия окрашивается по крутизне. Режим «По площади» строит гипсометрическую кривую полигона. Результат можно скачать в CSV и PNG."><i class="fas fa-mountain"></i><span>Профиль рельефа</span></button>
                         <button type="button" class="sp-tile" data-bp="logistics" style="--c:#ef4444" title="Логистика&#10;Буфер вокруг точки или участка, дороги и водоёмы OpenStreetMap внутри буфера, а также расстояния до ближайшей дороги и водоёма — по прямой и по маршруту (OSRM)."><i class="fas fa-route"></i><span>Логистика</span></button>
                         <button type="button" class="sp-tile" data-bp="chem" style="--c:#a855f7" title="Почвенный анализ&#10;Почвенные показатели (pH, углерод, азот, глина, песок и др.) по нарисованной фигуре: статистика и зоны на карте. Данные SoilGrids 250 м."><i class="fas fa-flask"></i><span>Почвенный анализ</span></button>
@@ -358,7 +358,7 @@
             </div>
         </div><!-- /tab-pane main -->
 
-        <!-- ВКЛАДКА 2 «АНАЛИЗ УЧАСТКА» -->
+        <!-- ВКЛАДКА 2 «ПОЛНЫЙ АНАЛИЗ» -->
         <div class="tab-pane" data-pane="analysis" role="tabpanel">
                 <!-- ИНСТРУМЕНТЫ РИСОВАНИЯ УЧАСТКА (перенесены с карты) -->
         <div class="section">
@@ -435,7 +435,7 @@
             <div class="an-hint">Сначала выберите дату снимка Sentinel-2. Анализ выполняется в фоне, результат появится на вкладке «Отчёты».</div>
         </div>
             <div class="tab-art" data-art="analysis">
-                <div class="tab-art-txt"><b>Анализ участка</b><p>Оценка земельного участка по спутниковым снимкам и открытым данным.</p><ul><li>Значок загрузки — контур из файла (KML, GeoJSON, Excel, XML Росреестра)</li><li>Нарисовать участок — контур прямо на карте</li><li>Свойства объекта — площадь, периметр, координаты</li><li>Дата снимка Sentinel-2 — основа для запуска анализа</li></ul></div>
+                <div class="tab-art-txt"><b>Полный анализ</b><p>Оценка земельного участка по спутниковым снимкам и открытым данным.</p><ul><li>Значок загрузки — контур из файла (KML, GeoJSON, Excel, XML Росреестра)</li><li>Нарисовать участок — контур прямо на карте</li><li>Свойства объекта — площадь, периметр, координаты</li><li>Дата снимка Sentinel-2 — основа для запуска анализа</li></ul></div>
             </div>
         </div><!-- /tab-pane analysis -->
 
@@ -573,7 +573,7 @@
             <div class="section ct">
                 <div class="section-title"><i class="fas fa-circle-question"></i> Инструкции</div>
                 <details class="ct-grp"><summary><i class="fas fa-location-crosshairs"></i> Поиск и координаты</summary><ul class="hp"><li>Поле поиска — в левом верхнем углу карты: введите город или улицу и выберите результат.</li><li>Правый клик по карте → «Что здесь?» покажет координаты и адрес точки (блок «Координаты и адрес» на вкладке «Главная»).</li><li>Кнопки копирования рядом с полями сохранят значения в буфер.</li></ul></details>
-                <details class="ct-grp"><summary><i class="fas fa-magnifying-glass-chart"></i> Анализ участка</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
+                <details class="ct-grp"><summary><i class="fas fa-magnifying-glass-chart"></i> Полный анализ</summary><ul class="hp"><li>Загрузите контур (KML, GeoJSON, Excel, XML Росреестра) или нарисуйте его.</li><li>Проверьте площадь, периметр и число вершин в «Свойствах объекта».</li><li>Нажмите «Запустить анализ участка» — готовый отчёт появится во вкладке «Отчёты».</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-file-lines"></i> Отчёты и паспорт участка</summary><ul class="hp"><li>Нажмите на отчёт в списке — паспорт раскроется на всю область карты.</li><li>«К карте» или Esc возвращают обычный вид.</li><li>Из паспорта можно скачать PDF.</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-store"></i> Каталог геоданных</summary><ul class="hp"><li>Данные разбиты на группы: векторы OSM, спутниковые снимки, готовые карты.</li><li>Раскройте группу, выберите набор и оформите заказ (в разработке).</li></ul></details>
                 <details class="ct-grp"><summary><i class="fas fa-layer-group"></i> Подложки и слои (кнопки справа)</summary><ul class="hp"><li>«Базовые карты», «Спутник» и «Аналитические подложки» меняют основу карты.</li><li>Легенда аналитического слоя — на вкладке «Главная» нижней панели.</li><li>«Шторка» делит карту на две подложки для сравнения.</li></ul></details>
